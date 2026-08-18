@@ -36,7 +36,9 @@ export const Footer: React.FC<FooterProps> = ({ setActiveTab }) => {
               onClick={() => setActiveTab('home')} 
             />
             <p className="text-sm sm:text-base text-[#FAF8F3]/85 leading-relaxed max-w-lg font-normal">
-              �            <div className="flex items-center gap-3 pt-1">
+              ისტორიის პედაგოგ ნოდარ თოთაძის მოსამზადებელი პორტალი. მოემზადე ეროვნული გამოცდებისთვის საგამოცდო რესურსებით, ტესტებითა და ვიდეო გაკვეთილებით.
+            </p>
+            <div className="flex items-center gap-3 pt-1">
               <a 
                 href="https://www.facebook.com/profile.php?id=61593642503126" 
                 target="_blank" 
@@ -134,18 +136,6 @@ export const Footer: React.FC<FooterProps> = ({ setActiveTab }) => {
               <li className="flex items-center gap-3">
                 <Mail className="w-4 h-4 text-[#C79B3A] shrink-0" />
                 <span>ntistoria@gmail.com</span>
-              </li>
-            </ul>ap-3">
-                <MapPin className="w-4 h-4 text-[#C79B3A] shrink-0 mt-1" />
-                <span>თბილისი, რუსთაველის გამზირი 42 (მეცნიერებათა აკადემიის მიმდებარედ)</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <Phone className="w-4 h-4 text-[#C79B3A] shrink-0" />
-                <span>+995 599 12 34 56</span>
-              </li>
-              <li className="flex items-center gap-3">
-                <Mail className="w-4 h-4 text-[#C79B3A] shrink-0" />
-                <span>history.teacher.nt@gmail.com</span>
               </li>
             </ul>
           </div>
