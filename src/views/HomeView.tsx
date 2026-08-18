@@ -131,7 +131,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   <div className="text-[10px] text-[#666666] uppercase tracking-wider font-semibold">წარმატებული სტუდენტი</div>
                 </div>
                 <div className="space-y-0.5 border-x border-[#E6DDCB] px-3">
-                  <div className="font-serif font-bold text-lg sm:text-xl text-[#C79B3A]">8+</div>
+                  <div className="font-serif font-bold text-lg sm:text-xl text-[#C79B3A]">12+</div>
                   <div className="text-[10px] text-[#666666] uppercase tracking-wider font-semibold">წლის გამოცდილება</div>
                 </div>
                 <div className="space-y-0.5 pl-2">
