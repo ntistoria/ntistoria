@@ -1,7 +1,7 @@
 import { Article, HistoryTest, VideoLesson, HistoricalEpoch } from '../types';
 
-export const HERO_IMAGE = 'https://atzrgduilvlmpgmbuedk.supabase.co/storage/v1/object/public/pics/hero.jpg';
-export const ABOUT_IMAGE = 'https://atzrgduilvlmpgmbuedk.supabase.co/storage/v1/object/public/pics/poto.png';
+export const HERO_IMAGE = 'https://vqkpacwswksgvhuczrbw.supabase.co/storage/v1/object/public/photos/hero.jpg';
+export const ABOUT_IMAGE = 'https://vqkpacwswksgvhuczrbw.supabase.co/storage/v1/object/public/photos/poto.png';
 
 export const HISTORICAL_EPOCHS: HistoricalEpoch[] = [
   {

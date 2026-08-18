@@ -1,6 +1,6 @@
 import React from 'react';
 
-const LOGO_URL = 'https://atzrgduilvlmpgmbuedk.supabase.co/storage/v1/object/public/pics/logpng.png';
+const LOGO_URL = 'https://vqkpacwswksgvhuczrbw.supabase.co/storage/v1/object/public/photos/logpng.png';
 
 interface LogoProps {
   variant?: 'full' | 'compact' | 'icon';
