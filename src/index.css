@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Cormorant Garamond", "Noto Serif Georgian", Georgia, serif;
+  --font-display: "Cinzel", "Noto Serif Georgian", Georgia, serif;
+  --font-sans: "Inter", "Noto Sans Georgian", system-ui, sans-serif;
+  --font-georgian-serif: "Noto Serif Georgian", "Cormorant Garamond", serif;
+
+  --color-ivory: #FAF8F3;
+  --color-ivory-dark: #F5F2EA;
+  --color-navy: #13253D;
+  --color-navy-dark: #0D1B2A;
+  --color-gold: #C79B3A;
+  --color-gold-luxury: #D4AF37;
+  --color-gold-light: #E6C86B;
+  --color-gold-border: #E6DDCB;
+  --color-charcoal: #1B1B1B;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background-color: #FFFFFF;
+    color: #1B1B1B;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, .font-heading {
+    font-family: var(--font-georgian-serif);
+  }
+}
+
+/* Custom fine scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #FFFFFF;
+}
+::-webkit-scrollbar-thumb {
+  background: #D4AF37;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #C79B3A;
+}
+
+/* Custom luxury subtle card shadow */
+.shadow-luxury {
+  box-shadow: 0 4px 24px -2px rgba(13, 27, 42, 0.05), 0 1px 3px 0 rgba(199, 155, 58, 0.08);
+}
+
+.shadow-luxury-hover {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.shadow-luxury-hover:hover {
+  box-shadow: 0 12px 36px -4px rgba(13, 27, 42, 0.09), 0 4px 12px 0 rgba(199, 155, 58, 0.15);
+  transform: translateY(-2px);
+}
+
+/* Gold foil gradient effect */
+.gold-text-gradient {
+  background: linear-gradient(135deg, #C79B3A 0%, #E6C86B 50%, #B38628 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
