@@ -149,7 +149,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               transition={{ duration: 0.4, delay: 0.1 }}
               className="relative flex flex-col space-y-3 justify-center"
             >
-              {/* Header Badges above photo: ადგილზე, ონლაინ, Phone & 511111111 */}
+              {/* Header Badges above photo: ადგილზე, ონლაინ, Phone & 574 122 193 */}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-[2px] bg-white border border-[#E6DDCB] text-[#13253D] text-xs font-semibold shadow-sm">
@@ -163,12 +163,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 </div>
 
                 <a 
-                  href="tel:511111111" 
+                  href="tel:574122193" 
                   className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-[2px] bg-[#13253D] text-white text-xs font-semibold shadow-sm hover:bg-[#C79B3A] transition-colors cursor-pointer"
                   title="დარეკვა"
                 >
                   <Phone className="w-3.5 h-3.5 text-[#C79B3A]" />
-                  <span className="font-mono tracking-wider">511111111</span>
+                  <span className="font-mono tracking-wider">574 122 193</span>
                 </a>
               </div>
 
