@@ -27,15 +27,15 @@ export const Footer: React.FC<FooterProps> = ({ setActiveTab }) => {
         {/* Main Grid Layout */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-10 py-12">
           
-          {/* Brand Info (5 cols) */}
-          <div className="md:col-span-5 space-y-5">
+          {/* Brand Info (4 cols) */}
+          <div className="md:col-span-4 space-y-5">
             <Logo 
               variant="compact" 
               src="https://vqkpacwswksgvhuczrbw.supabase.co/storage/v1/object/public/photos/logooo.png"
               imgClassName="h-16 sm:h-20 md:h-24 max-w-[280px]" 
               onClick={() => setActiveTab('home')} 
             />
-            <p className="text-sm sm:text-base text-[#FAF8F3]/85 leading-relaxed max-w-lg font-normal">
+            <p className="text-sm text-[#FAF8F3]/85 leading-relaxed max-w-[340px] font-normal">
               ისტორიის პედაგოგ ნოდარ თოთაძის მოსამზადებელი პორტალი. მოემზადე ეროვნული გამოცდებისთვის საგამოცდო რესურსებით, ტესტებითა და ვიდეო გაკვეთილებით.
             </p>
             <div className="flex items-center gap-3 pt-1">
@@ -80,8 +80,8 @@ export const Footer: React.FC<FooterProps> = ({ setActiveTab }) => {
             </div>
           </div>
 
-          {/* Quick Navigation (3 cols) */}
-          <div className="md:col-span-3 space-y-3">
+          {/* Quick Navigation (4 cols) */}
+          <div className="md:col-span-4 space-y-3">
             <h4 className="text-xs uppercase tracking-[0.2em] font-semibold text-[#C79B3A]">
               ნავიგაცია
             </h4>
