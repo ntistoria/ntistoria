@@ -55,7 +55,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               {/* Social Media Links */}
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <a 
-                  href="https://facebook.com" 
+                  href="https://www.facebook.com/profile.php?id=61593642503126" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#E6DDCB] text-[#13253D] text-xs font-semibold hover:bg-[#1877F2] hover:text-white hover:border-[#1877F2] transition-all duration-200 shadow-sm cursor-pointer"
@@ -68,7 +68,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 </a>
 
                 <a 
-                  href="https://instagram.com" 
+                  href="https://www.instagram.com/ntistoria/?hl=en" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#E6DDCB] text-[#13253D] text-xs font-semibold hover:bg-gradient-to-r hover:from-[#833AB4] hover:via-[#FD1D1D] hover:to-[#F56040] hover:text-white hover:border-transparent transition-all duration-200 shadow-sm cursor-pointer"
@@ -81,7 +81,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 </a>
 
                 <a 
-                  href="https://tiktok.com" 
+                  href="https://www.tiktok.com/@nt.istoria" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#E6DDCB] text-[#13253D] text-xs font-semibold hover:bg-black hover:text-white hover:border-black transition-all duration-200 shadow-sm cursor-pointer"
@@ -94,7 +94,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 </a>
 
                 <a 
-                  href="https://youtube.com" 
+                  href="https://www.youtube.com/@NTIstoria" 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#E6DDCB] text-[#13253D] text-xs font-semibold hover:bg-[#FF0000] hover:text-white hover:border-[#FF0000] transition-all duration-200 shadow-sm cursor-pointer"

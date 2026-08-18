@@ -36,11 +36,9 @@ export const Footer: React.FC<FooterProps> = ({ setActiveTab }) => {
               onClick={() => setActiveTab('home')} 
             />
             <p className="text-sm sm:text-base text-[#FAF8F3]/85 leading-relaxed max-w-lg font-normal">
-              ისტორიის პედაგოგ ნოდარ თოთაძის მოსამზადებელი პორტალი. მოემზადე ეროვნული გამოცდებისთვის საგამოცდო რესურსებით, ტესტებითა და ვიდეო გაკვეთილებით.
-            </p>
-            <div className="flex items-center gap-3 pt-1">
+              �            <div className="flex items-center gap-3 pt-1">
               <a 
-                href="https://facebook.com" 
+                href="https://www.facebook.com/profile.php?id=61593642503126" 
                 target="_blank" 
                 rel="noreferrer"
                 className="w-9 h-9 rounded-lg bg-[#FAF8F3]/10 hover:bg-[#C79B3A] text-[#FAF8F3] hover:text-[#0D1B2A] flex items-center justify-center transition-all cursor-pointer border border-[#FAF8F3]/10"
@@ -49,7 +47,7 @@ export const Footer: React.FC<FooterProps> = ({ setActiveTab }) => {
                 <Facebook className="w-4 h-4" />
               </a>
               <a 
-                href="https://instagram.com" 
+                href="https://www.instagram.com/ntistoria/?hl=en" 
                 target="_blank" 
                 rel="noreferrer"
                 className="w-9 h-9 rounded-lg bg-[#FAF8F3]/10 hover:bg-[#C79B3A] text-[#FAF8F3] hover:text-[#0D1B2A] flex items-center justify-center transition-all cursor-pointer border border-[#FAF8F3]/10"
@@ -58,18 +56,18 @@ export const Footer: React.FC<FooterProps> = ({ setActiveTab }) => {
                 <Instagram className="w-4 h-4" />
               </a>
               <a 
-                href="https://tiktok.com" 
+                href="https://www.tiktok.com/@nt.istoria" 
                 target="_blank" 
                 rel="noreferrer"
                 className="w-9 h-9 rounded-lg bg-[#FAF8F3]/10 hover:bg-[#C79B3A] text-[#FAF8F3] hover:text-[#0D1B2A] flex items-center justify-center transition-all cursor-pointer border border-[#FAF8F3]/10"
                 title="TikTok"
               >
                 <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                  <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.29 0 .56.04.83.12V9.32a6.33 6.33 0 0 0-1-.08 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V9.05a8.33 8.33 0 0 0 4.96 1.62V7.22a4.85 4.85 0 0 1-1.01-.53z" />
+                  <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 1 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.29 0 .56.04.83.12V9.32a6.33 6.33 0 0 0-1-.08 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34V9.05a8.33 8.33 0 0 0 4.96 1.62V7.22a4.85 4.85 0 0 1-1.01-.53z" />
                 </svg>
               </a>
               <a 
-                href="https://youtube.com" 
+                href="https://www.youtube.com/@NTIstoria" 
                 target="_blank" 
                 rel="noreferrer"
                 className="w-9 h-9 rounded-lg bg-[#FAF8F3]/10 hover:bg-[#C79B3A] text-[#FAF8F3] hover:text-[#0D1B2A] flex items-center justify-center transition-all cursor-pointer border border-[#FAF8F3]/10"
@@ -126,6 +124,18 @@ export const Footer: React.FC<FooterProps> = ({ setActiveTab }) => {
             </h4>
             <ul className="space-y-3 text-sm text-[#FAF8F3]/80">
               <li className="flex items-start gap-3">
+                <MapPin className="w-4 h-4 text-[#C79B3A] shrink-0 mt-1" />
+                <span>თბილისი, ვაზისუბნის დასახლება</span>
+              </li>
+              <li className="flex items-center gap-3">
+                <Phone className="w-4 h-4 text-[#C79B3A] shrink-0" />
+                <span>574 122 193</span>
+              </li>
+              <li className="flex items-center gap-3">
+                <Mail className="w-4 h-4 text-[#C79B3A] shrink-0" />
+                <span>ntistoria@gmail.com</span>
+              </li>
+            </ul>ap-3">
                 <MapPin className="w-4 h-4 text-[#C79B3A] shrink-0 mt-1" />
                 <span>თბილისი, რუსთაველის გამზირი 42 (მეცნიერებათა აკადემიის მიმდებარედ)</span>
               </li>

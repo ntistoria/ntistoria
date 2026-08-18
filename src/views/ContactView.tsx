@@ -155,7 +155,7 @@ export const ContactView: React.FC = () => {
                 </div>
                 <div>
                   <div className="text-xs font-semibold text-[#C79B3A] uppercase tracking-wider">მისამართი</div>
-                  <div className="text-sm mt-0.5">თბილისი, რუსთაველის გამზირი 42</div>
+                  <div className="text-sm mt-0.5">თბილისი, ვაზისუბნის დასახლება</div>
                 </div>
               </div>
 
@@ -165,7 +165,7 @@ export const ContactView: React.FC = () => {
                 </div>
                 <div>
                   <div className="text-xs font-semibold text-[#C79B3A] uppercase tracking-wider">ტელეფონი</div>
-                  <div className="text-sm mt-0.5">+995 599 12 34 56</div>
+                  <div className="text-sm mt-0.5">574 122 193</div>
                 </div>
               </div>
 
@@ -175,7 +175,7 @@ export const ContactView: React.FC = () => {
                 </div>
                 <div>
                   <div className="text-xs font-semibold text-[#C79B3A] uppercase tracking-wider">ელ.ფოსტა</div>
-                  <div className="text-sm mt-0.5">history.teacher.nt@gmail.com</div>
+                  <div className="text-sm mt-0.5">ntistoria@gmail.com</div>
                 </div>
               </div>
 
@@ -198,7 +198,7 @@ export const ContactView: React.FC = () => {
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <a
-                  href="https://facebook.com"
+                  href="https://www.facebook.com/profile.php?id=61593642503126"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-[#FAF8F3]/10 hover:bg-[#C79B3A] text-[#FAF8F3] hover:text-[#0D1B2A] text-xs font-medium transition-all group"
@@ -207,7 +207,7 @@ export const ContactView: React.FC = () => {
                   <span>Facebook</span>
                 </a>
                 <a
-                  href="https://instagram.com"
+                  href="https://www.instagram.com/ntistoria/?hl=en"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-[#FAF8F3]/10 hover:bg-[#C79B3A] text-[#FAF8F3] hover:text-[#0D1B2A] text-xs font-medium transition-all group"
@@ -216,7 +216,7 @@ export const ContactView: React.FC = () => {
                   <span>Instagram</span>
                 </a>
                 <a
-                  href="https://tiktok.com"
+                  href="https://www.tiktok.com/@nt.istoria"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-[#FAF8F3]/10 hover:bg-[#C79B3A] text-[#FAF8F3] hover:text-[#0D1B2A] text-xs font-medium transition-all group"
@@ -227,7 +227,7 @@ export const ContactView: React.FC = () => {
                   <span>TikTok</span>
                 </a>
                 <a
-                  href="https://youtube.com"
+                  href="https://www.youtube.com/@NTIstoria"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-[#FAF8F3]/10 hover:bg-[#C79B3A] text-[#FAF8F3] hover:text-[#0D1B2A] text-xs font-medium transition-all group"
@@ -259,30 +259,36 @@ export const ContactView: React.FC = () => {
               <h3 className="font-serif font-bold text-xl text-[#0D1B2A]">
                 ნოდარ თოთაძე
               </h3>
-              <p className="text-xs text-[#666666] leading-relaxed max-w-xs mx-auto">
-                ისტორიის პედაგოგის მოსამზადებელი პორტალი - ეროვნული გამოცდებისთვის მომზადება უმაღლესი სტანდარტით.
+              <p className="text-xs text-[#666666]">
+                ისტორიის პედაგოგი & საგამოცდო ტრენერი
               </p>
+            </div>
+
+            <div className="pt-4 border-t border-[#E6DDCB] flex items-center justify-between text-xs text-[#666666]">
+              <span>საგამოცდო მომზადება</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-[#C79B3A]" />
+              <span>ინდივიდუალური & ჯგუფური</span>
             </div>
           </div>
 
           {/* Location Box */}
-          <div className="bg-white p-6 rounded-2xl border border-[#E6DDCB] shadow-sm space-y-3">
+          <div className="bg-white p-6 rounded-2xl border border-[#E6DDCB] shadow-luxury space-y-4">
             <div className="flex items-center justify-between">
               <span className="text-xs font-semibold text-[#0D1B2A] uppercase tracking-wider">ლოკაცია</span>
-              <span className="text-[10px] text-[#C79B3A] font-medium">თბილისის ცენტრი</span>
+              <span className="text-[10px] text-[#C79B3A] font-medium">თბილისი, ვაზისუბანი</span>
             </div>
             
             <div className="relative rounded-xl overflow-hidden aspect-[16/9] bg-[#F5F2EA] border border-[#E6DDCB] flex items-center justify-center">
               <img 
                 src="https://images.unsplash.com/photo-1565008447742-97f6f38c985c?auto=format&fit=crop&w=800&q=80" 
-                alt="თბილისის რუსთაველის გამზირი" 
+                alt="თბილისი, ვაზისუბნის დასახლება" 
                 className="w-full h-full object-cover opacity-70"
                 referrerPolicy="no-referrer"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[#0D1B2A]/60 to-transparent" />
               <div className="absolute p-3 rounded-lg bg-[#FAF8F3] border border-[#C79B3A] shadow-md text-center space-y-0.5">
                 <MapPin className="w-5 h-5 text-[#C79B3A] mx-auto" />
-                <span className="text-[11px] font-bold text-[#0D1B2A] block">რუსთაველის გამზირი 42</span>
+                <span className="text-[11px] font-bold text-[#0D1B2A] block">ვაზისუბნის დასახლება</span>
               </div>
             </div>
           </div>
