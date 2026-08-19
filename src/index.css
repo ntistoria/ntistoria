@@ -66,3 +66,41 @@
   -webkit-text-fill-color: transparent;
 }
 
+/* =============================================
+   HOVER BLUR FIX
+   backdrop-blur on the navbar header creates a
+   CSS filter stacking context that causes child
+   elements (buttons, icons) to appear blurry on
+   hover. Fix: isolate the header and force icon
+   buttons onto their own GPU compositing layer.
+   ============================================= */
+
+/* Isolate the sticky header so its backdrop-filter
+   doesn't bleed into child hover paints */
+header[class*="fixed"] {
+  isolation: isolate;
+}
+
+/* Force all interactive elements inside the navbar
+   onto a new compositing layer via transform3d —
+   this prevents the parent's backdrop-filter from
+   affecting their rendering on hover */
+header[class*="fixed"] button,
+header[class*="fixed"] a,
+header[class*="fixed"] nav button {
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  /* Prevent any inherited filter from blurring the text/icon */
+  filter: none !important;
+  -webkit-filter: none !important;
+}
+
+/* Ensure SVG icons inside navbar buttons stay sharp */
+header[class*="fixed"] button svg,
+header[class*="fixed"] nav button svg {
+  transform: translateZ(0);
+  filter: none !important;
+  -webkit-filter: none !important;
+}

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { NavTab } from '../types';
 import { Logo } from './Logo';
-import { Menu, X, BookOpen, Search, ArrowRight, User } from 'lucide-react';
+import { Menu, X, BookOpen, Search, ArrowRight, User, ShieldCheck } from 'lucide-react';
+import { isAdminUser } from '../lib/blogService';
 
 interface NavbarProps {
   activeTab: NavTab;
@@ -24,7 +25,9 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const navItems: { id: NavTab; label: string }[] = [
+  const isAdmin = isAdminUser(user);
+
+  const baseNavItems: { id: NavTab; label: string }[] = [
     { id: 'home', label: 'მთავარი' },
     { id: 'blog', label: 'ბლოგი' },
     { id: 'tests', label: 'ტესტები' },
@@ -32,6 +35,10 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
     { id: 'quizzes', label: 'ქვიზები' },
     { id: 'contact', label: 'კონტაქტი' },
   ];
+
+  const navItems = isAdmin 
+    ? [...baseNavItems, { id: 'admin' as NavTab, label: 'ადმინ პანელი' }]
+    : baseNavItems;
 
   const handleNavClick = (id: NavTab) => {
     setActiveTab(id);
@@ -92,10 +99,20 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
             )}
 
             {user ? (
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-semibold text-[#13253D] bg-[#F5F2EA] px-3 py-1.5 rounded-lg border border-[#E6DDCB]">
-                  {user.name}
-                </span>
+              <div className="flex items-center gap-2">
+                {isAdmin ? (
+                  <button
+                    onClick={() => handleNavClick('admin')}
+                    className="flex items-center gap-1.5 text-xs font-bold text-[#0D1B2A] bg-[#C79B3A] hover:bg-[#E6C86B] px-3 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>ადმინ პანელი</span>
+                  </button>
+                ) : (
+                  <span className="text-xs font-semibold text-[#13253D] bg-[#F5F2EA] px-3 py-1.5 rounded-lg border border-[#E6DDCB]">
+                    {user.name}
+                  </span>
+                )}
                 <button
                   onClick={onLogout}
                   className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-[#666666] hover:text-[#13253D] transition-colors cursor-pointer"

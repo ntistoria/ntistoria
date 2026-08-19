@@ -8,6 +8,7 @@ import { TestsView } from './views/TestsView';
 import { VideosView } from './views/VideosView';
 import { QuizzesView } from './views/QuizzesView';
 import { ContactView } from './views/ContactView';
+import { AdminView } from './views/AdminView';
 import { ArticleModal } from './components/ArticleModal';
 import { TestRunnerModal } from './components/TestRunnerModal';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
@@ -15,6 +16,8 @@ import { SearchModal } from './components/SearchModal';
 import { AuthModal } from './components/AuthModal';
 import { ARTICLES } from './data/historyData';
 import { supabase } from './lib/supabase';
+import { isAdminUser } from './lib/blogService';
+
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('home');
@@ -123,6 +126,13 @@ export default function App() {
         {activeTab === 'contact' && (
           <ContactView />
         )}
+
+        {activeTab === 'admin' && (
+          <AdminView
+            user={user}
+            onOpenArticle={handleOpenArticle}
+          />
+        )}
       </main>
 
       {/* Footer */}
@@ -157,7 +167,15 @@ export default function App() {
       <AuthModal
         isOpen={isAuthOpen}
         onClose={() => setIsAuthOpen(false)}
-        onSuccessLogin={(userData) => setUser(userData)}
+        onSuccessLogin={(userData) => {
+          setUser(userData);
+          // Automatically redirect admins to admin panel
+          if (isAdminUser(userData)) {
+            setActiveTab('admin');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+          setIsAuthOpen(false);
+        }}
       />
 
     </div>

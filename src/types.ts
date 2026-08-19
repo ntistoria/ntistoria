@@ -1,4 +1,4 @@
-export type NavTab = 'home' | 'blog' | 'tests' | 'videos' | 'quizzes' | 'contact';
+export type NavTab = 'home' | 'blog' | 'tests' | 'videos' | 'quizzes' | 'contact' | 'admin';
 
 export type HistoricalCategory = 
   | 'საქართველოს ისტორია'

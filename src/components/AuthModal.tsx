@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Mail, Lock, User, LogIn, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Mail, Lock, User, LogIn, CheckCircle2, AlertCircle, Loader2, ShieldCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { isAdminUser } from '../lib/blogService';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -74,20 +75,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                          `${data.user?.user_metadata?.first_name || ''} ${data.user?.user_metadata?.last_name || ''}`.trim() || 
                          email.split('@')[0];
 
+        const userData = { name: fullName, email: data.user.email || email };
+        const isAdmin = isAdminUser(userData);
+
         setIsSuccess(true);
-        setSuccessMsg('ავტორიზაცია წარმატებით დასრულდა!');
+        setSuccessMsg(
+          isAdmin 
+            ? 'კეთილი იყოს შენი მობრძანება, ადმინ! ადმინ პანელში გადამისამართება...'
+            : 'ავტორიზაცია წარმატებით დასრულდა!'
+        );
 
         if (onSuccessLogin) {
-          onSuccessLogin({
-            name: fullName,
-            email: data.user.email || email,
-          });
+          onSuccessLogin(userData);
         }
-
+        // App.tsx handles closing and redirect — just clean up state
         setTimeout(() => {
           setIsSuccess(false);
-          onClose();
-        }, 1200);
+        }, 1500);
       }
     } catch (err: any) {
       console.error('Supabase Auth error:', err);
