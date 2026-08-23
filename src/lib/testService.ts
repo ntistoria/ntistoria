@@ -168,39 +168,24 @@ export const DEFAULT_PROGRAMS: ProgramChapter[] = [
 /**
  * Fetch Program Chapters from Supabase tables (history_exam schema, public, or program)
  */
+/**
+ * Fetch Program Chapters from Supabase tables
+ */
 export const fetchProgramsAndSubprograms = async (): Promise<ProgramChapter[]> => {
   const possibleProgramTables = ['exam_programs', 'program', 'programs'];
   const possibleSubprogramTables = ['exam_subprograms', 'subprogram', 'subprograms'];
 
   for (const pTable of possibleProgramTables) {
     try {
-      // 1. Try history_exam schema
-      let { data: progData, error: progErr } = await supabase
-        .schema('history_exam')
-        .from(pTable)
-        .select('*');
-
-      if (progErr || !progData || progData.length === 0) {
-        // 2. Try public schema
-        const res = await supabase.from(pTable).select('*');
-        progData = res.data;
-        progErr = res.error;
-      }
+      const res = await supabase.from(pTable).select('*');
+      const progData = res.data;
+      const progErr = res.error;
 
       if (!progErr && progData && progData.length > 0) {
-        // Sort by chapter number
         progData.sort((a: any, b: any) => (a.chapter_number || a.order || 1) - (b.chapter_number || b.order || 1));
 
         let subData: any[] = [];
         for (const sTable of possibleSubprogramTables) {
-          try {
-            const { data: s1 } = await supabase.schema('history_exam').from(sTable).select('*');
-            if (s1 && s1.length > 0) {
-              subData = s1;
-              break;
-            }
-          } catch (e) {}
-
           const { data: s2 } = await supabase.from(sTable).select('*');
           if (s2 && s2.length > 0) {
             subData = s2;
@@ -228,7 +213,7 @@ export const fetchProgramsAndSubprograms = async (): Promise<ProgramChapter[]> =
 };
 
 /**
- * Fetch Total Question Count for a Category directly from Supabase DB
+ * Fetch Total Question Count for a Category directly from Supabase DB (public schema)
  */
 export const fetchCategoryQuestionsCount = async (categoryKey: string): Promise<number> => {
   const catMeta = TEST_CATEGORIES.find(c => c.key === categoryKey);
@@ -236,17 +221,6 @@ export const fetchCategoryQuestionsCount = async (categoryKey: string): Promise<
 
   for (const tableName of tablesToQuery) {
     try {
-      // 1. Try history_exam schema
-      const { count: hCount, error: hErr } = await supabase
-        .schema('history_exam')
-        .from(tableName)
-        .select('*', { count: 'exact', head: true });
-
-      if (!hErr && typeof hCount === 'number') {
-        return hCount;
-      }
-
-      // 2. Try public schema
       const { count: pCount, error: pErr } = await supabase
         .from(tableName)
         .select('*', { count: 'exact', head: true });
@@ -261,7 +235,7 @@ export const fetchCategoryQuestionsCount = async (categoryKey: string): Promise<
 };
 
 /**
- * Fetch Real Test Questions for a category directly from Supabase tables
+ * Fetch Real Test Questions for a category directly from Supabase tables (public schema)
  */
 export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(QuizQuestion & { chapterId: string })[]> => {
   const catMeta = TEST_CATEGORIES.find(c => c.key === categoryKey);
@@ -271,40 +245,18 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
     try {
       let rawQuestions: any[] = [];
 
-      // 1. Try history_exam schema
-      const { data: hQuestions, error: hErr } = await supabase
-        .schema('history_exam')
-        .from(tableName)
-        .select('*');
-
-      if (!hErr && hQuestions && hQuestions.length > 0) {
-        rawQuestions = hQuestions;
-      } else {
-        // 2. Try public schema
-        const { data: pQuestions, error: pErr } = await supabase.from(tableName).select('*');
-        if (!pErr && pQuestions && pQuestions.length > 0) {
-          rawQuestions = pQuestions;
-        }
+      const { data: pQuestions, error: pErr } = await supabase.from(tableName).select('*');
+      if (!pErr && pQuestions && pQuestions.length > 0) {
+        rawQuestions = pQuestions;
       }
 
       if (rawQuestions.length > 0) {
-        // Joined data maps (e.g. maps, sources)
         let mapsMap: Record<string, string> = {};
         let sourcesMap: Record<string, string> = {};
 
         if (categoryKey === 'map') {
           const possibleMapTables = ['maps', 'map', 'რუკა'];
           for (const mTab of possibleMapTables) {
-            try {
-              const { data: mData } = await supabase.schema('history_exam').from(mTab).select('*');
-              if (mData && mData.length > 0) {
-                mData.forEach((m: any) => {
-                  mapsMap[m.id] = m.map_url || m.image_url || m.url || m.link;
-                });
-                break;
-              }
-            } catch (e) {}
-
             const { data: mData2 } = await supabase.from(mTab).select('*');
             if (mData2 && mData2.length > 0) {
               mData2.forEach((m: any) => {
@@ -318,16 +270,6 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
         if (categoryKey === 'source') {
           const possibleSourceTables = ['sources', 'source', 'წყარო'];
           for (const sTab of possibleSourceTables) {
-            try {
-              const { data: sData } = await supabase.schema('history_exam').from(sTab).select('*');
-              if (sData && sData.length > 0) {
-                sData.forEach((s: any) => {
-                  sourcesMap[s.id] = s.text || s.content || s.body || s.title;
-                });
-                break;
-              }
-            } catch (e) {}
-
             const { data: sData2 } = await supabase.from(sTab).select('*');
             if (sData2 && sData2.length > 0) {
               sData2.forEach((s: any) => {
