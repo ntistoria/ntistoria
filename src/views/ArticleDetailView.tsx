@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Article } from '../types';
-import { ArrowLeft, Clock, Calendar, User, Share2, Check, Bookmark, Quote, BookOpen } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Share2, Check, Bookmark, Quote, BookOpen } from 'lucide-react';
 
 interface ArticleDetailViewProps {
   article: Article;
@@ -81,9 +81,6 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <span className="px-3 py-1 bg-[#FAF8F3] border border-[#C79B3A]/40 text-[#C79B3A] text-[11px] font-bold uppercase tracking-wider rounded-full">
               {article.category}
-            </span>
-            <span className="text-xs text-[#8A8A8A] flex items-center gap-1 font-medium">
-              <Clock className="w-3.5 h-3.5 text-[#C79B3A]" /> {article.readTime} კითხვა
             </span>
           </div>
 

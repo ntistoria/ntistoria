@@ -30,7 +30,6 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
   const [category, setCategory] = useState<HistoricalCategory>('საქართველოს ისტორია');
   const [excerpt, setExcerpt] = useState('');
   const [content, setContent] = useState('');
-  const [readTime, setReadTime] = useState('5 წთ');
   const [imageUrl, setImageUrl] = useState('');
   const [tagsInput, setTagsInput] = useState('ისტორია, ეროვნული გამოცდები');
   const [author, setAuthor] = useState('ნოდარ თოთაძე');
@@ -50,7 +49,6 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
       setCategory(articleToEdit.category || 'საქართველოს ისტორია');
       setExcerpt(articleToEdit.excerpt || '');
       setContent(articleToEdit.content || '');
-      setReadTime(articleToEdit.readTime || '5 წთ');
       setImageUrl(articleToEdit.imageUrl || '');
       setTagsInput(articleToEdit.tags?.join(', ') || 'ისტორია');
       setAuthor(articleToEdit.author || 'ნოდარ თოთაძე');
@@ -61,7 +59,6 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
       setCategory('საქართველოს ისტორია');
       setExcerpt('');
       setContent('');
-      setReadTime('5 წთ');
       setImageUrl('');
       setTagsInput('ისტორია, ეროვნული გამოცდები');
       setAuthor('ნოდარ თოთაძე');
@@ -145,7 +142,6 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
         category,
         author: author.trim() || 'ნოდარ თოთაძე',
         date: articleToEdit?.date || new Date().toISOString().split('T')[0],
-        readTime: readTime.trim() || '5 წთ',
         imageUrl: imageUrl || 'https://images.unsplash.com/photo-1544967082-d9d25d867d66',
         featured,
         tags: tags.length ? tags : ['ისტორია']
@@ -443,24 +439,14 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
                 />
               </div>
 
-              {/* Extra Metadata (Author, Read Time, Tags, Featured) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+              {/* Extra Metadata (Author, Tags, Featured) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                 <div className="space-y-1">
                   <label className="text-[11px] font-semibold text-[#666666]">ავტორი</label>
                   <input
                     type="text"
                     value={author}
                     onChange={(e) => setAuthor(e.target.value)}
-                    className="w-full bg-[#FAF8F3] border border-[#E6DDCB] rounded-xl px-3 py-2 text-xs text-[#13253D]"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-[#666666]">კითხვის დრო</label>
-                  <input
-                    type="text"
-                    value={readTime}
-                    onChange={(e) => setReadTime(e.target.value)}
                     className="w-full bg-[#FAF8F3] border border-[#E6DDCB] rounded-xl px-3 py-2 text-xs text-[#13253D]"
                   />
                 </div>
@@ -500,10 +486,8 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
                 <h1 className="font-serif font-bold text-2xl sm:text-3xl text-[#13253D] leading-tight">
                   {title || 'ბლოგის სათაური'}
                 </h1>
-                <div className="flex items-center gap-4 text-xs text-[#666666]">
+                <div className="flex items-center gap-3 text-xs text-[#8A8A8A]">
                   <span>ავტორი: {author}</span>
-                  <span>•</span>
-                  <span>{readTime}</span>
                 </div>
               </div>
 

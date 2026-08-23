@@ -19,7 +19,7 @@ export interface Article {
   category: HistoricalCategory;
   author: string;
   date: string;
-  readTime: string;
+  readTime?: string;
   imageUrl: string;
   featured?: boolean;
   tags: string[];

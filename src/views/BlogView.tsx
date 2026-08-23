@@ -158,7 +158,7 @@ export const BlogView: React.FC<BlogViewProps> = ({ onOpenArticle }) => {
 
                 <div className="pt-6 border-t border-[#E6DDCB] flex items-center justify-between text-xs text-[#8A8A8A]">
                   <span className="font-medium text-[#13253D]">{featured.author}</span>
-                  <span>{featured.readTime}</span>
+                  <span>{featured.date}</span>
                 </div>
               </div>
             </div>
@@ -196,7 +196,7 @@ export const BlogView: React.FC<BlogViewProps> = ({ onOpenArticle }) => {
 
                   <div className="pt-4 border-t border-[#E6DDCB]/60 flex items-center justify-between text-[11px] text-[#8A8A8A]">
                     <span>{article.date}</span>
-                    <span className="text-[#C79B3A] font-medium">{article.readTime}</span>
+                    <span className="text-[#C79B3A] font-medium">{article.author}</span>
                   </div>
                 </div>
               </div>

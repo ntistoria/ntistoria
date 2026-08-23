@@ -3,7 +3,7 @@
 -- Run this script in your Supabase SQL Editor (https://supabase.com/dashboard)
 -- ====================================================================
 
--- 1. Create ARTICLES (Blogs) Table
+-- 1. Create ARTICLES (Blogs) Table (Without read_time)
 CREATE TABLE IF NOT EXISTS public.articles (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   title TEXT NOT NULL,
@@ -13,7 +13,6 @@ CREATE TABLE IF NOT EXISTS public.articles (
   category TEXT DEFAULT 'საქართველოს ისტორია',
   author TEXT DEFAULT 'ნოდარ თოთაძე',
   date TEXT DEFAULT CURRENT_DATE::text,
-  read_time TEXT DEFAULT '5 წუთი',
   image_url TEXT,
   featured BOOLEAN DEFAULT FALSE,
   tags JSONB DEFAULT '["ისტორია"]'::jsonb,

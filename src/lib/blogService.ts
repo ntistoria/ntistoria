@@ -41,7 +41,6 @@ export const fetchAllArticles = async (): Promise<Article[]> => {
         category: item.category || 'საქართველოს ისტორია',
         author: item.author || 'ნოდარ თოთაძე',
         date: item.date || new Date().toISOString().split('T')[0],
-        readTime: item.read_time || item.readTime || '5 წთ',
         imageUrl: item.image_url || item.imageUrl || 'https://images.unsplash.com/photo-1544967082-d9d25d867d66',
         featured: item.featured || false,
         tags: item.tags ? (typeof item.tags === 'string' ? JSON.parse(item.tags) : item.tags) : ['ისტორია']
@@ -98,7 +97,6 @@ export const saveArticle = async (article: Article): Promise<Article> => {
       category: articleToSave.category,
       author: articleToSave.author,
       date: articleToSave.date,
-      read_time: articleToSave.readTime,
       image_url: articleToSave.imageUrl,
       featured: articleToSave.featured || false,
       tags: JSON.stringify(articleToSave.tags)
