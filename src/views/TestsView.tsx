@@ -3,7 +3,6 @@ import { HistoryTest } from '../types';
 
 import { 
   TEST_CATEGORIES, 
-  TestCategoryMeta, 
   ProgramChapter, 
   fetchProgramsAndSubprograms, 
   fetchQuestionsForCategory, 
@@ -31,7 +30,6 @@ import {
   HelpCircle, 
   ChevronLeft, 
   Sparkles,
-  RefreshCw,
   Database
 } from 'lucide-react';
 
@@ -96,11 +94,6 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
     countQuestions();
   }, [selectedCategoryKey]);
-
-  const refreshProgress = async () => {
-    const updated = await getStudentProgress(userEmail);
-    setProgressData(updated);
-  };
 
   const handleSelectCategory = (key: string) => {
     setSelectedCategoryKey(key);
@@ -183,7 +176,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
           <div className="text-center max-w-3xl mx-auto space-y-4 pt-4">
             <span className="px-3.5 py-1 bg-[#FAF8F3] border border-[#C79B3A]/40 text-[#C79B3A] text-[11px] font-bold uppercase tracking-[0.25em] rounded-full inline-flex items-center gap-1.5 shadow-sm">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>აკადემიური ტესტირება • NAEC ბაზა</span>
+              <span>აკადემიური ტესტირება</span>
             </span>
             <h1 className="font-serif font-bold text-3xl sm:text-5xl text-[#0D1B2A] leading-tight">
               ისტორიის ტესტები და გამოცდები
@@ -193,14 +186,11 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
             </p>
           </div>
 
-          {/* 1. ეროვნული გამოცდების კატეგორიები (N1-N38) */}
+          {/* 1. ეროვნული გამოცდების კატეგორიები */}
           <div className="space-y-6">
             <div className="border-b border-[#E6DDCB] pb-3 flex items-center justify-between">
-              <h2 className="font-serif font-bold text-2xl text-[#0D1B2A] flex items-center gap-2">
-                <span>ეროვნულის ტესტები</span>
-                <span className="text-xs font-sans font-semibold text-[#C79B3A] bg-[#FAF8F3] px-2.5 py-0.5 rounded-full border border-[#E6DDCB]">
-                  NAEC სტანდარტი
-                </span>
+              <h2 className="font-serif font-bold text-2xl text-[#0D1B2A]">
+                ეროვნულის ტესტები
               </h2>
             </div>
 
@@ -247,11 +237,11 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
             </div>
           </div>
 
-          {/* 2. სხვა ტესტები (ქრონოლოგია & ილუსტრაციები) */}
+          {/* 2. სხვა ტესტები */}
           <div className="space-y-6">
             <div className="border-b border-[#E6DDCB] pb-3">
               <h2 className="font-serif font-bold text-2xl text-[#0D1B2A]">
-                სხვა დამოუკიდებელი ტესტები
+                სხვა ტესტები
               </h2>
             </div>
 
@@ -271,7 +261,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                     <div className="space-y-2 flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <span className="px-2 py-0.5 bg-[#FAF8F3] text-[#C79B3A] text-[10px] font-bold rounded uppercase tracking-wider border border-[#E6DDCB]">
-                          {cat.isIndependent ? 'დამოუკიდებელი' : cat.badge}
+                          {cat.badge}
                         </span>
 
                         <span className="px-2.5 py-0.5 bg-[#FAF8F3] text-[#13253D] text-[11px] font-bold rounded-full border border-[#E6DDCB] flex items-center gap-1">
@@ -286,12 +276,6 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                       <p className="text-xs text-[#666666] leading-relaxed">
                         {cat.subtitle}
                       </p>
-
-                      {cat.isIndependent && (
-                        <p className="text-[11px] font-semibold text-[#C79B3A] bg-[#FAF8F3] p-2 rounded-lg border border-[#C79B3A]/30">
-                          📌 ქრონოლოგია არის დამოუკიდებელი დავალება და არ უკავშირდება კონკრეტულ თავებს.
-                        </p>
-                      )}
 
                       <div className="pt-2 flex items-center gap-2 text-xs font-bold text-[#C79B3A]">
                         <span>დავალებების გახსნა</span>
@@ -373,7 +357,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
               </div>
             </div>
 
-            {/* BOX 2: SELECT BY PROGRAM CHAPTER / SUBPROGRAM */}
+            {/* BOX 2: SELECT BY PROGRAM CHAPTER */}
             <div className="bg-white p-6 sm:p-8 rounded-3xl border-2 border-[#C79B3A] shadow-lg flex flex-col justify-between space-y-6 relative overflow-hidden">
               <div className="space-y-4">
                 <div className="w-14 h-14 rounded-2xl bg-[#FAF8F3] border border-[#C79B3A]/40 flex items-center justify-center">
@@ -500,83 +484,6 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
             </div>
 
-          </div>
-
-          {/* CHAPTER LIST WITH INDIVIDUAL PROGRESS BARS */}
-          <div className="bg-white rounded-3xl border border-[#E6DDCB] p-6 sm:p-8 space-y-6 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E6DDCB] pb-4">
-              <div>
-                <h3 className="font-serif font-bold text-xl text-[#0D1B2A]">
-                  პროგრამის თავების პროგრესი ({programs.length} თავი)
-                </h3>
-                <p className="text-xs text-[#666666]">
-                  თითოეულ თავში თქვენი სწორი, არასწორი და გაუკეთებელი კითხვების სტატისტიკა.
-                </p>
-              </div>
-
-              <button
-                onClick={refreshProgress}
-                className="text-xs text-[#C79B3A] font-bold hover:underline flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>სტატისტიკის განახლება</span>
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {programs.map((prog) => {
-                const totalQ = questionsCountMap[prog.id] || 3;
-                const stats = getChapterStats(selectedCategoryKey, prog.id, totalQ);
-                const isSelected = selectedChapterId === prog.id;
-
-                return (
-                  <div
-                    key={prog.id}
-                    onClick={() => setSelectedChapterId(prog.id)}
-                    className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
-                      isSelected
-                        ? 'bg-[#FAF8F3] border-[#C79B3A] shadow-sm'
-                        : 'bg-white border-[#E6DDCB] hover:border-[#C79B3A]/60'
-                    }`}
-                  >
-                    <div className="space-y-1 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-serif font-bold text-[#0D1B2A]">
-                          {prog.title}
-                        </span>
-                        {isSelected && (
-                          <span className="px-2 py-0.5 bg-[#C79B3A] text-[#0D1B2A] text-[9px] font-bold rounded-md">
-                            არჩეული
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-[#666666] line-clamp-1">
-                        {prog.description}
-                      </p>
-                    </div>
-
-                    {/* Progress Stats Summary */}
-                    <div className="w-full sm:w-64 space-y-1.5 shrink-0">
-                      <div className="flex justify-between text-[11px] font-semibold text-[#0D1B2A]">
-                        <span>სწორი: {stats.correct} / {totalQ}</span>
-                        <span>{stats.pct}%</span>
-                      </div>
-
-                      <div className="w-full h-2 bg-[#E6DDCB] rounded-full overflow-hidden flex">
-                        <div 
-                          style={{ width: `${stats.total > 0 ? (stats.correct / stats.total) * 100 : 0}%` }}
-                          className="bg-emerald-500 h-full"
-                        />
-                        <div 
-                          style={{ width: `${stats.total > 0 ? (stats.incorrect / stats.total) * 100 : 0}%` }}
-                          className="bg-rose-500 h-full"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
           </div>
 
         </div>
