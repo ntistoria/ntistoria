@@ -52,31 +52,54 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
   // Load programs, total question counts per category, and student progress
   useEffect(() => {
+    let isMounted = true;
+
     const init = async () => {
       setLoading(true);
       try {
+        // 1. Fetch programs (fast or instant default fallback)
         const progs = await fetchProgramsAndSubprograms();
-        setPrograms(progs);
-        if (progs.length > 0) {
-          setSelectedChapterId(progs[0].id);
+        if (isMounted) {
+          setPrograms(progs);
+          if (progs.length > 0) {
+            setSelectedChapterId(progs[0].id);
+          }
+          // Turn off initial loading spinner immediately so the UI is interactive
+          setLoading(false);
         }
 
-        // Fetch question count in database for all categories
-        const totalCounts: Record<string, number> = {};
-        for (const cat of TEST_CATEGORIES) {
-          totalCounts[cat.key] = await fetchCategoryQuestionsCount(cat.key);
-        }
-        setCategoryTotalCounts(totalCounts);
+        // 2. Fetch question counts in PARALLEL for all categories concurrently
+        const catEntries = await Promise.all(
+          TEST_CATEGORIES.map(async (cat) => {
+            const count = await fetchCategoryQuestionsCount(cat.key);
+            return [cat.key, count] as [string, number];
+          })
+        );
 
+        if (isMounted) {
+          const totalCounts: Record<string, number> = Object.fromEntries(catEntries);
+          setCategoryTotalCounts(totalCounts);
+        }
+
+        // 3. Load student progress
         const prog = await getStudentProgress(userEmail);
-        setProgressData(prog);
+        if (isMounted) {
+          setProgressData(prog);
+        }
       } catch (err) {
         console.error('Error initializing TestsView:', err);
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
+
     init();
+
+    return () => {
+      isMounted = false;
+    };
   }, [userEmail]);
 
   // When a category is selected, calculate question counts per chapter

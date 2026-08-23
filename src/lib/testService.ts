@@ -220,16 +220,16 @@ export const fetchProgramsAndSubprograms = async (): Promise<ProgramChapter[]> =
  */
 export const fetchCategoryQuestionsCount = async (categoryKey: string): Promise<number> => {
   const catMeta = TEST_CATEGORIES.find(c => c.key === categoryKey);
-  const tablesToQuery = catMeta?.tableNames || [categoryKey];
+  if (!catMeta) return 0;
 
-  for (const tableName of tablesToQuery) {
+  for (const tableName of catMeta.tableNames) {
     try {
-      const { count: pCount, error: pErr } = await supabase
+      const { count, error } = await supabase
         .from(tableName)
         .select('*', { count: 'exact', head: true });
 
-      if (!pErr && typeof pCount === 'number') {
-        return pCount;
+      if (!error && typeof count === 'number' && count >= 0) {
+        return count;
       }
     } catch (err) {}
   }
