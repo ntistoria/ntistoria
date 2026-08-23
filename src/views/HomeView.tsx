@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavTab, Article, HistoryTest, VideoLesson } from '../types';
-import { HERO_IMAGE, ABOUT_IMAGE, HISTORICAL_EPOCHS, ARTICLES } from '../data/historyData';
+import { HERO_IMAGE, ABOUT_IMAGE, HISTORICAL_EPOCHS } from '../data/historyData';
+import { fetchAllArticles } from '../lib/blogService';
 import { Video, BookOpen, FileText, ArrowRight, CheckCircle2, MapPin, Wifi, Phone, GraduationCap, Award, Quote } from 'lucide-react';
 import { motion } from 'motion/react';
 import { CatalogModal } from '../components/CatalogModal';
@@ -17,7 +18,14 @@ export const HomeView: React.FC<HomeViewProps> = ({
   onOpenArticle
 }) => {
   const [catalogType, setCatalogType] = useState<'universities' | 'colleges' | 'programs' | null>(null);
-  const featuredArticles = ARTICLES.slice(0, 3);
+  const [featuredArticles, setFeaturedArticles] = useState<Article[]>([]);
+
+  useEffect(() => {
+    fetchAllArticles().then(arts => {
+      setFeaturedArticles(arts.slice(0, 3));
+    });
+  }, []);
+
 
   return (
     <div className="space-y-24 pb-20">

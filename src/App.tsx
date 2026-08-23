@@ -5,22 +5,20 @@ import { Footer } from './components/Footer';
 import { HomeView } from './views/HomeView';
 import { BlogView } from './views/BlogView';
 import { TestsView } from './views/TestsView';
-import { VideosView } from './views/VideosView';
 import { QuizzesView } from './views/QuizzesView';
+import { VideosView } from './views/VideosView';
 import { ContactView } from './views/ContactView';
 import { AdminView } from './views/AdminView';
-import { ArticleModal } from './components/ArticleModal';
+import { ArticleDetailView } from './views/ArticleDetailView';
 import { TestRunnerModal } from './components/TestRunnerModal';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { SearchModal } from './components/SearchModal';
 import { AuthModal } from './components/AuthModal';
 import { StudentProfileModal } from './components/StudentProfileModal';
-import { ARTICLES } from './data/historyData';
 import { supabase } from './lib/supabase';
 import { isAdminUser } from './lib/blogService';
 
-
-export default function App() {
+export function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('home');
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [selectedTest, setSelectedTest] = useState<HistoryTest | null>(null);
@@ -62,7 +60,7 @@ export default function App() {
       handleSession(session);
     });
 
-    // Listen for real-time auth changes (Login, Logout, Token Refresh, OAuth Redirect)
+    // Listen for real-time auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       handleSession(session);
     });
@@ -71,7 +69,6 @@ export default function App() {
       subscription.unsubscribe();
     };
   }, []);
-
 
   const handleLogout = async () => {
     try {
@@ -84,6 +81,7 @@ export default function App() {
 
   const handleOpenArticle = (article: Article) => {
     setSelectedArticle(article);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleOpenTest = (test: HistoryTest) => {
@@ -94,13 +92,18 @@ export default function App() {
     setSelectedVideo(video);
   };
 
+  const handleTabChange = (tab: NavTab) => {
+    setSelectedArticle(null);
+    setActiveTab(tab);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-white text-[#1B1B1B] selection:bg-[#C79B3A] selection:text-[#0D1B2A]">
-      
-      {/* Sticky Navigation */}
+      {/* Top Sticky Header */}
       <Navbar 
         activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
+        setActiveTab={handleTabChange}
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenAuth={() => setIsAuthOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
@@ -108,61 +111,63 @@ export default function App() {
         onLogout={handleLogout}
       />
 
-      {/* Main View Container */}
-      <main className="flex-1 pt-24 px-4 sm:px-6 lg:px-8">
-        {activeTab === 'home' && (
-          <HomeView
-            setActiveTab={setActiveTab}
-            onOpenArticle={handleOpenArticle}
-            onOpenTest={handleOpenTest}
-            onOpenVideo={handleOpenVideo}
+      {/* Main Dynamic View Area */}
+      <main className="flex-1">
+        {selectedArticle ? (
+          <ArticleDetailView 
+            article={selectedArticle}
+            onBack={() => setSelectedArticle(null)}
+            onSelectRelated={(art) => handleOpenArticle(art)}
           />
-        )}
+        ) : (
+          <>
+            {activeTab === 'home' && (
+              <HomeView 
+                onOpenArticle={handleOpenArticle} 
+                onOpenTest={handleOpenTest}
+                setActiveTab={handleTabChange}
+              />
+            )}
 
-        {activeTab === 'blog' && (
-          <BlogView
-            onOpenArticle={handleOpenArticle}
-          />
-        )}
+            {activeTab === 'blog' && (
+              <BlogView
+                onOpenArticle={handleOpenArticle}
+              />
+            )}
 
-        {activeTab === 'tests' && (
-          <TestsView
-            onOpenTest={handleOpenTest}
-            user={user}
-          />
-        )}
+            {activeTab === 'tests' && (
+              <TestsView
+                onOpenTest={handleOpenTest}
+                user={user}
+              />
+            )}
 
-        {activeTab === 'quizzes' && (
-          <QuizzesView />
-        )}
+            {activeTab === 'quizzes' && (
+              <QuizzesView />
+            )}
 
-        {activeTab === 'videos' && (
-          <VideosView />
-        )}
+            {activeTab === 'videos' && (
+              <VideosView />
+            )}
 
-        {activeTab === 'contact' && (
-          <ContactView />
-        )}
+            {activeTab === 'contact' && (
+              <ContactView />
+            )}
 
-        {activeTab === 'admin' && (
-          <AdminView
-            user={user}
-            onOpenArticle={handleOpenArticle}
-          />
+            {activeTab === 'admin' && (
+              <AdminView
+                user={user}
+                onOpenArticle={handleOpenArticle}
+              />
+            )}
+          </>
         )}
       </main>
 
       {/* Footer */}
-      <Footer setActiveTab={setActiveTab} />
+      <Footer setActiveTab={handleTabChange} />
 
       {/* Interactive Modals */}
-      <ArticleModal 
-        article={selectedArticle}
-        onClose={() => setSelectedArticle(null)}
-        onSelectRelated={(art) => setSelectedArticle(art)}
-        allArticles={ARTICLES}
-      />
-
       <TestRunnerModal
         test={selectedTest}
         onClose={() => setSelectedTest(null)}
@@ -179,7 +184,6 @@ export default function App() {
         onClose={() => setIsSearchOpen(false)}
         onOpenArticle={handleOpenArticle}
         onOpenTest={handleOpenTest}
-        onOpenVideo={handleOpenVideo}
       />
 
       <AuthModal
@@ -187,7 +191,6 @@ export default function App() {
         onClose={() => setIsAuthOpen(false)}
         onSuccessLogin={(userData) => {
           setUser(userData);
-          // Automatically redirect admins to admin panel
           if (isAdminUser(userData)) {
             setActiveTab('admin');
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -201,8 +204,8 @@ export default function App() {
         onClose={() => setIsProfileOpen(false)}
         user={user}
       />
-
     </div>
   );
 }
 
+export default App;
