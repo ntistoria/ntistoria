@@ -3,7 +3,7 @@
 -- Run this script in your Supabase SQL Editor (https://supabase.com/dashboard)
 -- ====================================================================
 
--- 1. Create ARTICLES (Blogs) Table (Without read_time)
+-- 1. Create ARTICLES (Blogs) Table
 CREATE TABLE IF NOT EXISTS public.articles (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   title TEXT NOT NULL,
@@ -20,18 +20,32 @@ CREATE TABLE IF NOT EXISTS public.articles (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. Disable Row Level Security for Public Read & Write Access
+-- 2. Disable Row Level Security on articles table
 ALTER TABLE public.articles DISABLE ROW LEVEL SECURITY;
 
--- 3. Grant SELECT, INSERT, UPDATE, DELETE Permissions to anon & authenticated roles
+-- 3. Drop existing restrictive policies if any
+DROP POLICY IF EXISTS "Enable all access for articles" ON public.articles;
+
+-- 4. Create permissive policy for articles table
+CREATE POLICY "Enable all access for articles" 
+ON public.articles 
+FOR ALL 
+USING (true) 
+WITH CHECK (true);
+
+-- 5. Grant SELECT, INSERT, UPDATE, DELETE permissions to all roles
 GRANT ALL ON TABLE public.articles TO anon, authenticated, service_role;
 
--- 4. Ensure Storage Bucket 'photos' exists for Blog & Map images
+-- 6. Ensure Storage Bucket 'photos' exists for Blog & Map images
 INSERT INTO storage.buckets (id, name, public) 
 VALUES ('photos', 'photos', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
 
--- 5. Storage Public Read & Insert Access Policies
+-- 7. Drop existing storage policies if present
+DROP POLICY IF EXISTS "Public Read Access Photos" ON storage.objects;
+DROP POLICY IF EXISTS "Public Insert Access Photos" ON storage.objects;
+
+-- 8. Storage Public Read & Insert Access Policies
 CREATE POLICY "Public Read Access Photos" 
 ON storage.objects FOR SELECT 
 USING (bucket_id = 'photos');
