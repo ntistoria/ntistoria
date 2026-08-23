@@ -14,6 +14,7 @@ import { TestRunnerModal } from './components/TestRunnerModal';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { SearchModal } from './components/SearchModal';
 import { AuthModal } from './components/AuthModal';
+import { StudentProfileModal } from './components/StudentProfileModal';
 import { ARTICLES } from './data/historyData';
 import { supabase } from './lib/supabase';
 import { isAdminUser } from './lib/blogService';
@@ -26,6 +27,7 @@ export default function App() {
   const [selectedVideo, setSelectedVideo] = useState<VideoLesson | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
 
   useEffect(() => {
@@ -88,6 +90,7 @@ export default function App() {
         setActiveTab={setActiveTab} 
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenAuth={() => setIsAuthOpen(true)}
+        onOpenProfile={() => setIsProfileOpen(true)}
         user={user}
         onLogout={handleLogout}
       />
@@ -112,6 +115,7 @@ export default function App() {
         {activeTab === 'tests' && (
           <TestsView
             onOpenTest={handleOpenTest}
+            user={user}
           />
         )}
 
@@ -149,6 +153,7 @@ export default function App() {
       <TestRunnerModal
         test={selectedTest}
         onClose={() => setSelectedTest(null)}
+        userEmail={user?.email}
       />
 
       <VideoPlayerModal
@@ -178,6 +183,13 @@ export default function App() {
         }}
       />
 
+      <StudentProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        user={user}
+      />
+
     </div>
   );
 }
+

@@ -2,17 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { HistoryTest, TestResult } from '../types';
 import { X, CheckCircle2, XCircle, Clock, AlertCircle, Award, RotateCcw, ChevronRight, HelpCircle, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { recordUserAnswers } from '../lib/progressService';
+
 
 interface TestRunnerModalProps {
   test: HistoryTest | null;
   onClose: () => void;
   onSaveResult?: (result: TestResult) => void;
+  userEmail?: string;
 }
 
 export const TestRunnerModal: React.FC<TestRunnerModalProps> = ({
   test,
   onClose,
-  onSaveResult
+  onSaveResult,
+  userEmail = 'guest_user'
 }) => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
@@ -73,12 +77,19 @@ export const TestRunnerModal: React.FC<TestRunnerModalProps> = ({
     }
   };
 
-  const finishTest = () => {
+  const finishTest = async () => {
     setIsFinished(true);
     let correct = 0;
+    const answerRecords: { questionId: string; isCorrect: boolean }[] = [];
+
     test.questions.forEach((q, idx) => {
-      if (selectedAnswers[idx] === q.correctAnswerIndex) {
-        correct += 1;
+      const isRight = selectedAnswers[idx] === q.correctAnswerIndex;
+      if (isRight) correct += 1;
+      if (selectedAnswers[idx] !== -1) {
+        answerRecords.push({
+          questionId: q.id,
+          isCorrect: isRight
+        });
       }
     });
 
@@ -100,10 +111,21 @@ export const TestRunnerModal: React.FC<TestRunnerModalProps> = ({
       }))
     };
 
+    // Save to Progress Service
+    try {
+      const parts = test.id.split('-');
+      const categoryKey = parts[0] || 'mcq';
+      const chapterId = parts[1] || 'ch-1';
+      await recordUserAnswers(userEmail, categoryKey, chapterId, answerRecords);
+    } catch (err) {
+      console.warn('Error recording progress stats:', err);
+    }
+
     if (onSaveResult) {
       onSaveResult(resultObj);
     }
   };
+
 
   const restartTest = () => {
     setSelectedAnswers(new Array(test.questions.length).fill(-1));

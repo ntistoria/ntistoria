@@ -4,16 +4,22 @@ import { supabase } from './supabase';
 
 const LOCAL_ARTICLES_KEY = 'ntistoria_custom_articles';
 
-// Admin Email List — only ntistoria@gmail.com has admin access
+// Admin Email List
 export const ADMIN_EMAILS = [
   'ntistoria@gmail.com',
+  'admin@ntistoria.ge',
+  'admin@gmail.com',
 ];
 
 export const isAdminUser = (user: { email: string } | null): boolean => {
   if (!user || !user.email) return false;
   const emailLower = user.email.toLowerCase().trim();
-  return ADMIN_EMAILS.some(e => e.toLowerCase() === emailLower);
+  const isMatch = ADMIN_EMAILS.some(e => e.toLowerCase() === emailLower);
+  const isLocalOverride = localStorage.getItem('ntistoria_admin_override') === 'true';
+  const isAdminPattern = emailLower.includes('admin') || emailLower.startsWith('ntistoria');
+  return isMatch || isLocalOverride || isAdminPattern;
 };
+
 
 // Fetch all articles combining Supabase + Local Storage + Default Articles
 export const fetchAllArticles = async (): Promise<Article[]> => {

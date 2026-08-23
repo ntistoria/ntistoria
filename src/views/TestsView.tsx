@@ -1,241 +1,548 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { HistoryTest } from '../types';
-import { TESTS } from '../data/historyData';
-import { BookOpen, MapPin, Layers, FileText, Clock, Image as ImageIcon, ArrowRight } from 'lucide-react';
+
+import { 
+  TEST_CATEGORIES, 
+  TestCategoryMeta, 
+  ProgramChapter, 
+  fetchProgramsAndSubprograms, 
+  fetchQuestionsForCategory, 
+  buildHistoryTest 
+} from '../lib/testService';
+import { 
+  getStudentProgress, 
+  resetStudentProgress, 
+  StudentProfileProgress 
+} from '../lib/progressService';
+import { 
+  BookOpen, 
+  MapPin, 
+  Layers, 
+  FileText, 
+  Clock, 
+  Image as ImageIcon, 
+  ArrowRight, 
+  Shuffle, 
+  BookMarked, 
+  RotateCcw, 
+  CheckCircle2, 
+  XCircle, 
+  HelpCircle, 
+  ChevronLeft, 
+  Sparkles,
+  RefreshCw
+} from 'lucide-react';
 
 interface TestsViewProps {
   onOpenTest: (test: HistoryTest) => void;
+  user?: { name: string; email: string } | null;
 }
 
-export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest }) => {
+export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(null);
+  const [programs, setPrograms] = useState<ProgramChapter[]>([]);
+  const [selectedChapterId, setSelectedChapterId] = useState<string>('ch-1');
+  const [questionsCountMap, setQuestionsCountMap] = useState<Record<string, number>>({});
+  const [progressData, setProgressData] = useState<StudentProfileProgress | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
 
-  // Map each box to a test or custom test payload
-  const nationalTestsData: { title: string; subtitle: string; testId: string; icon: React.ReactNode; defaultTest: HistoryTest }[] = [
-    {
-      title: 'არჩევითპასუხიანი (N1-35 კითხვა)',
-      subtitle: 'NAEC სტანდარტის 35 არჩევითპასუხიანი კითხვა',
-      testId: 'mcq-1-35',
-      icon: <BookOpen className="w-6 h-6 text-[#C79B3A]" />,
-      defaultTest: TESTS[0] || {
-        id: 'mcq-1-35',
-        title: 'არჩევითპასუხიანი (N1-35 კითხვა)',
-        category: 'ეროვნული გამოცდები',
-        difficulty: 'საგამოცდო',
-        timeLimitMinutes: 45,
-        questionCount: 35,
-        description: 'ეროვნული გამოცდების პირველი ნაწილი: 35 არჩევითპასუხიანი კითხვა ისტორიის ყველა ეპოქიდან.',
-        questions: TESTS[0]?.questions || []
-      }
-    },
-    {
-      title: 'ისტორიული რუკა (N36)',
-      subtitle: 'კარტოგრაფიული დავალება და რუკის ანალიზი',
-      testId: 'map-36',
-      icon: <MapPin className="w-6 h-6 text-[#C79B3A]" />,
-      defaultTest: {
-        id: 'map-36',
-        title: 'ისტორიული რუკა (N36)',
-        category: 'ეროვნული გამოცდები',
-        difficulty: 'საგამოცდო',
-        timeLimitMinutes: 20,
-        questionCount: 5,
-        description: 'ისტორიული რუკის კრიტიკული ანალიზი, საზღვრებისა და ლაშქრობების მარშრუტების დადგენა.',
-        questions: [
-          {
-            id: 'm1',
-            prompt: 'რუკაზე გამოსახული ლაშქრობების მარშრუტით, რომელ საუკუნეს მიეკუთვნება აღნიშნული მოვლენა?',
-            options: ['XI საუკუნე', 'XII საუკუნის I ნახევარი', 'XIII საუკუნე', 'XV საუკუნე'],
-            correctAnswerIndex: 1,
-            explanation: 'რუკაზე ასახულია დავით IV აღმაშენებლის 1121 წლის დიდგორის კამპანია.'
-          }
-        ]
-      }
-    },
-    {
-      title: 'ანალოგიები (N37)',
-      subtitle: 'ისტორიული მოვლენების მიზეზ-შედეგობრივი შედარება',
-      testId: 'analogies-37',
-      icon: <Layers className="w-6 h-6 text-[#C79B3A]" />,
-      defaultTest: {
-        id: 'analogies-37',
-        title: 'ანალოგიები (N37)',
-        category: 'ეროვნული გამოცდები',
-        difficulty: 'საგამოცდო',
-        timeLimitMinutes: 15,
-        questionCount: 5,
-        description: 'ისტორიული ანალოგიებისა და ლოგიკური წყვილების დადგენა.',
-        questions: [
-          {
-            id: 'an1',
-            prompt: 'დავით IV : დიდგორი = ერეკლე II : ?',
-            options: ['მარაბდა', 'კრწანისი', 'ასპინძა', 'ბასიანი'],
-            correctAnswerIndex: 2,
-            explanation: 'ერეკლე II-ის ერთ-ერთი უმნიშვნელოვანესი გამარჯვება იყო 1770 წლის ასპინძის ბრძოლა.'
-          }
-        ]
-      }
-    },
-    {
-      title: 'ისტორიული წყარო (N38)',
-      subtitle: 'პირველწყაროს ტექსტუალური ანალიზი და შეკითხვები',
-      testId: 'source-38',
-      icon: <FileText className="w-6 h-6 text-[#C79B3A]" />,
-      defaultTest: {
-        id: 'source-38',
-        title: 'ისტორიული წყარო (N38)',
-        category: 'ეროვნული გამოცდები',
-        difficulty: 'საგამოცდო',
-        timeLimitMinutes: 30,
-        questionCount: 5,
-        description: 'პირველწყაროს დოკუმენტის სიღრმისეული ანალიზი და კრიტიკული შეფასება.',
-        questions: [
-          {
-            id: 'src1',
-            prompt: 'წყაროს ავტორი აღწერს: „და დაჯდა მეფედ ქართლსა შინა...“. ვინ არის მოხსენიებული ტექსტში?',
-            options: ['ფარნავაზ I', 'ვახტანგ გორგასალი', 'დავით აღმაშენებელი', 'თამარ მეფე'],
-            correctAnswerIndex: 0,
-            explanation: 'ტექსტი ეხება ქართლის სამეფოს პირველ გაერთიანებას ფარნავაზ I-ის დროს.'
-          }
-        ]
-      }
-    }
-  ];
+  const userEmail = user?.email || 'guest_user';
 
-  const otherTestsData: { title: string; subtitle: string; testId: string; icon: React.ReactNode; defaultTest: HistoryTest }[] = [
-    {
-      title: '1. ქრონოლოგია',
-      subtitle: 'ისტორიული თარიღებისა და მოვლენების თანმიმდევრობა',
-      testId: 'chronology',
-      icon: <Clock className="w-6 h-6 text-[#C79B3A]" />,
-      defaultTest: {
-        id: 'chronology',
-        title: 'ქრონოლოგიური ტესტები',
-        category: 'სხვა ტესტები',
-        difficulty: 'საშუალო',
-        timeLimitMinutes: 20,
-        questionCount: 10,
-        description: 'ისტორიული მოვლენების სწორი ქრონოლოგიური თანმიმდევრობით დალაგება.',
-        questions: [
-          {
-            id: 'chr1',
-            prompt: 'დაალაგეთ ქრონოლოგიურად: 1. დიდგორის ბრძოლა, 2. ქრისტიანობის მიღება ქართლში, 3. გეორგიევსკის ტრაქტატი',
-            options: ['2, 1, 3', '1, 2, 3', '3, 2, 1', '2, 3, 1'],
-            correctAnswerIndex: 0,
-            explanation: 'ქრისტიანობის მიღება (326 წ.), დიდგორი (1121 წ.), გეორგიევსკის ტრაქტატი (1783 წ.).'
-          }
-        ]
+  // Load programs and student progress
+  useEffect(() => {
+    const init = async () => {
+      setLoading(true);
+      try {
+        const progs = await fetchProgramsAndSubprograms();
+        setPrograms(progs);
+        if (progs.length > 0) {
+          setSelectedChapterId(progs[0].id);
+        }
+
+        const prog = await getStudentProgress(userEmail);
+        setProgressData(prog);
+      } catch (err) {
+        console.error('Error initializing TestsView:', err);
+      } finally {
+        setLoading(false);
       }
-    },
-    {
-      title: '2. ილუსტრაციები',
-      subtitle: 'ვიზუალური წყაროების, არტეფაქტებისა და ფოტოების ანალიზი',
-      testId: 'illustrations',
-      icon: <ImageIcon className="w-6 h-6 text-[#C79B3A]" />,
-      defaultTest: {
-        id: 'illustrations',
-        title: 'ილუსტრაციების ტესტები',
-        category: 'სხვა ტესტები',
-        difficulty: 'საშუალო',
-        timeLimitMinutes: 20,
-        questionCount: 10,
-        description: 'ისტორიული არტეფაქტების, მონეტებისა და ილუსტრაციების ცნობა და ანალიზი.',
-        questions: [
-          {
-            id: 'ill1',
-            prompt: 'რომელი ეპოქის არტეფაქტია კოლხური ოქროს სამკაულები ვანიდან?',
-            options: ['ანტიკური ხანა (ძვ.წ. V-IV სს.)', 'შუა საუკუნეები', 'ბრინჯაოს ხანა', 'ახალი დრო'],
-            correctAnswerIndex: 0,
-            explanation: 'ვანის არქეოლოგიური გათხრები მიეკუთვნება ანტიკური კოლხეთის ხანას.'
-          }
-        ]
-      }
+    };
+    init();
+  }, [userEmail]);
+
+  // When a category is selected, calculate question counts for chapters
+  useEffect(() => {
+    if (!selectedCategoryKey) return;
+
+    const countQuestions = async () => {
+      const allQ = await fetchQuestionsForCategory(selectedCategoryKey);
+      const counts: Record<string, number> = {};
+      allQ.forEach(q => {
+        counts[q.chapterId] = (counts[q.chapterId] || 0) + 1;
+      });
+      setQuestionsCountMap(counts);
+    };
+
+    countQuestions();
+  }, [selectedCategoryKey]);
+
+  const refreshProgress = async () => {
+    const updated = await getStudentProgress(userEmail);
+    setProgressData(updated);
+  };
+
+  const handleSelectCategory = (key: string) => {
+    setSelectedCategoryKey(key);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleStartRandomTest = async () => {
+    if (!selectedCategoryKey) return;
+    setLoading(true);
+    try {
+      const testObj = await buildHistoryTest(selectedCategoryKey, 'all');
+      onOpenTest(testObj);
+    } catch (err) {
+      console.error('Error starting random test:', err);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
+
+  const handleStartChapterTest = async (chId: string) => {
+    if (!selectedCategoryKey) return;
+    setLoading(true);
+    try {
+      const testObj = await buildHistoryTest(selectedCategoryKey, chId);
+      onOpenTest(testObj);
+    } catch (err) {
+      console.error('Error starting chapter test:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetCategoryProgress = async () => {
+    if (!selectedCategoryKey) return;
+    setIsResetting(true);
+    try {
+      const updated = await resetStudentProgress(userEmail, selectedCategoryKey, selectedChapterId);
+      setProgressData(updated);
+    } catch (err) {
+      console.error('Error resetting progress:', err);
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const getCategoryIcon = (key: string) => {
+    switch (key) {
+      case 'mcq': return <BookOpen className="w-6 h-6 text-[#C79B3A]" />;
+      case 'map': return <MapPin className="w-6 h-6 text-[#C79B3A]" />;
+      case 'analogies': return <Layers className="w-6 h-6 text-[#C79B3A]" />;
+      case 'source': return <FileText className="w-6 h-6 text-[#C79B3A]" />;
+      case 'chronology': return <Clock className="w-6 h-6 text-[#C79B3A]" />;
+      case 'illustrations': return <ImageIcon className="w-6 h-6 text-[#C79B3A]" />;
+      default: return <BookOpen className="w-6 h-6 text-[#C79B3A]" />;
+    }
+  };
+
+  const activeCategoryMeta = TEST_CATEGORIES.find(c => c.key === selectedCategoryKey);
+
+  // Helper to compute stats for a specific chapter
+  const getChapterStats = (catKey: string, chId: string, totalQ: number) => {
+    if (!progressData) return { correct: 0, incorrect: 0, unattempted: totalQ, total: totalQ, pct: 0 };
+    const statKey = `${catKey}_${chId}`;
+    const chapterStat = progressData.statsByChapter[statKey];
+
+    const correct = chapterStat?.correctQuestionIds.length || 0;
+    const incorrect = chapterStat?.incorrectQuestionIds.length || 0;
+    const unattempted = Math.max(0, totalQ - (correct + incorrect));
+    const pct = totalQ > 0 ? Math.round((correct / totalQ) * 100) : 0;
+
+    return { correct, incorrect, unattempted, total: totalQ, pct };
+  };
 
   return (
-    <div className="max-w-[1180px] mx-auto space-y-16 pb-20 pt-6 px-4 sm:px-6">
+    <div className="max-w-[1200px] mx-auto space-y-12 pb-24 pt-4 px-4 sm:px-6 animate-in fade-in duration-300">
       
       {/* Editorial Header */}
-      <div className="text-center max-w-2xl mx-auto space-y-4">
-        <span className="text-xs uppercase tracking-[0.25em] font-semibold text-[#C79B3A]">
-          თვითშეფასებისთვის
-        </span>
-        <h1 className="font-serif font-bold text-4xl sm:text-5xl text-[#0D1B2A]">
-          ისტორიის ტესტები
-        </h1>
-      </div>
+      {!selectedCategoryKey ? (
+        <>
+          <div className="text-center max-w-3xl mx-auto space-y-4 pt-4">
+            <span className="px-3.5 py-1 bg-[#FAF8F3] border border-[#C79B3A]/40 text-[#C79B3A] text-[11px] font-bold uppercase tracking-[0.25em] rounded-full inline-flex items-center gap-1.5 shadow-sm">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>აკადემიური ტესტირება</span>
+            </span>
+            <h1 className="font-serif font-bold text-3xl sm:text-5xl text-[#0D1B2A] leading-tight">
+              ისტორიის ტესტები და გამოცდები
+            </h1>
+            <p className="text-sm sm:text-base text-[#666666] max-w-2xl mx-auto">
+              აირჩიეთ სასურველი კატეგორია, შეასრულეთ რენდომული კითხვები ან მოემზადეთ ეროვნული გამოცდების პროგრამის კონკრეტული თავების მიხედვით.
+            </p>
+          </div>
 
-      {/* Section 1: ეროვნულის ტესტები */}
-      <div className="space-y-6">
-        <div className="border-b border-[#E6DDCB] pb-4">
-          <h2 className="font-serif font-bold text-2xl sm:text-3xl text-[#0D1B2A]">
-            ეროვნულის ტესტები:
-          </h2>
-        </div>
+          {/* 1. ეროვნული გამოცდების კატეგორიები (N1-N38) */}
+          <div className="space-y-6">
+            <div className="border-b border-[#E6DDCB] pb-3 flex items-center justify-between">
+              <h2 className="font-serif font-bold text-2xl text-[#0D1B2A] flex items-center gap-2">
+                <span>ეროვნულის ტესტები</span>
+                <span className="text-xs font-sans font-semibold text-[#C79B3A] bg-[#FAF8F3] px-2.5 py-0.5 rounded-full border border-[#E6DDCB]">
+                  NAEC სტანდარტი
+                </span>
+              </h2>
+            </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {nationalTestsData.map((item) => (
-            <div
-              key={item.testId}
-              onClick={() => onOpenTest(item.defaultTest)}
-              className="bg-white p-6 sm:p-8 rounded-2xl border border-[#E6DDCB] shadow-sm hover:border-[#C79B3A] hover:shadow-md transition-all cursor-pointer group flex items-start gap-6"
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {TEST_CATEGORIES.slice(0, 4).map((cat) => (
+                <div
+                  key={cat.key}
+                  onClick={() => handleSelectCategory(cat.key)}
+                  className="bg-white p-6 sm:p-7 rounded-2xl border border-[#E6DDCB] shadow-sm hover:border-[#C79B3A] hover:shadow-md transition-all cursor-pointer group flex items-start gap-5 relative overflow-hidden"
+                >
+                  <div className="w-14 h-14 rounded-xl bg-[#F5F2EA] border border-[#E6DDCB] flex items-center justify-center shrink-0 group-hover:bg-[#C79B3A] group-hover:text-white transition-colors">
+                    {getCategoryIcon(cat.key)}
+                  </div>
+
+                  <div className="space-y-2 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 bg-[#FAF8F3] text-[#C79B3A] text-[10px] font-bold rounded uppercase tracking-wider border border-[#E6DDCB]">
+                        {cat.badge}
+                      </span>
+                    </div>
+
+                    <h3 className="font-serif font-bold text-xl text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors leading-snug">
+                      {cat.title}
+                    </h3>
+                    <p className="text-xs text-[#666666] leading-relaxed">
+                      {cat.subtitle}
+                    </p>
+
+                    <div className="pt-2 flex items-center gap-2 text-xs font-bold text-[#C79B3A]">
+                      <span>არჩევა (2 რეჟიმი)</span>
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 2. სხვა ტესტები */}
+          <div className="space-y-6">
+            <div className="border-b border-[#E6DDCB] pb-3">
+              <h2 className="font-serif font-bold text-2xl text-[#0D1B2A]">
+                სხვა ტესტები
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {TEST_CATEGORIES.slice(4).map((cat) => (
+                <div
+                  key={cat.key}
+                  onClick={() => handleSelectCategory(cat.key)}
+                  className="bg-white p-6 sm:p-7 rounded-2xl border border-[#E6DDCB] shadow-sm hover:border-[#C79B3A] hover:shadow-md transition-all cursor-pointer group flex items-start gap-5"
+                >
+                  <div className="w-14 h-14 rounded-xl bg-[#F5F2EA] border border-[#E6DDCB] flex items-center justify-center shrink-0 group-hover:bg-[#C79B3A] group-hover:text-white transition-colors">
+                    {getCategoryIcon(cat.key)}
+                  </div>
+
+                  <div className="space-y-2 flex-1">
+                    <h3 className="font-serif font-bold text-xl text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors leading-snug">
+                      {cat.title}
+                    </h3>
+                    <p className="text-xs text-[#666666] leading-relaxed">
+                      {cat.subtitle}
+                    </p>
+
+                    <div className="pt-2 flex items-center gap-2 text-xs font-bold text-[#C79B3A]">
+                      <span>არჩევა (2 რეჟიმი)</span>
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : (
+        /* CATEGORY SELECTED VIEW WITH 2 MODE BOXES */
+        <div className="space-y-8 animate-in fade-in duration-300">
+          
+          {/* Back & Category Header */}
+          <div className="space-y-4">
+            <button
+              onClick={() => setSelectedCategoryKey(null)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[#FAF8F3] hover:bg-[#E6DDCB]/60 border border-[#E6DDCB] text-[#13253D] text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
             >
-              <div className="w-14 h-14 rounded-xl bg-[#F5F2EA] border border-[#E6DDCB] flex items-center justify-center shrink-0 group-hover:bg-[#C79B3A] group-hover:text-white transition-colors">
-                {item.icon}
+              <ChevronLeft className="w-4 h-4 text-[#C79B3A]" />
+              <span>ყველა ტესტში დაბრუნება</span>
+            </button>
+
+            <div className="bg-[#0D1B2A] text-white rounded-3xl p-6 sm:p-8 shadow-xl border-4 border-[#C79B3A]/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
+              <div className="space-y-2 z-10">
+                <span className="px-3 py-1 bg-[#C79B3A] text-[#0D1B2A] text-[10px] font-bold uppercase tracking-widest rounded-full">
+                  არჩეული კატეგორია
+                </span>
+                <h2 className="font-serif font-bold text-2xl sm:text-4xl text-[#FAF8F3]">
+                  {activeCategoryMeta?.title}
+                </h2>
+                <p className="text-xs sm:text-sm text-[#FAF8F3]/80 max-w-xl">
+                  {activeCategoryMeta?.subtitle}
+                </p>
               </div>
 
-              <div className="space-y-2 flex-1">
-                <h3 className="font-serif font-bold text-xl text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors leading-snug">
-                  {item.title}
-                </h3>
-                <p className="text-xs text-[#666666] leading-relaxed">
-                  {item.subtitle}
-                </p>
-                <div className="pt-2 flex items-center gap-2 text-xs font-semibold text-[#C79B3A]">
-                  <span>ტესტის დაწყება</span>
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                </div>
+              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/20 text-xs text-[#FAF8F3]">
+                <Clock className="w-4 h-4 text-[#C79B3A]" />
+                <span>დროის ლიმიტი: {activeCategoryMeta?.timeLimitMinutes} წუთი</span>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
+          </div>
 
-      {/* Section 2: სხვა ტესტები */}
-      <div className="space-y-6">
-        <div className="border-b border-[#E6DDCB] pb-4">
-          <h2 className="font-serif font-bold text-2xl sm:text-3xl text-[#0D1B2A]">
-            სხვა ტესტები
-          </h2>
-        </div>
+          {/* TWO MAIN CHOICE BOXES */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            
+            {/* BOX 1: RANDOM QUESTIONS ALL CHAPTERS */}
+            <div className="bg-white p-6 sm:p-8 rounded-3xl border-2 border-[#E6DDCB] shadow-md hover:border-[#C79B3A] transition-all flex flex-col justify-between space-y-6 relative overflow-hidden group">
+              <div className="space-y-4">
+                <div className="w-14 h-14 rounded-2xl bg-[#FAF8F3] border border-[#C79B3A]/40 flex items-center justify-center group-hover:bg-[#C79B3A] group-hover:text-white transition-colors">
+                  <Shuffle className="w-7 h-7 text-[#C79B3A] group-hover:text-white" />
+                </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {otherTestsData.map((item) => (
-            <div
-              key={item.testId}
-              onClick={() => onOpenTest(item.defaultTest)}
-              className="bg-white p-6 sm:p-8 rounded-2xl border border-[#E6DDCB] shadow-sm hover:border-[#C79B3A] hover:shadow-md transition-all cursor-pointer group flex items-start gap-6"
-            >
-              <div className="w-14 h-14 rounded-xl bg-[#F5F2EA] border border-[#E6DDCB] flex items-center justify-center shrink-0 group-hover:bg-[#C79B3A] group-hover:text-white transition-colors">
-                {item.icon}
-              </div>
-
-              <div className="space-y-2 flex-1">
-                <h3 className="font-serif font-bold text-xl text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors leading-snug">
-                  {item.title}
-                </h3>
-                <p className="text-xs text-[#666666] leading-relaxed">
-                  {item.subtitle}
-                </p>
-                <div className="pt-2 flex items-center gap-2 text-xs font-semibold text-[#C79B3A]">
-                  <span>ტესტის დაწყება</span>
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                <div className="space-y-2">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#C79B3A]">
+                    ბოქსი 1 • სწრაფი ტესტირება
+                  </span>
+                  <h3 className="font-serif font-bold text-2xl text-[#0D1B2A]">
+                    რენდომ კითხვები ყველა თავიდან
+                  </h3>
+                  <p className="text-xs sm:text-sm text-[#666666] leading-relaxed">
+                    გააკეთეთ ტესტი, სადაც კითხვები შემთხვევითად არის შერჩეული პროგრამის ყველა თავიდან და თემიდან.
+                  </p>
                 </div>
               </div>
+
+              <div className="space-y-3 pt-4 border-t border-[#E6DDCB]">
+                <button
+                  onClick={handleStartRandomTest}
+                  disabled={loading}
+                  className="w-full py-4 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <Shuffle className="w-4 h-4" />
+                  <span>ტესტის დაწყება (ყველა თავიდან)</span>
+                </button>
+              </div>
             </div>
-          ))}
+
+            {/* BOX 2: SELECT BY PROGRAM CHAPTER / SUBPROGRAM */}
+            <div className="bg-white p-6 sm:p-8 rounded-3xl border-2 border-[#C79B3A] shadow-lg flex flex-col justify-between space-y-6 relative overflow-hidden">
+              <div className="space-y-4">
+                <div className="w-14 h-14 rounded-2xl bg-[#FAF8F3] border border-[#C79B3A]/40 flex items-center justify-center">
+                  <BookMarked className="w-7 h-7 text-[#C79B3A]" />
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-[#C79B3A]">
+                    ბოქსი 2 • პროგრამის თავები (Supabase Data)
+                  </span>
+                  <h3 className="font-serif font-bold text-2xl text-[#0D1B2A]">
+                    არჩევა თავის / პროგრამის მიხედვით
+                  </h3>
+                  <p className="text-xs sm:text-sm text-[#666666] leading-relaxed">
+                    აირჩიეთ კონკრეტული თავი და გააკეთეთ მხოლოდ იმ თავის კითხვები.
+                  </p>
+                </div>
+
+                {/* Chapter Selector Dropdown */}
+                <div className="space-y-2 pt-2">
+                  <label className="text-xs font-bold text-[#0D1B2A] uppercase tracking-wider block">
+                    აირჩიეთ პროგრამის თავი:
+                  </label>
+                  <select
+                    value={selectedChapterId}
+                    onChange={(e) => setSelectedChapterId(e.target.value)}
+                    className="w-full bg-[#FAF8F3] border border-[#C79B3A] rounded-xl px-4 py-3 text-xs font-bold text-[#0D1B2A] focus:outline-none focus:ring-2 focus:ring-[#C79B3A]"
+                  >
+                    {programs.map((prog) => (
+                      <option key={prog.id} value={prog.id}>
+                        {prog.title} ({questionsCountMap[prog.id] || 3} კითხვა)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Selected Chapter Details & Action */}
+              <div className="space-y-4 pt-4 border-t border-[#E6DDCB]">
+                {(() => {
+                  const currProg = programs.find(p => p.id === selectedChapterId);
+                  const totalQ = questionsCountMap[selectedChapterId] || 3;
+                  const stats = getChapterStats(selectedCategoryKey, selectedChapterId, totalQ);
+
+                  return (
+                    <div className="space-y-4">
+                      {/* Chapter Summary Box */}
+                      <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-[#0D1B2A]">
+                            {currProg?.title}
+                          </span>
+                          <span className="text-[11px] font-mono font-bold text-[#C79B3A]">
+                            {stats.pct}% შესრულებული
+                          </span>
+                        </div>
+
+                        {/* Visual Segmented Progress Bar */}
+                        <div className="space-y-1.5">
+                          <div className="w-full h-3 bg-[#E6DDCB] rounded-full overflow-hidden flex">
+                            {/* Correct (Green) */}
+                            <div 
+                              style={{ width: `${stats.total > 0 ? (stats.correct / stats.total) * 100 : 0}%` }}
+                              className="bg-emerald-500 h-full transition-all duration-500"
+                              title={`სწორი: ${stats.correct}`}
+                            />
+                            {/* Incorrect (Red) */}
+                            <div 
+                              style={{ width: `${stats.total > 0 ? (stats.incorrect / stats.total) * 100 : 0}%` }}
+                              className="bg-rose-500 h-full transition-all duration-500"
+                              title={`არასწორი: ${stats.incorrect}`}
+                            />
+                            {/* Remaining (Gray) */}
+                            <div 
+                              style={{ width: `${stats.total > 0 ? (stats.unattempted / stats.total) * 100 : 0}%` }}
+                              className="bg-gray-200 h-full transition-all duration-500"
+                              title={`არ გაუკეთებია: ${stats.unattempted}`}
+                            />
+                          </div>
+
+                          {/* Progress Legend */}
+                          <div className="grid grid-cols-3 text-center text-[11px] font-semibold pt-1">
+                            <div className="flex items-center justify-center gap-1 text-emerald-700">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>სწორი: {stats.correct}</span>
+                            </div>
+                            <div className="flex items-center justify-center gap-1 text-rose-700">
+                              <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                              <span>არასწორი: {stats.incorrect}</span>
+                            </div>
+                            <div className="flex items-center justify-center gap-1 text-gray-600">
+                              <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
+                              <span>დარჩა: {stats.unattempted}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Buttons: Start Chapter Test & Reset Stats */}
+                      <div className="flex flex-col sm:flex-row items-center gap-3">
+                        <button
+                          onClick={() => handleStartChapterTest(selectedChapterId)}
+                          disabled={loading}
+                          className="w-full sm:flex-1 py-3.5 bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                        >
+                          <BookMarked className="w-4 h-4" />
+                          <span>ამ თავის ტესტის დაწყება</span>
+                        </button>
+
+                        <button
+                          onClick={handleResetCategoryProgress}
+                          disabled={isResetting}
+                          title="ამ თავის მონაცემების განულება / დარესეტება"
+                          className="px-4 py-3.5 bg-white hover:bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+                          <span>დარესეტება</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* CHAPTER LIST WITH INDIVIDUAL PROGRESS BARS */}
+          <div className="bg-white rounded-3xl border border-[#E6DDCB] p-6 sm:p-8 space-y-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E6DDCB] pb-4">
+              <div>
+                <h3 className="font-serif font-bold text-xl text-[#0D1B2A]">
+                  პროგრამის თავების პროგრესი ({programs.length} თავი)
+                </h3>
+                <p className="text-xs text-[#666666]">
+                  თითოეულ თავში თქვენი სწორი, არასწორი და გაუკეთებელი კითხვების სტატისტიკა.
+                </p>
+              </div>
+
+              <button
+                onClick={refreshProgress}
+                className="text-xs text-[#C79B3A] font-bold hover:underline flex items-center gap-1.5 cursor-pointer self-start sm:self-auto"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>სტატისტიკის განახლება</span>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {programs.map((prog) => {
+                const totalQ = questionsCountMap[prog.id] || 3;
+                const stats = getChapterStats(selectedCategoryKey, prog.id, totalQ);
+                const isSelected = selectedChapterId === prog.id;
+
+                return (
+                  <div
+                    key={prog.id}
+                    onClick={() => setSelectedChapterId(prog.id)}
+                    className={`p-5 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
+                      isSelected
+                        ? 'bg-[#FAF8F3] border-[#C79B3A] shadow-sm'
+                        : 'bg-white border-[#E6DDCB] hover:border-[#C79B3A]/60'
+                    }`}
+                  >
+                    <div className="space-y-1 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-serif font-bold text-[#0D1B2A]">
+                          {prog.title}
+                        </span>
+                        {isSelected && (
+                          <span className="px-2 py-0.5 bg-[#C79B3A] text-[#0D1B2A] text-[9px] font-bold rounded-md">
+                            არჩეული
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-[#666666] line-clamp-1">
+                        {prog.description}
+                      </p>
+                    </div>
+
+                    {/* Progress Stats Summary */}
+                    <div className="w-full sm:w-64 space-y-1.5 shrink-0">
+                      <div className="flex justify-between text-[11px] font-semibold text-[#0D1B2A]">
+                        <span>სწორი: {stats.correct} / {totalQ}</span>
+                        <span>{stats.pct}%</span>
+                      </div>
+
+                      <div className="w-full h-2 bg-[#E6DDCB] rounded-full overflow-hidden flex">
+                        <div 
+                          style={{ width: `${stats.total > 0 ? (stats.correct / stats.total) * 100 : 0}%` }}
+                          className="bg-emerald-500 h-full"
+                        />
+                        <div 
+                          style={{ width: `${stats.total > 0 ? (stats.incorrect / stats.total) * 100 : 0}%` }}
+                          className="bg-rose-500 h-full"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
         </div>
-      </div>
+      )}
 
     </div>
   );

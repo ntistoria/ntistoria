@@ -9,11 +9,12 @@ interface NavbarProps {
   setActiveTab: (tab: NavTab) => void;
   onOpenSearch?: () => void;
   onOpenAuth?: () => void;
+  onOpenProfile?: () => void;
   user?: { name: string; email: string } | null;
   onLogout?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenSearch, onOpenAuth, user, onLogout }) => {
+export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenSearch, onOpenAuth, onOpenProfile, user, onLogout }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -100,7 +101,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
 
             {user ? (
               <div className="flex items-center gap-2">
-                {isAdmin ? (
+                {isAdmin && (
                   <button
                     onClick={() => handleNavClick('admin')}
                     className="flex items-center gap-1.5 text-xs font-bold text-[#0D1B2A] bg-[#C79B3A] hover:bg-[#E6C86B] px-3 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer"
@@ -108,11 +109,18 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
                     <ShieldCheck className="w-3.5 h-3.5" />
                     <span>ადმინ პანელი</span>
                   </button>
-                ) : (
-                  <span className="text-xs font-semibold text-[#13253D] bg-[#F5F2EA] px-3 py-1.5 rounded-lg border border-[#E6DDCB]">
-                    {user.name}
-                  </span>
                 )}
+
+                {onOpenProfile && (
+                  <button
+                    onClick={onOpenProfile}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-[#13253D] bg-[#F5F2EA] hover:bg-[#E6DDCB]/60 px-3 py-1.5 rounded-lg border border-[#E6DDCB] cursor-pointer transition-colors"
+                  >
+                    <User className="w-3.5 h-3.5 text-[#C79B3A]" />
+                    <span>{user.name}</span>
+                  </button>
+                )}
+
                 <button
                   onClick={onLogout}
                   className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-[#666666] hover:text-[#13253D] transition-colors cursor-pointer"
@@ -129,6 +137,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
               </button>
             )}
           </div>
+
 
           {/* Mobile Menu Toggle */}
           <div className="flex md:hidden items-center gap-2">
