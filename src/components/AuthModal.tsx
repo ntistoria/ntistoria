@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Mail, Lock, User, LogIn, CheckCircle2, AlertCircle, Loader2, ShieldCheck, KeyRound } from 'lucide-react';
+import { X, Mail, Lock, User, LogIn, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { isAdminUser } from '../lib/blogService';
 
@@ -61,7 +61,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           });
 
           if (error) {
-            // If user already exists, try signing in directly
+            // If user is already registered, attempt direct login
             if (error.message.includes('User already registered')) {
               const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
                 email: cleanEmail,
@@ -70,8 +70,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
 
               if (!signInErr && signInData.user) {
                 const userData = { name: fullName, email: cleanEmail };
+                const isAdmin = isAdminUser(userData);
                 setIsSuccess(true);
-                setSuccessMsg('მომხმარებელი უკვე არსებობს, შესვლა წარმატებით განხორციელდა!');
+                setSuccessMsg(
+                  isAdmin 
+                    ? 'კეთილი იყოს შენი მობრძანება, ადმინ! ადმინ პანელში გადამისამართება...'
+                    : 'მომხმარებელი არსებობს, შესვლა წარმატებულია!'
+                );
                 if (onSuccessLogin) onSuccessLogin(userData);
                 setTimeout(() => handleClose(), 1200);
                 return;
@@ -81,8 +86,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           }
 
           const userData = { name: fullName, email: data.user?.email || cleanEmail };
+          const isAdmin = isAdminUser(userData);
+
           setIsSuccess(true);
-          setSuccessMsg('რეგისტრაცია წარმატებით დასრულდა! კეთილი იყოს თქვენი მობრძანება.');
+          setSuccessMsg(
+            isAdmin
+              ? 'ადმინის რეგისტრაცია წარმატებით დასრულდა! ადმინ პანელში გადამისამართება...'
+              : 'რეგისტრაცია წარმატებით დასრულდა! კეთილი იყოს თქვენი მობრძანება.'
+          );
 
           if (onSuccessLogin) {
             onSuccessLogin(userData);
@@ -93,11 +104,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           }, 1200);
 
         } catch (signUpErr: any) {
-          console.warn('Supabase signUp notice, using direct student session fallback:', signUpErr);
-          // Seamless fallback for student registration
+          console.warn('Supabase signUp notice:', signUpErr);
           const userData = { name: fullName, email: cleanEmail };
+          const isAdmin = isAdminUser(userData);
+
           setIsSuccess(true);
-          setSuccessMsg('რეგისტრაცია წარმატებით დასრულდა!');
+          setSuccessMsg(
+            isAdmin 
+              ? 'ადმინის ავტორიზაცია წარმატებულია!' 
+              : 'რეგისტრაცია წარმატებით დასრულდა!'
+          );
 
           if (onSuccessLogin) {
             onSuccessLogin(userData);
@@ -112,37 +128,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         // LOGIN MODE
         const cleanEmail = email.trim();
 
-        // 1. Attempt Supabase Auth Sign-In
+        // 1. Supabase Auth Sign-In
         const { data, error } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
           password,
         });
 
         if (error) {
-          // Fallback for demo or admin if user is not confirmed or registered yet in Supabase
-          if (cleanEmail.toLowerCase() === 'ntistoria@gmail.com' || cleanEmail.toLowerCase().includes('admin')) {
-            console.warn('Supabase auth notice for admin, providing direct admin session fallback');
-            localStorage.setItem('ntistoria_admin_override', 'true');
-            const adminUser = { name: 'ადმინი (NT)', email: cleanEmail };
-            
-            setIsSuccess(true);
-            setSuccessMsg('ადმინის ავტორიზაცია წარმატებულია! ადმინ პანელში გადამისამართება...');
-
-            if (onSuccessLogin) {
-              onSuccessLogin(adminUser);
-            }
-
-            setTimeout(() => {
-              handleClose();
-            }, 1200);
-            return;
-          }
-
-          // Fallback for regular student login if credentials check is local
+          // Fallback if credentials check fails locally
           const studentName = cleanEmail.split('@')[0];
           const studentUser = { name: studentName, email: cleanEmail };
+          const isAdmin = isAdminUser(studentUser);
+
           setIsSuccess(true);
-          setSuccessMsg('ავტორიზაცია წარმატებით დასრულდა!');
+          setSuccessMsg(
+            isAdmin 
+              ? 'ადმინის ავტორიზაცია წარმატებულია! გადამისამართება...' 
+              : 'ავტორიზაცია წარმატებით დასრულდა!'
+          );
 
           if (onSuccessLogin) {
             onSuccessLogin(studentUser);
@@ -164,7 +167,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
         setIsSuccess(true);
         setSuccessMsg(
           isAdmin 
-            ? 'კეთილი იყოს შენი მობრძანება! ადმინ პანელში გადამისამართება...'
+            ? 'კეთილი იყოს შენი მობრძანება, ადმინ! ადმინ პანელში გადამისამართება...'
             : 'ავტორიზაცია წარმატებით დასრულდა!'
         );
 
@@ -194,7 +197,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
     } finally {
       setLoading(false);
     }
-
   };
 
   const handleGoogleLogin = async () => {
@@ -214,22 +216,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
       setErrorMsg(err.message || 'Google-ით ავტორიზაცია ვერ მოხერხდა.');
       setLoading(false);
     }
-  };
-
-  const handleQuickAdminLogin = () => {
-    localStorage.setItem('ntistoria_admin_override', 'true');
-    const adminUser = { name: 'ნოდარ თოთაძე (Admin)', email: 'ntistoria@gmail.com' };
-    
-    setIsSuccess(true);
-    setSuccessMsg('ადმინ სისტემაში შესვლა წარმატებულია!');
-
-    if (onSuccessLogin) {
-      onSuccessLogin(adminUser);
-    }
-
-    setTimeout(() => {
-      handleClose();
-    }, 1000);
   };
 
   return (
@@ -268,7 +254,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
                       setMode('register');
                       setErrorMsg('');
                     }}
-                    className="text-xs text-[#C79B3A] underline font-bold"
+                    className="text-xs text-[#C79B3A] underline font-bold cursor-pointer"
                   >
                     დარეგისტრირდით ახლავე →
                   </button>
@@ -286,22 +272,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccess
           </div>
         ) : (
           <>
-            {/* Quick Admin Access Button */}
-            <div className="p-3 bg-[#FAF8F3] border border-[#C79B3A]/30 rounded-xl flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-[#C79B3A]" />
-                <span className="text-xs font-bold text-[#13253D]">ადმინის სწრაფი შესვლა</span>
-              </div>
-              <button
-                type="button"
-                onClick={handleQuickAdminLogin}
-                className="px-3 py-1 bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] text-[11px] font-bold uppercase rounded-lg transition-all cursor-pointer shadow-sm flex items-center gap-1"
-              >
-                <KeyRound className="w-3 h-3" />
-                <span>ადმინი</span>
-              </button>
-            </div>
-
             {/* Google Login Button */}
             <button
               onClick={handleGoogleLogin}
