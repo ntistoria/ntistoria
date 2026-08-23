@@ -31,34 +31,47 @@ export default function App() {
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
 
   useEffect(() => {
+    // Process Supabase session (including Google OAuth redirect)
+    const handleSession = (session: any) => {
+      if (session?.user) {
+        const meta = session.user.user_metadata;
+        const name = meta?.full_name || 
+                     `${meta?.first_name || ''} ${meta?.last_name || ''}`.trim() || 
+                     session.user.email?.split('@')[0] || 'მომხმარებელი';
+        const userData = { name, email: session.user.email || '' };
+        setUser(userData);
+
+        if (isAdminUser(userData)) {
+          setActiveTab('admin');
+        }
+
+        // Clean up URL hash or search params from Google OAuth redirect
+        if (window.location.hash || window.location.search.includes('code=')) {
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      } else {
+        const isOverride = localStorage.getItem('ntistoria_admin_override') === 'true';
+        if (!isOverride) {
+          setUser(null);
+        }
+      }
+    };
+
     // Check initial active Supabase session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        const meta = session.user.user_metadata;
-        const name = meta?.full_name || 
-                     `${meta?.first_name || ''} ${meta?.last_name || ''}`.trim() || 
-                     session.user.email?.split('@')[0] || 'მომხმარებელი';
-        setUser({ name, email: session.user.email || '' });
-      }
+      handleSession(session);
     });
 
-    // Listen for real-time auth changes (Login, Logout, Token Refresh)
+    // Listen for real-time auth changes (Login, Logout, Token Refresh, OAuth Redirect)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        const meta = session.user.user_metadata;
-        const name = meta?.full_name || 
-                     `${meta?.first_name || ''} ${meta?.last_name || ''}`.trim() || 
-                     session.user.email?.split('@')[0] || 'მომხმარებელი';
-        setUser({ name, email: session.user.email || '' });
-      } else {
-        setUser(null);
-      }
+      handleSession(session);
     });
 
     return () => {
       subscription.unsubscribe();
     };
   }, []);
+
 
   const handleLogout = async () => {
     try {
