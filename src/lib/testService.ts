@@ -57,7 +57,7 @@ export const TEST_CATEGORIES: TestCategoryMeta[] = [
   },
   {
     key: 'chronology',
-    tableNames: ['chronology_questions', 'chronology', 'ქრონოლოგია'],
+    tableNames: ['chronology', 'chronology_questions', 'ქრონოლოგია'],
     title: 'ქრონოლოგია',
     subtitle: 'ისტორიული თარიღებისა და მოვლენების თანმიმდევრობით დალაგება',
     timeLimitMinutes: 0,
@@ -66,7 +66,7 @@ export const TEST_CATEGORIES: TestCategoryMeta[] = [
   },
   {
     key: 'illustrations',
-    tableNames: ['illustration_questions', 'illustrations', 'ilustrations', 'ილუსტრაციები'],
+    tableNames: ['illustrations_questions', 'illustration_questions', 'illustrations', 'ilustrations', 'ილუსტრაციები'],
     title: 'ილუსტრაციები',
     subtitle: 'ვიზუალური წყაროების, არტეფაქტებისა და ფოტოების ანალიზი',
     timeLimitMinutes: 0,
@@ -74,7 +74,6 @@ export const TEST_CATEGORIES: TestCategoryMeta[] = [
   }
 ];
 
-// ZERO hardcoded dummy questions - all questions are strictly fetched from Supabase database tables
 export const FALLBACK_QUESTIONS: Record<string, (QuizQuestion & { chapterId: string })[]> = {
   mcq: [],
   map: [],
@@ -166,14 +165,11 @@ export const DEFAULT_PROGRAMS: ProgramChapter[] = [
 ];
 
 /**
- * Fetch Program Chapters from Supabase tables (history_exam schema, public, or program)
- */
-/**
- * Fetch Program Chapters from Supabase tables
+ * Fetch Program Chapters from Supabase tables (exam_programs & sub_programs)
  */
 export const fetchProgramsAndSubprograms = async (): Promise<ProgramChapter[]> => {
   const possibleProgramTables = ['exam_programs', 'program', 'programs'];
-  const possibleSubprogramTables = ['exam_subprograms', 'subprogram', 'subprograms'];
+  const possibleSubprogramTables = ['sub_programs', 'exam_subprograms', 'subprogram', 'subprograms'];
 
   for (const pTable of possibleProgramTables) {
     try {
@@ -182,7 +178,10 @@ export const fetchProgramsAndSubprograms = async (): Promise<ProgramChapter[]> =
       const progErr = res.error;
 
       if (!progErr && progData && progData.length > 0) {
-        progData.sort((a: any, b: any) => (a.chapter_number || a.order || 1) - (b.chapter_number || b.order || 1));
+        progData.sort((a: any, b: any) => 
+          (a.program_number || a.chapter_number || a.order || 1) - 
+          (b.program_number || b.chapter_number || b.order || 1)
+        );
 
         let subData: any[] = [];
         for (const sTable of possibleSubprogramTables) {
@@ -193,18 +192,22 @@ export const fetchProgramsAndSubprograms = async (): Promise<ProgramChapter[]> =
           }
         }
 
-        return progData.map((p: any) => ({
-          id: String(p.id || `ch-${p.chapter_number || 1}`),
-          chapterNumber: Number(p.chapter_number || p.order || 1),
-          title: p.title || p.name || `თავი ${p.chapter_number || 1}`,
-          description: p.description || p.details || '',
-          subprograms: subData
-            .filter((s: any) => String(s.program_id) === String(p.id) || String(s.chapter_id) === String(p.id))
-            .map((s: any) => ({
-              id: String(s.id),
-              title: s.title || s.name || ''
-            }))
-        }));
+        return progData.map((p: any) => {
+          const num = Number(p.program_number || p.chapter_number || p.order || 1);
+          const pId = `ch-${num}`;
+          return {
+            id: pId,
+            chapterNumber: num,
+            title: p.program_name || p.title || p.name || `თავი ${num}`,
+            description: p.description || p.details || '',
+            subprograms: subData
+              .filter((s: any) => Number(s.program_number) === num || String(s.program_id) === String(p.id))
+              .map((s: any) => ({
+                id: String(s.sub_program_number || s.id),
+                title: s.sub_name || s.title || s.name || ''
+              }))
+          };
+        });
       }
     } catch (e) {}
   }
@@ -235,7 +238,7 @@ export const fetchCategoryQuestionsCount = async (categoryKey: string): Promise<
 };
 
 /**
- * Fetch Real Test Questions for a category directly from Supabase tables (public schema)
+ * Fetch Real Test Questions for a category directly from Supabase tables
  */
 export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(QuizQuestion & { chapterId: string })[]> => {
   const catMeta = TEST_CATEGORIES.find(c => c.key === categoryKey);
@@ -245,75 +248,187 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
     try {
       let rawQuestions: any[] = [];
 
-      const { data: pQuestions, error: pErr } = await supabase.from(tableName).select('*');
-      if (!pErr && pQuestions && pQuestions.length > 0) {
-        rawQuestions = pQuestions;
+      // 1. Try embedded join queries for parent tables (maps, analogy, source, illustrations)
+      if (categoryKey === 'map') {
+        const { data: mQData, error: mQErr } = await supabase
+          .from(tableName)
+          .select('*, maps!inner(*)');
+        if (!mQErr && mQData && mQData.length > 0) {
+          rawQuestions = mQData;
+        }
+      } else if (categoryKey === 'analogies') {
+        const { data: aQData, error: aQErr } = await supabase
+          .from(tableName)
+          .select('*, analogy!inner(*)');
+        if (!aQErr && aQData && aQData.length > 0) {
+          rawQuestions = aQData;
+        }
+      } else if (categoryKey === 'source') {
+        const { data: sQData, error: sQErr } = await supabase
+          .from(tableName)
+          .select('*, source!inner(*)');
+        if (!sQErr && sQData && sQData.length > 0) {
+          rawQuestions = sQData;
+        }
+      } else if (categoryKey === 'illustrations') {
+        const { data: iQData, error: iQErr } = await supabase
+          .from(tableName)
+          .select('*, illustrations!inner(*)');
+        if (!iQErr && iQData && iQData.length > 0) {
+          rawQuestions = iQData;
+        }
+      }
+
+      // Fallback to direct select if embedded join was empty or not applicable
+      if (rawQuestions.length === 0) {
+        const { data: pQuestions, error: pErr } = await supabase.from(tableName).select('*');
+        if (!pErr && pQuestions && pQuestions.length > 0) {
+          rawQuestions = pQuestions;
+        }
       }
 
       if (rawQuestions.length > 0) {
-        let mapsMap: Record<string, string> = {};
-        let sourcesMap: Record<string, string> = {};
+        // Fetch parent lookup tables if not embedded
+        let mapsMap: Record<number, { map_url: string; program_number: number }> = {};
+        let analogyMap: Record<number, { analogy: string; program_number: number }> = {};
+        let sourceMap: Record<number, { source: string; program_number: number }> = {};
+        let illustrationMap: Record<number, { illustration_url: string; program_number: number }> = {};
 
-        if (categoryKey === 'map') {
-          const possibleMapTables = ['maps', 'map', 'რუკა'];
-          for (const mTab of possibleMapTables) {
-            const { data: mData2 } = await supabase.from(mTab).select('*');
-            if (mData2 && mData2.length > 0) {
-              mData2.forEach((m: any) => {
-                mapsMap[m.id] = m.map_url || m.image_url || m.url || m.link;
-              });
-              break;
-            }
+        if (categoryKey === 'map' && !rawQuestions[0].maps) {
+          const { data: mData } = await supabase.from('maps').select('*');
+          if (mData) {
+            mData.forEach((m: any) => {
+              mapsMap[m.map_number || m.id] = {
+                map_url: m.map_url || m.image_url || m.url,
+                program_number: Number(m.program_number || 1)
+              };
+            });
           }
         }
 
-        if (categoryKey === 'source') {
-          const possibleSourceTables = ['sources', 'source', 'წყარო'];
-          for (const sTab of possibleSourceTables) {
-            const { data: sData2 } = await supabase.from(sTab).select('*');
-            if (sData2 && sData2.length > 0) {
-              sData2.forEach((s: any) => {
-                sourcesMap[s.id] = s.text || s.content || s.body || s.title;
-              });
-              break;
-            }
+        if (categoryKey === 'analogies' && !rawQuestions[0].analogy) {
+          const { data: aData } = await supabase.from('analogy').select('*');
+          if (aData) {
+            aData.forEach((a: any) => {
+              analogyMap[a.analogy_number || a.id] = {
+                analogy: a.analogy || a.text,
+                program_number: Number(a.program_number || 1)
+              };
+            });
+          }
+        }
+
+        if (categoryKey === 'source' && !rawQuestions[0].source) {
+          const { data: sData } = await supabase.from('source').select('*');
+          if (sData) {
+            sData.forEach((s: any) => {
+              sourceMap[s.source_number || s.id] = {
+                source: s.source || s.text,
+                program_number: Number(s.program_number || 1)
+              };
+            });
+          }
+        }
+
+        if (categoryKey === 'illustrations' && !rawQuestions[0].illustrations) {
+          const { data: iData } = await supabase.from('illustrations').select('*');
+          if (iData) {
+            iData.forEach((i: any) => {
+              illustrationMap[i.illustration_number || i.id] = {
+                illustration_url: i.illustration_url || i.image_url || i.url,
+                program_number: Number(i.program_number || 1)
+              };
+            });
           }
         }
 
         return rawQuestions.map((item: any, idx: number) => {
+          // Options mapping
           let opts: string[] = [];
           if (Array.isArray(item.options)) {
             opts = item.options;
           } else if (typeof item.options === 'string') {
             try { opts = JSON.parse(item.options); } catch (e) { opts = [item.options]; }
-          } else {
+          } else if (item.answer_1 || item.answer_2) {
             opts = [
-              item.option_a || item.option1 || 'ა',
-              item.option_b || item.option2 || 'ბ',
-              item.option_c || item.option3 || 'გ',
-              item.option_d || item.option4 || 'დ'
-            ];
+              item.answer_1 || item.option_a || 'ა',
+              item.answer_2 || item.option_b || 'ბ',
+              item.answer_3 || item.option_c || 'გ',
+              item.answer_4 || item.option_d || 'დ'
+            ].filter(Boolean);
+          } else if (item.answer || item.correct_answer) {
+            opts = [item.answer || item.correct_answer];
+          } else {
+            opts = ['ა', 'ბ', 'გ', 'დ'];
           }
 
-          const rawChapter = item.chapter_id || item.program_id || item.chapterId || `ch-${(idx % 11) + 1}`;
+          // Program / Chapter Number mapping
+          let pNum: number = Number(
+            item.program_number ||
+            item.maps?.program_number ||
+            item.analogy?.program_number ||
+            item.source?.program_number ||
+            item.illustrations?.program_number ||
+            mapsMap[item.map_number]?.program_number ||
+            analogyMap[item.analogy_number]?.program_number ||
+            sourceMap[item.source_number]?.program_number ||
+            illustrationMap[item.illustration_number]?.program_number ||
+            ((idx % 11) + 1)
+          );
+
+          const chapterId = `ch-${pNum}`;
+
+          // Correct Answer Index mapping (1-based integer from DB -> 0-based index for FE)
+          let correctIdx = 0;
+          if (typeof item.correct_answer === 'number') {
+            correctIdx = item.correct_answer > 0 ? item.correct_answer - 1 : 0;
+          } else if (typeof item.correct_answer_index === 'number') {
+            correctIdx = item.correct_answer_index;
+          } else if (typeof item.correct_option === 'number') {
+            correctIdx = item.correct_option - 1;
+          }
+
+          // Image mapping
+          const mapImg = item.map_image ||
+            item.map_url ||
+            item.maps?.map_url ||
+            item.illustrations?.illustration_url ||
+            mapsMap[item.map_number]?.map_url ||
+            illustrationMap[item.illustration_number]?.illustration_url ||
+            undefined;
+
+          // Source / Context text mapping
+          const srcContext = item.source_context ||
+            item.source_text ||
+            item.analogy?.analogy ||
+            item.source?.source ||
+            analogyMap[item.analogy_number]?.analogy ||
+            sourceMap[item.source_number]?.source ||
+            undefined;
+
+          // Explanation
+          let expl = item.explanation || item.description || '';
+          if (!expl && item.answer) {
+            expl = `სწორი პასუხი: ${item.answer}`;
+          } else if (!expl && typeof item.correct_answer === 'string') {
+            expl = `სწორი პასუხი: ${item.correct_answer}`;
+          }
 
           return {
             id: String(item.id || `${categoryKey}-${idx}`),
-            chapterId: String(rawChapter).startsWith('ch-') ? String(rawChapter) : `ch-${rawChapter}`,
-            prompt: item.prompt || item.question || item.title || item.question_text || 'კითხვა',
+            chapterId,
+            prompt: item.question || item.prompt || item.title || 'კითხვა',
             options: opts,
-            correctAnswerIndex: typeof item.correct_answer_index === 'number' 
-              ? item.correct_answer_index 
-              : typeof item.correct_option === 'number' 
-                ? item.correct_option 
-                : typeof item.correct_answer === 'number' ? item.correct_answer : 0,
-            explanation: item.explanation || item.description || item.answer_explanation || '',
-            sourceContext: item.source_context || item.source_text || item.sourceContext || (item.source_id ? sourcesMap[item.source_id] : undefined),
-            mapImage: item.map_image || item.map_url || item.image_url || item.url || (item.map_id ? mapsMap[item.map_id] : undefined)
+            correctAnswerIndex: correctIdx,
+            explanation: expl,
+            sourceContext: srcContext,
+            mapImage: mapImg
           };
         });
       }
-    } catch (err) {}
+    } catch (err) {
+      console.warn(`Error fetching questions for ${categoryKey}:`, err);
+    }
   }
 
   return [];
