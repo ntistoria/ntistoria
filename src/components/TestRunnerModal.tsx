@@ -172,16 +172,9 @@ export const TestRunnerModal: React.FC<TestRunnerModalProps> = ({
             </div>
 
             <div className="flex items-center gap-4">
-              {!isFinished && (
-                <div className="flex items-center gap-1.5 font-mono text-sm font-semibold text-[#13253D] bg-white px-3 py-1 rounded-lg border border-[#E6DDCB]">
-                  <Clock className="w-4 h-4 text-[#C79B3A]" />
-                  <span>{formatTime(timeRemaining)}</span>
-                </div>
-              )}
-
               <button
                 onClick={onClose}
-                className="p-1.5 text-[#666666] hover:text-[#0D1B2A] hover:bg-[#E6DDCB] rounded-full transition-colors"
+                className="p-1.5 text-[#666666] hover:text-[#0D1B2A] hover:bg-[#E6DDCB] rounded-full transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -209,6 +202,28 @@ export const TestRunnerModal: React.FC<TestRunnerModalProps> = ({
 
                 {/* Question Card */}
                 <div className="bg-white p-6 rounded-xl border border-[#E6DDCB] shadow-sm space-y-4">
+                  
+                  {/* Map or Illustration Image if present */}
+                  {currentQ.mapImage && (
+                    <div className="rounded-xl overflow-hidden border border-[#E6DDCB] bg-[#FAF8F3] max-h-96 flex items-center justify-center p-2 shadow-inner">
+                      <img 
+                        src={currentQ.mapImage} 
+                        alt="ისტორიული რუკა / ილუსტრაცია" 
+                        className="max-h-80 w-auto object-contain rounded-lg shadow-sm"
+                      />
+                    </div>
+                  )}
+
+                  {/* Primary Source Text if present */}
+                  {currentQ.sourceContext && (
+                    <div className="p-4 bg-[#F5F2EA] rounded-xl border-l-4 border-[#C79B3A] text-xs font-serif leading-relaxed text-[#13253D] shadow-inner space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-[#C79B3A] block font-sans">
+                        📜 ისტორიული წყაროს ტექსტი
+                      </span>
+                      <div className="italic text-sm">{currentQ.sourceContext}</div>
+                    </div>
+                  )}
+
                   <div className="flex items-start gap-3">
                     <span className="w-7 h-7 rounded-full bg-[#13253D] text-[#FAF8F3] text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
                       {currentQuestionIndex + 1}
@@ -218,11 +233,6 @@ export const TestRunnerModal: React.FC<TestRunnerModalProps> = ({
                     </h2>
                   </div>
 
-                  {currentQ.sourceContext && (
-                    <div className="p-4 bg-[#F5F2EA] rounded-lg border-l-3 border-[#C79B3A] text-xs font-serif italic text-[#666666]">
-                      {currentQ.sourceContext}
-                    </div>
-                  )}
 
                   {/* Options list */}
                   <div className="space-y-3 pt-2">

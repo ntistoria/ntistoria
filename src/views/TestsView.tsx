@@ -7,6 +7,7 @@ import {
   ProgramChapter, 
   fetchProgramsAndSubprograms, 
   fetchQuestionsForCategory, 
+  fetchCategoryQuestionsCount,
   buildHistoryTest 
 } from '../lib/testService';
 import { 
@@ -30,7 +31,8 @@ import {
   HelpCircle, 
   ChevronLeft, 
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  Database
 } from 'lucide-react';
 
 interface TestsViewProps {
@@ -43,13 +45,14 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
   const [programs, setPrograms] = useState<ProgramChapter[]>([]);
   const [selectedChapterId, setSelectedChapterId] = useState<string>('ch-1');
   const [questionsCountMap, setQuestionsCountMap] = useState<Record<string, number>>({});
+  const [categoryTotalCounts, setCategoryTotalCounts] = useState<Record<string, number>>({});
   const [progressData, setProgressData] = useState<StudentProfileProgress | null>(null);
   const [loading, setLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
 
   const userEmail = user?.email || 'guest_user';
 
-  // Load programs and student progress
+  // Load programs, total question counts per category, and student progress
   useEffect(() => {
     const init = async () => {
       setLoading(true);
@@ -59,6 +62,13 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
         if (progs.length > 0) {
           setSelectedChapterId(progs[0].id);
         }
+
+        // Fetch question count in database for all categories
+        const totalCounts: Record<string, number> = {};
+        for (const cat of TEST_CATEGORIES) {
+          totalCounts[cat.key] = await fetchCategoryQuestionsCount(cat.key);
+        }
+        setCategoryTotalCounts(totalCounts);
 
         const prog = await getStudentProgress(userEmail);
         setProgressData(prog);
@@ -71,7 +81,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
     init();
   }, [userEmail]);
 
-  // When a category is selected, calculate question counts for chapters
+  // When a category is selected, calculate question counts per chapter
   useEffect(() => {
     if (!selectedCategoryKey) return;
 
@@ -167,19 +177,19 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
   return (
     <div className="max-w-[1200px] mx-auto space-y-12 pb-24 pt-4 px-4 sm:px-6 animate-in fade-in duration-300">
       
-      {/* Editorial Header */}
+      {/* Header */}
       {!selectedCategoryKey ? (
         <>
           <div className="text-center max-w-3xl mx-auto space-y-4 pt-4">
             <span className="px-3.5 py-1 bg-[#FAF8F3] border border-[#C79B3A]/40 text-[#C79B3A] text-[11px] font-bold uppercase tracking-[0.25em] rounded-full inline-flex items-center gap-1.5 shadow-sm">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>აკადემიური ტესტირება</span>
+              <span>აკადემიური ტესტირება • NAEC ბაზა</span>
             </span>
             <h1 className="font-serif font-bold text-3xl sm:text-5xl text-[#0D1B2A] leading-tight">
               ისტორიის ტესტები და გამოცდები
             </h1>
             <p className="text-sm sm:text-base text-[#666666] max-w-2xl mx-auto">
-              აირჩიეთ სასურველი კატეგორია, შეასრულეთ რენდომული კითხვები ან მოემზადეთ ეროვნული გამოცდების პროგრამის კონკრეტული თავების მიხედვით.
+              აირჩიეთ სასურველი კატეგორია. ბაზაში დამატებულია 11-ვე თავის რეალური კითხვები, რუკები, წყაროები და ილუსტრაციები.
             </p>
           </div>
 
@@ -195,74 +205,102 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {TEST_CATEGORIES.slice(0, 4).map((cat) => (
-                <div
-                  key={cat.key}
-                  onClick={() => handleSelectCategory(cat.key)}
-                  className="bg-white p-6 sm:p-7 rounded-2xl border border-[#E6DDCB] shadow-sm hover:border-[#C79B3A] hover:shadow-md transition-all cursor-pointer group flex items-start gap-5 relative overflow-hidden"
-                >
-                  <div className="w-14 h-14 rounded-xl bg-[#F5F2EA] border border-[#E6DDCB] flex items-center justify-center shrink-0 group-hover:bg-[#C79B3A] group-hover:text-white transition-colors">
-                    {getCategoryIcon(cat.key)}
-                  </div>
-
-                  <div className="space-y-2 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 bg-[#FAF8F3] text-[#C79B3A] text-[10px] font-bold rounded uppercase tracking-wider border border-[#E6DDCB]">
-                        {cat.badge}
-                      </span>
+              {TEST_CATEGORIES.slice(0, 4).map((cat) => {
+                const totalInDb = categoryTotalCounts[cat.key] || 0;
+                return (
+                  <div
+                    key={cat.key}
+                    onClick={() => handleSelectCategory(cat.key)}
+                    className="bg-white p-6 sm:p-7 rounded-2xl border border-[#E6DDCB] shadow-sm hover:border-[#C79B3A] hover:shadow-md transition-all cursor-pointer group flex items-start gap-5 relative overflow-hidden"
+                  >
+                    <div className="w-14 h-14 rounded-xl bg-[#F5F2EA] border border-[#E6DDCB] flex items-center justify-center shrink-0 group-hover:bg-[#C79B3A] group-hover:text-white transition-colors">
+                      {getCategoryIcon(cat.key)}
                     </div>
 
-                    <h3 className="font-serif font-bold text-xl text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors leading-snug">
-                      {cat.title}
-                    </h3>
-                    <p className="text-xs text-[#666666] leading-relaxed">
-                      {cat.subtitle}
-                    </p>
+                    <div className="space-y-2 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="px-2 py-0.5 bg-[#FAF8F3] text-[#C79B3A] text-[10px] font-bold rounded uppercase tracking-wider border border-[#E6DDCB]">
+                          {cat.badge}
+                        </span>
+                        
+                        <span className="px-2.5 py-0.5 bg-[#FAF8F3] text-[#13253D] text-[11px] font-bold rounded-full border border-[#E6DDCB] flex items-center gap-1">
+                          <Database className="w-3 h-3 text-[#C79B3A]" />
+                          <span>ბაზაშია {totalInDb} კითხვა</span>
+                        </span>
+                      </div>
 
-                    <div className="pt-2 flex items-center gap-2 text-xs font-bold text-[#C79B3A]">
-                      <span>არჩევა (2 რეჟიმი)</span>
-                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                      <h3 className="font-serif font-bold text-xl text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors leading-snug">
+                        {cat.title}
+                      </h3>
+                      <p className="text-xs text-[#666666] leading-relaxed">
+                        {cat.subtitle}
+                      </p>
+
+                      <div className="pt-2 flex items-center gap-2 text-xs font-bold text-[#C79B3A]">
+                        <span>ტესტების გახსნა (2 რეჟიმი)</span>
+                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
-          {/* 2. სხვა ტესტები */}
+          {/* 2. სხვა ტესტები (ქრონოლოგია & ილუსტრაციები) */}
           <div className="space-y-6">
             <div className="border-b border-[#E6DDCB] pb-3">
               <h2 className="font-serif font-bold text-2xl text-[#0D1B2A]">
-                სხვა ტესტები
+                სხვა დამოუკიდებელი ტესტები
               </h2>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {TEST_CATEGORIES.slice(4).map((cat) => (
-                <div
-                  key={cat.key}
-                  onClick={() => handleSelectCategory(cat.key)}
-                  className="bg-white p-6 sm:p-7 rounded-2xl border border-[#E6DDCB] shadow-sm hover:border-[#C79B3A] hover:shadow-md transition-all cursor-pointer group flex items-start gap-5"
-                >
-                  <div className="w-14 h-14 rounded-xl bg-[#F5F2EA] border border-[#E6DDCB] flex items-center justify-center shrink-0 group-hover:bg-[#C79B3A] group-hover:text-white transition-colors">
-                    {getCategoryIcon(cat.key)}
-                  </div>
+              {TEST_CATEGORIES.slice(4).map((cat) => {
+                const totalInDb = categoryTotalCounts[cat.key] || 0;
+                return (
+                  <div
+                    key={cat.key}
+                    onClick={() => handleSelectCategory(cat.key)}
+                    className="bg-white p-6 sm:p-7 rounded-2xl border border-[#E6DDCB] shadow-sm hover:border-[#C79B3A] hover:shadow-md transition-all cursor-pointer group flex items-start gap-5"
+                  >
+                    <div className="w-14 h-14 rounded-xl bg-[#F5F2EA] border border-[#E6DDCB] flex items-center justify-center shrink-0 group-hover:bg-[#C79B3A] group-hover:text-white transition-colors">
+                      {getCategoryIcon(cat.key)}
+                    </div>
 
-                  <div className="space-y-2 flex-1">
-                    <h3 className="font-serif font-bold text-xl text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors leading-snug">
-                      {cat.title}
-                    </h3>
-                    <p className="text-xs text-[#666666] leading-relaxed">
-                      {cat.subtitle}
-                    </p>
+                    <div className="space-y-2 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="px-2 py-0.5 bg-[#FAF8F3] text-[#C79B3A] text-[10px] font-bold rounded uppercase tracking-wider border border-[#E6DDCB]">
+                          {cat.isIndependent ? 'დამოუკიდებელი' : cat.badge}
+                        </span>
 
-                    <div className="pt-2 flex items-center gap-2 text-xs font-bold text-[#C79B3A]">
-                      <span>არჩევა (2 რეჟიმი)</span>
-                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                        <span className="px-2.5 py-0.5 bg-[#FAF8F3] text-[#13253D] text-[11px] font-bold rounded-full border border-[#E6DDCB] flex items-center gap-1">
+                          <Database className="w-3 h-3 text-[#C79B3A]" />
+                          <span>ბაზაშია {totalInDb} კითხვა</span>
+                        </span>
+                      </div>
+
+                      <h3 className="font-serif font-bold text-xl text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors leading-snug">
+                        {cat.title}
+                      </h3>
+                      <p className="text-xs text-[#666666] leading-relaxed">
+                        {cat.subtitle}
+                      </p>
+
+                      {cat.isIndependent && (
+                        <p className="text-[11px] font-semibold text-[#C79B3A] bg-[#FAF8F3] p-2 rounded-lg border border-[#C79B3A]/30">
+                          📌 ქრონოლოგია არის დამოუკიდებელი დავალება და არ უკავშირდება კონკრეტულ თავებს.
+                        </p>
+                      )}
+
+                      <div className="pt-2 flex items-center gap-2 text-xs font-bold text-[#C79B3A]">
+                        <span>დავალებების გახსნა</span>
+                        <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </>
@@ -282,20 +320,20 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
             <div className="bg-[#0D1B2A] text-white rounded-3xl p-6 sm:p-8 shadow-xl border-4 border-[#C79B3A]/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
               <div className="space-y-2 z-10">
-                <span className="px-3 py-1 bg-[#C79B3A] text-[#0D1B2A] text-[10px] font-bold uppercase tracking-widest rounded-full">
-                  არჩეული კატეგორია
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 bg-[#C79B3A] text-[#0D1B2A] text-[10px] font-bold uppercase tracking-widest rounded-full">
+                    არჩეული კატეგორია
+                  </span>
+                  <span className="px-3 py-1 bg-white/10 text-[#FAF8F3] text-[11px] font-bold rounded-full border border-white/20">
+                    ბაზაშია {categoryTotalCounts[selectedCategoryKey] || 0} კითხვა
+                  </span>
+                </div>
                 <h2 className="font-serif font-bold text-2xl sm:text-4xl text-[#FAF8F3]">
                   {activeCategoryMeta?.title}
                 </h2>
                 <p className="text-xs sm:text-sm text-[#FAF8F3]/80 max-w-xl">
                   {activeCategoryMeta?.subtitle}
                 </p>
-              </div>
-
-              <div className="flex items-center gap-2 bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/20 text-xs text-[#FAF8F3]">
-                <Clock className="w-4 h-4 text-[#C79B3A]" />
-                <span>დროის ლიმიტი: {activeCategoryMeta?.timeLimitMinutes} წუთი</span>
               </div>
             </div>
           </div>
@@ -318,7 +356,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                     რენდომ კითხვები ყველა თავიდან
                   </h3>
                   <p className="text-xs sm:text-sm text-[#666666] leading-relaxed">
-                    გააკეთეთ ტესტი, სადაც კითხვები შემთხვევითად არის შერჩეული პროგრამის ყველა თავიდან და თემიდან.
+                    გააკეთეთ ტესტი, სადაც კითხვები შემთხვევითად არის შერჩეული პროგრამის ყველა 11-ვე თავიდან და ბაზიდან.
                   </p>
                 </div>
               </div>
@@ -344,13 +382,13 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
                 <div className="space-y-2">
                   <span className="text-[10px] font-bold uppercase tracking-widest text-[#C79B3A]">
-                    ბოქსი 2 • პროგრამის თავები (Supabase Data)
+                    ბოქსი 2 • პროგრამის თავები ({programs.length} თავი)
                   </span>
                   <h3 className="font-serif font-bold text-2xl text-[#0D1B2A]">
                     არჩევა თავის / პროგრამის მიხედვით
                   </h3>
                   <p className="text-xs sm:text-sm text-[#666666] leading-relaxed">
-                    აირჩიეთ კონკრეტული თავი და გააკეთეთ მხოლოდ იმ თავის კითხვები.
+                    აირჩიეთ კონკრეტული თავი 11 თავიდან და გააკეთეთ მხოლოდ იმ თავის კითხვები.
                   </p>
                 </div>
 

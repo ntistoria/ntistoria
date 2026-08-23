@@ -37,9 +37,8 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
     { id: 'contact', label: 'კონტაქტი' },
   ];
 
-  const navItems = isAdmin 
-    ? [...baseNavItems, { id: 'admin' as NavTab, label: 'ადმინ პანელი' }]
-    : baseNavItems;
+  const navItems = baseNavItems;
+
 
   const handleNavClick = (id: NavTab) => {
     setActiveTab(id);
