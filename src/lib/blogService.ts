@@ -21,6 +21,22 @@ export const isAdminUser = (user: { email: string } | null): boolean => {
 };
 
 
+// Get initial articles instantly from local storage & defaults (0ms sync)
+export const getInitialArticles = (): Article[] => {
+  let localArticles: Article[] = [];
+  try {
+    const saved = localStorage.getItem(LOCAL_ARTICLES_KEY);
+    if (saved) {
+      localArticles = JSON.parse(saved);
+    }
+  } catch (err) {}
+
+  const combinedMap = new Map<string, Article>();
+  DEFAULT_ARTICLES.forEach(a => combinedMap.set(a.id, a));
+  localArticles.forEach(a => combinedMap.set(a.id, a));
+  return Array.from(combinedMap.values());
+};
+
 // Fetch all articles combining Supabase + Local Storage + Default Articles
 export const fetchAllArticles = async (): Promise<Article[]> => {
   let dbArticles: Article[] = [];
@@ -50,27 +66,10 @@ export const fetchAllArticles = async (): Promise<Article[]> => {
     console.warn('Supabase fetch articles fallback:', err);
   }
 
-  // Retrieve locally saved custom articles
-  let localArticles: Article[] = [];
-  try {
-    const saved = localStorage.getItem(LOCAL_ARTICLES_KEY);
-    if (saved) {
-      localArticles = JSON.parse(saved);
-    }
-  } catch (err) {
-    console.error('Failed to read local articles:', err);
-  }
-
-  // Combine DB articles + Local Custom Articles + Default Articles (deduplicated by ID)
+  const initial = getInitialArticles();
   const combinedMap = new Map<string, Article>();
 
-  // Add default articles first
-  DEFAULT_ARTICLES.forEach(a => combinedMap.set(a.id, a));
-
-  // Override with local articles
-  localArticles.forEach(a => combinedMap.set(a.id, a));
-
-  // Override with Supabase DB articles
+  initial.forEach(a => combinedMap.set(a.id, a));
   dbArticles.forEach(a => combinedMap.set(a.id, a));
 
   return Array.from(combinedMap.values());

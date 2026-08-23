@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Article } from '../types';
-import { fetchAllArticles } from '../lib/blogService';
+import { fetchAllArticles, getInitialArticles } from '../lib/blogService';
 import { Search, Clock, Calendar, User, ArrowRight, BookOpen, Loader2 } from 'lucide-react';
 
 interface BlogViewProps {
@@ -8,8 +8,8 @@ interface BlogViewProps {
 }
 
 export const BlogView: React.FC<BlogViewProps> = ({ onOpenArticle }) => {
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [articles, setArticles] = useState<Article[]>(() => getInitialArticles());
+  const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('ყველა');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -23,18 +23,22 @@ export const BlogView: React.FC<BlogViewProps> = ({ onOpenArticle }) => {
   ];
 
   useEffect(() => {
+    let isMounted = true;
     const load = async () => {
-      setLoading(true);
       try {
         const fetched = await fetchAllArticles();
-        setArticles(fetched);
+        if (isMounted) {
+          setArticles(fetched);
+        }
       } catch (err) {
         console.error('Error loading articles:', err);
-      } finally {
-        setLoading(false);
       }
     };
     load();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const filteredArticles = articles.filter(art => {
