@@ -86,6 +86,8 @@ export const saveArticle = async (article: Article): Promise<Article> => {
     tags: article.tags?.length ? article.tags : ['ისტორია', article.category]
   };
 
+  let supabaseError: any = null;
+
   // Try saving to Supabase first
   try {
     const { error } = await supabase.from('articles').upsert({
@@ -99,14 +101,16 @@ export const saveArticle = async (article: Article): Promise<Article> => {
       date: articleToSave.date,
       image_url: articleToSave.imageUrl,
       featured: articleToSave.featured || false,
-      tags: JSON.stringify(articleToSave.tags)
+      tags: articleToSave.tags
     });
 
     if (error) {
-      console.warn('Supabase article save notice (using local backup):', error.message);
+      console.error('Supabase article save error:', error);
+      supabaseError = error;
     }
   } catch (err) {
-    console.warn('Supabase DB unavailable, saving locally:', err);
+    console.error('Supabase DB error:', err);
+    supabaseError = err;
   }
 
   // Save to localStorage backup
@@ -124,6 +128,10 @@ export const saveArticle = async (article: Article): Promise<Article> => {
     localStorage.setItem(LOCAL_ARTICLES_KEY, JSON.stringify(localArticles));
   } catch (err) {
     console.error('Error writing to local storage:', err);
+  }
+
+  if (supabaseError) {
+    throw new Error(`Supabase-ში შეინახა ლოკალურად, თუმცა ბაზაში შეცდომაა: ${supabaseError.message || supabaseError}`);
   }
 
   return articleToSave;
