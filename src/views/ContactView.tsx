@@ -19,7 +19,7 @@ export const ContactView: React.FC = () => {
   };
 
   return (
-    <div className="max-w-[1180px] mx-auto space-y-16 pb-20 pt-6">
+    <div className="max-w-[1180px] mx-auto space-y-16 pb-20 py-6 px-4 sm:px-6">
       
       {/* Editorial Header */}
       <div className="text-center max-w-2xl mx-auto space-y-4">

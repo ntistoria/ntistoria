@@ -20,13 +20,13 @@ CREATE TABLE IF NOT EXISTS public.articles (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. Disable Row Level Security on articles table
-ALTER TABLE public.articles DISABLE ROW LEVEL SECURITY;
+-- 2. Enable Row Level Security on the articles table (required for policies)
+ALTER TABLE public.articles ENABLE ROW LEVEL SECURITY;
 
 -- 3. Drop existing restrictive policies if any
 DROP POLICY IF EXISTS "Enable all access for articles" ON public.articles;
 
--- 4. Create permissive policy for articles table
+-- 4. Create permissive policy for articles table (allows all operations for all roles)
 CREATE POLICY "Enable all access for articles" 
 ON public.articles 
 FOR ALL 

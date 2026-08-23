@@ -30,7 +30,7 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
   const related = allArticles.filter(a => a.id !== article.id).slice(0, 3);
 
   return (
-    <div className="max-w-[1000px] mx-auto space-y-8 pb-24 pt-4 px-4 sm:px-6 animate-in fade-in duration-300">
+    <div className="max-w-[1000px] mx-auto space-y-8 pb-24 py-6 px-4 sm:px-6 animate-in fade-in duration-300">
       
       {/* Top Back Navigation Bar */}
       <div className="flex items-center justify-between border-b border-[#E6DDCB] pb-4">

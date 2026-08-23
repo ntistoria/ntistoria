@@ -50,7 +50,7 @@ export const BlogView: React.FC<BlogViewProps> = ({ onOpenArticle }) => {
   const listArticles = filteredArticles.filter(a => a.id !== featured?.id);
 
   return (
-    <div className="max-w-[1180px] mx-auto space-y-12 pb-20 pt-6 px-4 sm:px-6 animate-in fade-in duration-300">
+    <div className="max-w-[1180px] mx-auto space-y-12 pb-20 py-6 px-4 sm:px-6 animate-in fade-in duration-300">
       
       {/* Editorial Header */}
       <div className="text-center max-w-2xl mx-auto space-y-4">

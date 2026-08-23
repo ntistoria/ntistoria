@@ -168,10 +168,20 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
   };
 
   return (
-    <div className="max-w-[1200px] mx-auto space-y-12 pb-24 pt-4 px-4 sm:px-6 animate-in fade-in duration-300">
+    <div className="max-w-[1200px] mx-auto space-y-12 pb-24 py-6 px-4 sm:px-6 animate-in fade-in duration-300">
       
+      {/* Loading indicator */}
+      {loading && (
+        <div className="flex items-center justify-center py-12">
+          <div className="flex items-center gap-3 text-[#C79B3A]">
+            <div className="w-6 h-6 border-2 border-[#C79B3A] border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm font-semibold text-[#666666]">სუფრბაზადან ტვირთვა...</span>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
-      {!selectedCategoryKey ? (
+      {!loading && !selectedCategoryKey ? (
         <>
           <div className="text-center max-w-3xl mx-auto space-y-4 pt-4">
             <span className="px-3.5 py-1 bg-[#FAF8F3] border border-[#C79B3A]/40 text-[#C79B3A] text-[11px] font-bold uppercase tracking-[0.25em] rounded-full inline-flex items-center gap-1.5 shadow-sm">
@@ -215,7 +225,9 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                         
                         <span className="px-2.5 py-0.5 bg-[#FAF8F3] text-[#13253D] text-[11px] font-bold rounded-full border border-[#E6DDCB] flex items-center gap-1">
                           <Database className="w-3 h-3 text-[#C79B3A]" />
-                          <span>ბაზაშია {totalInDb} კითხვა</span>
+                          <span>
+                            {loading ? 'ტვირთვა...' : totalInDb > 0 ? `${totalInDb} კითხვა ბაზაში` : 'ბაზა ემზადება'}
+                          </span>
                         </span>
                       </div>
 
@@ -266,7 +278,9 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
                         <span className="px-2.5 py-0.5 bg-[#FAF8F3] text-[#13253D] text-[11px] font-bold rounded-full border border-[#E6DDCB] flex items-center gap-1">
                           <Database className="w-3 h-3 text-[#C79B3A]" />
-                          <span>ბაზაშია {totalInDb} კითხვა</span>
+                          <span>
+                            {loading ? 'ტვირთვა...' : totalInDb > 0 ? `${totalInDb} კითხვა ბაზაში` : 'ბაზა ემზადება'}
+                          </span>
                         </span>
                       </div>
 
@@ -288,7 +302,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
             </div>
           </div>
         </>
-      ) : (
+      ) : !loading && selectedCategoryKey ? (
         /* CATEGORY SELECTED VIEW WITH 2 MODE BOXES */
         <div className="space-y-8 animate-in fade-in duration-300">
           
@@ -487,7 +501,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
           </div>
 
         </div>
-      )}
+      ) : null}
 
     </div>
   );

@@ -82,7 +82,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => 
   });
 
   return (
-    <div className="max-w-[1280px] mx-auto py-8 space-y-8 animate-in fade-in duration-300">
+    <div className="max-w-[1280px] mx-auto py-6 sm:py-8 px-4 sm:px-6 space-y-8 animate-in fade-in duration-300">
       
       {/* Top Banner Header */}
       <div className="relative bg-[#0D1B2A] text-white rounded-3xl p-6 sm:p-8 overflow-hidden shadow-2xl border-4 border-[#C79B3A]/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">

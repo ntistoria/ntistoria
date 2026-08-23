@@ -28,12 +28,12 @@ export const HomeView: React.FC<HomeViewProps> = ({
 
 
   return (
-    <div className="space-y-24 pb-20">
+    <div className="space-y-24 pb-20 overflow-x-hidden">
       
       {/* 1. HERO SECTION (Split 50/50 Layout) */}
       <section className="relative py-8 lg:py-12">
         <div className="max-w-[1180px] mx-auto px-4 sm:px-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-center min-h-[480px]">
             
             {/* Left Content (50% Width) */}
             <motion.div 
