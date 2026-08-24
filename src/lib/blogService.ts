@@ -110,6 +110,20 @@ export const fetchAllArticles = async (): Promise<Article[]> => {
         tags: item.tags ? (typeof item.tags === 'string' ? JSON.parse(item.tags) : item.tags) : ['ისტორია'],
         status: item.status || 'published'
       }));
+
+      // Auto-fix broken dashed slugs in Supabase (one-time migration)
+      for (const item of data) {
+        const dbSlug = item.slug ? item.slug.trim() : '';
+        const isBroken = !dbSlug || /^[-]+\d*$/.test(dbSlug) || dbSlug.length < 3;
+        if (isBroken && item.title) {
+          const fixedSlug = generateSlug(item.title, item.id);
+          if (fixedSlug && fixedSlug !== dbSlug) {
+            supabase.from('articles').update({ slug: fixedSlug }).eq('id', item.id).then(() => {
+              console.log(`Auto-fixed slug for "${item.title}": "${dbSlug}" → "${fixedSlug}"`);
+            }).catch(() => {});
+          }
+        }
+      }
     }
   } catch (err) {
     console.warn('Supabase fetch articles fallback:', err);

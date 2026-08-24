@@ -51,7 +51,7 @@ export default async function handler(req, res) {
       const supabaseUrl = `https://enjnwxpzafroxapksdlt.supabase.co/rest/v1/articles?select=*`;
       const response = await fetch(supabaseUrl, {
         headers: {
-          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVuam53eHB6YWZyb3hhcGtzZGx0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAzNzc1MzUsImV4cCI6MjA1NTk1MzUzNX0.V5VvG1R8FkLd_dZk',
+          'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVuam53eHB6YWZyb3hhcGtzZGx0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1NTc0MjMsImV4cCI6MjEwMzEzMzQyM30.oXPl2qDJpNaX8BiTzLR0rmL4ItinpgjnT_AcQ7wSttM',
           'Accept': 'application/json'
         }
       });
