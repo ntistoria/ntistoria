@@ -185,6 +185,17 @@ export function App() {
           canonicalUrl: 'https://ntistoria.vercel.app/'
         });
     }
+
+    // Single Page Application GA4 Virtual Pageview Tracking
+    if (typeof window !== 'undefined' && (window as any).gtag) {
+      let currentPath = '/';
+      if (selectedArticle) {
+        currentPath = `/?article=${encodeURIComponent(selectedArticle.slug || selectedArticle.id)}`;
+      } else if (activeTab && activeTab !== 'home') {
+        currentPath = `/?tab=${activeTab}`;
+      }
+      (window as any).gtag('config', 'G-VHKM6K967T', { page_path: currentPath });
+    }
   }, [activeTab, selectedArticle]);
 
   useEffect(() => {
