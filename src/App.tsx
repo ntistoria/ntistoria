@@ -18,6 +18,65 @@ import { StudentProfileModal } from './components/StudentProfileModal';
 import { supabase } from './lib/supabase';
 import { isAdminUser, fetchAllArticles } from './lib/blogService';
 
+// Dynamic SEO Meta Manager Helper for SPA
+function updateSeoMetaData(options: {
+  title: string;
+  description: string;
+  canonicalUrl: string;
+  imageUrl?: string;
+  articleJsonLd?: any;
+}) {
+  document.title = options.title;
+
+  const setMeta = (nameOrProperty: string, content: string, isProperty = false) => {
+    let el = document.querySelector(
+      isProperty ? `meta[property="${nameOrProperty}"]` : `meta[name="${nameOrProperty}"]`
+    );
+    if (!el) {
+      el = document.createElement('meta');
+      if (isProperty) el.setAttribute('property', nameOrProperty);
+      else el.setAttribute('name', nameOrProperty);
+      document.head.appendChild(el);
+    }
+    el.setAttribute('content', content);
+  };
+
+  setMeta('description', options.description);
+  setMeta('og:title', options.title, true);
+  setMeta('og:description', options.description, true);
+  setMeta('og:url', options.canonicalUrl, true);
+  setMeta('twitter:title', options.title);
+  setMeta('twitter:description', options.description);
+
+  if (options.imageUrl) {
+    setMeta('og:image', options.imageUrl, true);
+    setMeta('twitter:image', options.imageUrl);
+  }
+
+  // Canonical Link
+  let canonicalEl = document.querySelector('link[rel="canonical"]');
+  if (!canonicalEl) {
+    canonicalEl = document.createElement('link');
+    canonicalEl.setAttribute('rel', 'canonical');
+    document.head.appendChild(canonicalEl);
+  }
+  canonicalEl.setAttribute('href', options.canonicalUrl);
+
+  // Dynamic Article JSON-LD Schema
+  let schemaEl = document.getElementById('dynamic-article-schema');
+  if (options.articleJsonLd) {
+    if (!schemaEl) {
+      schemaEl = document.createElement('script');
+      schemaEl.id = 'dynamic-article-schema';
+      schemaEl.setAttribute('type', 'application/ld+json');
+      document.head.appendChild(schemaEl);
+    }
+    schemaEl.textContent = JSON.stringify(options.articleJsonLd);
+  } else if (schemaEl) {
+    schemaEl.remove();
+  }
+}
+
 export function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('home');
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
@@ -27,6 +86,106 @@ export function App() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+
+  // Dynamic SEO title, description, canonical & Open Graph manager
+  useEffect(() => {
+    if (selectedArticle) {
+      const artTitle = `${selectedArticle.title} — NT ისტორიის მასწავლებელი`;
+      const artDesc = selectedArticle.excerpt 
+        ? (selectedArticle.excerpt.length > 155 ? `${selectedArticle.excerpt.slice(0, 155)}...` : selectedArticle.excerpt)
+        : `წაიკითხეთ სტატია "${selectedArticle.title}" - NT ისტორიის მასწავლებელი ნოდარ თოთაძე.`;
+      const artUrl = `https://ntistoria.vercel.app/?article=${encodeURIComponent(selectedArticle.slug || selectedArticle.id)}`;
+
+      updateSeoMetaData({
+        title: artTitle,
+        description: artDesc,
+        canonicalUrl: artUrl,
+        imageUrl: selectedArticle.imageUrl,
+        articleJsonLd: {
+          "@context": "https://schema.org",
+          "@type": "BlogPosting",
+          "headline": selectedArticle.title,
+          "description": selectedArticle.excerpt,
+          "image": selectedArticle.imageUrl,
+          "author": {
+            "@type": "Person",
+            "name": selectedArticle.author || "ნოდარ თოთაძე"
+          },
+          "publisher": {
+            "@type": "Organization",
+            "name": "NT ისტორიის მასწავლებელი",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://enjnwxpzafroxapksdlt.supabase.co/storage/v1/object/public/photos/logpng.png"
+            }
+          },
+          "datePublished": selectedArticle.date || "2026-08-24",
+          "mainEntityOfPage": {
+            "@type": "WebPage",
+            "@id": artUrl
+          }
+        }
+      });
+      return;
+    }
+
+    switch (activeTab) {
+      case 'home':
+        updateSeoMetaData({
+          title: 'NT ისტორიის მასწავლებელი — ეროვნული გამოცდების მოსამზადებელი',
+          description: 'ისტორიის პედაგოგ ნოდარ თოთაძის მოსამზადებელი პორტალი. ეროვნული გამოცდების ტესტები, ისტორიული ბლოგი, რუკები და ვიდეო გაკვეთილები.',
+          canonicalUrl: 'https://ntistoria.vercel.app/'
+        });
+        break;
+
+      case 'blog':
+        updateSeoMetaData({
+          title: 'ისტორიული ბლოგი და სტატიები — NT ისტორიის მასწავლებელი',
+          description: 'საქართველოსა და მსოფლიო ისტორიის სამეცნიერო და შემეცნებითი სტატიები, ისტორიული წყაროების ანალიზი და ეროვნული გამოცდების დამხმარე მასალები.',
+          canonicalUrl: 'https://ntistoria.vercel.app/?tab=blog'
+        });
+        break;
+
+      case 'tests':
+        updateSeoMetaData({
+          title: 'ისტორიის ტესტები და ეროვნული გამოცდები — NT ისტორია',
+          description: 'ეროვნული გამოცდების ისტორიის ტესტები: არჩევითპასუხიანი, რუკები, წყაროები, ანალოგიები, ქრონოლოგია და ილუსტრაციები.',
+          canonicalUrl: 'https://ntistoria.vercel.app/?tab=tests'
+        });
+        break;
+
+      case 'videos':
+        updateSeoMetaData({
+          title: 'ვიდეო გაკვეთილები ისტორიაში — ეროვნული გამოცდები',
+          description: 'ისტორიის ვიდეო გაკვეთილები, ლექციები და ეროვნული გამოცდების საგამოცდო მასალების მიმოხილვა ნოდარ თოთაძისგან.',
+          canonicalUrl: 'https://ntistoria.vercel.app/?tab=videos'
+        });
+        break;
+
+      case 'quizzes':
+        updateSeoMetaData({
+          title: 'ონლაინ ვიქტორინები და ქვიზები ისტორიაში — NT ისტორია',
+          description: 'ინტერაქტიული ვიქტორინები და სწრაფი ქვიზები საქართველოსა და მსოფლიო ისტორიაში ეროვნული გამოცდებისთვის.',
+          canonicalUrl: 'https://ntistoria.vercel.app/?tab=quizzes'
+        });
+        break;
+
+      case 'contact':
+        updateSeoMetaData({
+          title: 'კონტაქტი — NT ისტორიის მასწავლებელი ნოდარ თოთაძე',
+          description: 'დაუკავშირდით ისტორიის პედაგოგ ნოდარ თოთაძეს. ეროვნული გამოცდების მოსამზადებელი ჯგუფები, მისამართი და საკონტაქტო ინფორმაცია.',
+          canonicalUrl: 'https://ntistoria.vercel.app/?tab=contact'
+        });
+        break;
+
+      default:
+        updateSeoMetaData({
+          title: 'NT ისტორიის მასწავლებელი — ეროვნული გამოცდების მოსამზადებელი',
+          description: 'ისტორიის პედაგოგ ნოდარ თოთაძის მოსამზადებელი პორტალი. ეროვნული გამოცდების ტესტები, ისტორიული ბლოგი, რუკები და ვიდეო გაკვეთილები.',
+          canonicalUrl: 'https://ntistoria.vercel.app/'
+        });
+    }
+  }, [activeTab, selectedArticle]);
 
   useEffect(() => {
     // Process Supabase session (without forcing activeTab='admin' on refresh)
