@@ -57,7 +57,7 @@ export const TEST_CATEGORIES: TestCategoryMeta[] = [
   },
   {
     key: 'chronology',
-    tableNames: ['chronology', 'chronology_questions', 'ქრონოლოგია'],
+    tableNames: ['chronology', 'chronology_questions'],
     title: 'ქრონოლოგია',
     subtitle: 'ისტორიული თარიღებისა და მოვლენების თანმიმდევრობით დალაგება',
     timeLimitMinutes: 0,
@@ -66,7 +66,7 @@ export const TEST_CATEGORIES: TestCategoryMeta[] = [
   },
   {
     key: 'illustrations',
-    tableNames: ['illustrations_questions', 'illustration_questions', 'illustrations', 'ilustrations', 'ილუსტრაციები'],
+    tableNames: ['illustrations_questions', 'illustration_questions'],
     title: 'ილუსტრაციები',
     subtitle: 'ვიზუალური წყაროების, არტეფაქტებისა და ფოტოების ანალიზი',
     timeLimitMinutes: 0,
@@ -248,43 +248,10 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
     try {
       let rawQuestions: any[] = [];
 
-      // 1. Try embedded join queries for parent tables (maps, analogy, source, illustrations)
-      if (categoryKey === 'map') {
-        const { data: mQData, error: mQErr } = await supabase
-          .from(tableName)
-          .select('*, maps!inner(*)');
-        if (!mQErr && mQData && mQData.length > 0) {
-          rawQuestions = mQData;
-        }
-      } else if (categoryKey === 'analogies') {
-        const { data: aQData, error: aQErr } = await supabase
-          .from(tableName)
-          .select('*, analogy!inner(*)');
-        if (!aQErr && aQData && aQData.length > 0) {
-          rawQuestions = aQData;
-        }
-      } else if (categoryKey === 'source') {
-        const { data: sQData, error: sQErr } = await supabase
-          .from(tableName)
-          .select('*, source!inner(*)');
-        if (!sQErr && sQData && sQData.length > 0) {
-          rawQuestions = sQData;
-        }
-      } else if (categoryKey === 'illustrations') {
-        const { data: iQData, error: iQErr } = await supabase
-          .from(tableName)
-          .select('*, illustrations!inner(*)');
-        if (!iQErr && iQData && iQData.length > 0) {
-          rawQuestions = iQData;
-        }
-      }
-
-      // Fallback to direct select if embedded join was empty or not applicable
-      if (rawQuestions.length === 0) {
-        const { data: pQuestions, error: pErr } = await supabase.from(tableName).select('*');
-        if (!pErr && pQuestions && pQuestions.length > 0) {
-          rawQuestions = pQuestions;
-        }
+      // Direct select from the primary table (avoids fragile !inner join PostgREST cache issues)
+      const { data: pQuestions, error: pErr } = await supabase.from(tableName).select('*');
+      if (!pErr && pQuestions && pQuestions.length > 0) {
+        rawQuestions = pQuestions;
       }
 
       if (rawQuestions.length > 0) {

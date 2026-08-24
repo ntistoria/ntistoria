@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Article } from '../types';
 import { fetchAllArticles, getInitialArticles } from '../lib/blogService';
-import { Search, Clock, Calendar, User, ArrowRight, BookOpen, Loader2 } from 'lucide-react';
+import { Search, Clock, Calendar, User, ArrowRight, BookOpen } from 'lucide-react';
 
 interface BlogViewProps {
   onOpenArticle: (article: Article) => void;
@@ -112,12 +112,7 @@ export const BlogView: React.FC<BlogViewProps> = ({ onOpenArticle }) => {
         </div>
       </div>
 
-      {loading ? (
-        <div className="py-20 text-center flex flex-col items-center justify-center gap-3">
-          <Loader2 className="w-8 h-8 text-[#C79B3A] animate-spin" />
-          <span className="text-xs text-[#666666] font-semibold">ბლოგები იტვირთება...</span>
-        </div>
-      ) : articles.length === 0 ? (
+      {articles.length === 0 ? (
         <div className="bg-white p-12 rounded-3xl border border-[#E6DDCB] text-center space-y-4 max-w-xl mx-auto shadow-sm">
           <div className="w-16 h-16 bg-[#FAF8F3] border border-[#C79B3A]/40 rounded-2xl flex items-center justify-center mx-auto text-[#C79B3A]">
             <BookOpen className="w-8 h-8" />

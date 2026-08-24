@@ -176,17 +176,37 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
             
             <div className="pt-3 mt-2 border-t border-[#E6DDCB]">
               {user ? (
-                <div className="flex items-center justify-between px-2">
-                  <span className="text-sm font-semibold text-[#13253D]">{user.name}</span>
-                  <button
-                    onClick={() => {
-                      if (onLogout) onLogout();
-                      setMobileMenuOpen(false);
-                    }}
-                    className="text-xs font-semibold text-rose-600 hover:underline cursor-pointer"
-                  >
-                    გამოსვლა
-                  </button>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between px-2 pb-1">
+                    <span className="text-sm font-semibold text-[#13253D]">{user.name}</span>
+                    <button
+                      onClick={() => {
+                        if (onLogout) onLogout();
+                        setMobileMenuOpen(false);
+                      }}
+                      className="text-xs font-semibold text-rose-600 hover:underline cursor-pointer"
+                    >
+                      გამოსვლა
+                    </button>
+                  </div>
+                  {isAdmin && (
+                    <button
+                      onClick={() => { handleNavClick('admin'); }}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] font-bold text-sm rounded-xl cursor-pointer"
+                    >
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>ადმინ პანელი</span>
+                    </button>
+                  )}
+                  {onOpenProfile && (
+                    <button
+                      onClick={() => { if (onOpenProfile) onOpenProfile(); setMobileMenuOpen(false); }}
+                      className="w-full flex items-center gap-2 px-4 py-2.5 bg-[#F5F2EA] hover:bg-[#E6DDCB] text-[#13253D] font-semibold text-sm rounded-xl border border-[#E6DDCB] cursor-pointer"
+                    >
+                      <User className="w-4 h-4 text-[#C79B3A]" />
+                      <span>პროფილი</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <button

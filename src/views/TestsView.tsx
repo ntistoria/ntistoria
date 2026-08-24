@@ -198,7 +198,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
         <div className="flex items-center justify-center py-12">
           <div className="flex items-center gap-3 text-[#C79B3A]">
             <div className="w-6 h-6 border-2 border-[#C79B3A] border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm font-semibold text-[#666666]">სუფრბაზადან ტვირთვა...</span>
+            <span className="text-sm font-semibold text-[#666666]">ბაზიდან ტვირთვა...</span>
           </div>
         </div>
       )}
@@ -425,7 +425,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                   >
                     {programs.map((prog) => (
                       <option key={prog.id} value={prog.id}>
-                        {prog.title} ({questionsCountMap[prog.id] || 3} კითხვა)
+                        {prog.title} ({questionsCountMap[prog.id] ?? 0} კითხვა)
                       </option>
                     ))}
                   </select>
