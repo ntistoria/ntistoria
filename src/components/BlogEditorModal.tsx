@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Upload, Image as ImageIcon, Bold, Italic, Heading1, Heading2, List, Quote, Code, Eye, Edit3, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Article, HistoricalCategory } from '../types';
-import { uploadBlogImage } from '../lib/blogService';
+import { uploadBlogImage, formatArticleContent } from '../lib/blogService';
 
 interface BlogEditorModalProps {
   isOpen: boolean;
@@ -40,8 +40,15 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
+  // Inline Image Insertion State
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [inlineImageUrl, setInlineImageUrl] = useState('');
+  const [inlineCaption, setInlineCaption] = useState('');
+  const [uploadingInline, setUploadingInline] = useState(false);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inlineFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (articleToEdit) {
@@ -89,7 +96,7 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
     }, 50);
   };
 
-  // Image Upload Handler
+  // Image Upload Handler for Cover Image
   const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -109,6 +116,55 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
       setUploadingImage(false);
     }
   };
+
+  // Inline Image File Upload Handler (For Blog Full Text)
+  const handleInlineImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingInline(true);
+    try {
+      const publicUrl = await uploadBlogImage(file);
+      setInlineImageUrl(publicUrl);
+      setSuccessMessage('ტექსტის ფოტო წარმატებით აიტვირთა Supabase Storage-ში!');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err: any) {
+      console.error('Inline image upload error:', err);
+      alert('ფოტოს ატვირთვა ვერ მოხერხდა');
+    } finally {
+      setUploadingInline(false);
+    }
+  };
+
+  // Insert Inline Image into Textarea Content
+  const handleInsertInlineImage = (finalUrl?: string, captionText?: string) => {
+    const urlToUse = finalUrl || inlineImageUrl;
+    if (!urlToUse.trim()) return;
+
+    const caption = captionText !== undefined ? captionText : inlineCaption;
+    const textarea = textareaRef.current;
+    const start = textarea ? textarea.selectionStart : content.length;
+    const end = textarea ? textarea.selectionEnd : content.length;
+
+    const imageSnippet = `\n\n<figure class="my-6 text-center">\n  <img src="${urlToUse.trim()}" alt="${caption.trim()}" class="rounded-2xl max-w-full mx-auto shadow-md border border-[#E6DDCB]" />\n  ${caption.trim() ? `<figcaption class="text-xs text-[#666666] italic mt-2">${caption.trim()}</figcaption>` : ''}\n</figure>\n\n`;
+
+    const newContent = content.substring(0, start) + imageSnippet + content.substring(end);
+    setContent(newContent);
+
+    // Reset inline modal form
+    setInlineImageUrl('');
+    setInlineCaption('');
+    setShowImageModal(false);
+
+    setTimeout(() => {
+      if (textarea) {
+        textarea.focus();
+        const newPos = start + imageSnippet.length;
+        textarea.setSelectionRange(newPos, newPos);
+      }
+    }, 80);
+  };
+
 
   // Save / Submit Form
   const handleSubmit = async (e: React.FormEvent) => {
@@ -360,7 +416,7 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
 
               {/* Rich Formatting Toolbar + Content Textarea */}
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <label className="text-xs font-bold text-[#13253D] uppercase tracking-wider">
                     ბლოგის სრული ტექსტი *
                   </label>
@@ -425,6 +481,19 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
                     >
                       <Code className="w-4 h-4" />
                     </button>
+
+                    <div className="h-4 w-[1px] bg-[#E6DDCB] mx-1" />
+
+                    {/* Inline Image Upload Button */}
+                    <button
+                      type="button"
+                      title="ფოტოს ატვირთვა / ჩასმა ტექსტში (Supabase Storage)"
+                      onClick={() => setShowImageModal(true)}
+                      className="p-1.5 bg-[#C79B3A]/15 hover:bg-[#13253D] text-[#13253D] hover:text-white rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-bold px-2.5 border border-[#C79B3A]/30"
+                    >
+                      <ImageIcon className="w-4 h-4 text-[#C79B3A]" />
+                      <span>ფოტოს ჩასმა ტექსტში</span>
+                    </button>
                   </div>
                 </div>
 
@@ -432,7 +501,7 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
                   ref={textareaRef}
                   rows={12}
                   required
-                  placeholder="დაწერეთ ბლოგის სრული ტექსტი აქ... შეგიძლიათ გამოიყენოთ ქვესათაურები, ციტატები და სიები."
+                  placeholder="დაწერეთ ბლოგის სრული ტექსტი აქ... შეგიძლიათ გამოიყენოთ ქვესათაურები, ციტატები, სიები და ჩასვათ ფოტოები."
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   className="w-full bg-[#FAF8F3] border border-[#E6DDCB] rounded-2xl p-4 text-sm font-sans leading-relaxed text-[#13253D] focus:outline-none focus:border-[#C79B3A]"
@@ -503,11 +572,116 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
                 </p>
               )}
 
-              <div className="prose max-w-none text-sm leading-relaxed text-[#13253D] whitespace-pre-wrap font-serif">
-                {content || 'აქ გამოჩნდება თქვენი დაწერილი ტექსტის პირდაპირი გადახედვა...'}
+              <div
+                dangerouslySetInnerHTML={{ __html: formatArticleContent(content || 'აქ გამოჩნდება თქვენი დაწერილი ტექსტის პირდაპირი გადახედვა...') }}
+                className="prose prose-stone max-w-none space-y-4 prose-headings:font-serif prose-headings:text-[#0D1B2A] prose-a:text-[#C79B3A] prose-img:rounded-2xl prose-img:shadow-md prose-img:mx-auto prose-img:my-6 border-t border-[#E6DDCB] pt-4 font-serif text-[#13253D] leading-relaxed"
+              />
+            </div>
+          )}
+
+          {/* Inline Image Modal */}
+          {showImageModal && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+              <div className="bg-white border border-[#E6DDCB] shadow-2xl rounded-2xl p-6 w-full max-w-lg space-y-4 relative">
+                <div className="flex items-center justify-between border-b border-[#E6DDCB] pb-3">
+                  <h3 className="font-serif font-bold text-lg text-[#13253D] flex items-center gap-2">
+                    <ImageIcon className="w-5 h-5 text-[#C79B3A]" />
+                    <span>ფოტოს ატვირთვა / ჩასმა ტექსტში</span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowImageModal(false)}
+                    className="p-1 text-[#8A8A8A] hover:text-[#13253D] rounded-full cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Device Upload */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-[#13253D] uppercase tracking-wider block">
+                      1. აირჩიეთ ფაილი მოწყობილობიდან (Supabase Storage)
+                    </label>
+                    <input
+                      type="file"
+                      ref={inlineFileInputRef}
+                      accept="image/*"
+                      onChange={handleInlineImageFileChange}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      disabled={uploadingInline}
+                      onClick={() => inlineFileInputRef.current?.click()}
+                      className="w-full py-3 bg-[#FAF8F3] hover:bg-[#E6DDCB]/40 border border-dashed border-[#C79B3A] text-[#13253D] text-xs font-semibold rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {uploadingInline ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-[#C79B3A]" />
+                      ) : (
+                        <Upload className="w-4 h-4 text-[#C79B3A]" />
+                      )}
+                      <span>{uploadingInline ? 'ფოტო იტვირთება Supabase-ში...' : 'ფოტოს ატვირთვა მოწყობილობიდან'}</span>
+                    </button>
+                  </div>
+
+                  {/* OR URL */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#13253D] uppercase tracking-wider block">
+                      2. ან ჩასვით ფოტოს პირდაპირი ბმული (URL)
+                    </label>
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={inlineImageUrl}
+                      onChange={(e) => setInlineImageUrl(e.target.value)}
+                      className="w-full bg-[#FAF8F3] border border-[#E6DDCB] rounded-xl px-3 py-2 text-xs text-[#13253D] focus:outline-none focus:border-[#C79B3A]"
+                    />
+                  </div>
+
+                  {/* Caption */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#13253D] uppercase tracking-wider block">
+                      3. ფოტოს წარწერა / აღწერა (არასავალდებულო)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="მაგ: დიდგორის ბრძოლის ილუსტრაცია"
+                      value={inlineCaption}
+                      onChange={(e) => setInlineCaption(e.target.value)}
+                      className="w-full bg-[#FAF8F3] border border-[#E6DDCB] rounded-xl px-3 py-2 text-xs text-[#13253D] focus:outline-none focus:border-[#C79B3A]"
+                    />
+                  </div>
+
+                  {/* Image Preview if available */}
+                  {inlineImageUrl && (
+                    <div className="rounded-xl overflow-hidden max-h-40 border border-[#E6DDCB] bg-[#FAF8F3] flex items-center justify-center p-2">
+                      <img src={inlineImageUrl} alt="Preview" className="max-h-36 object-contain rounded-lg" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-[#E6DDCB] flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowImageModal(false)}
+                    className="px-4 py-2 border border-[#E6DDCB] text-[#13253D] text-xs font-semibold rounded-xl hover:bg-[#FAF8F3] cursor-pointer"
+                  >
+                    გაუქმება
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!inlineImageUrl.trim() || uploadingInline}
+                    onClick={() => handleInsertInlineImage()}
+                    className="px-5 py-2 bg-[#13253D] hover:bg-[#C79B3A] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    ტექსტში ჩასმა
+                  </button>
+                </div>
               </div>
             </div>
           )}
+
 
           {/* Footer Actions */}
           <div className="pt-4 border-t border-[#E6DDCB] flex items-center justify-end gap-3">

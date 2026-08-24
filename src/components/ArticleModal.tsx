@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Article } from '../types';
+import { formatArticleContent } from '../lib/blogService';
 import { X, Clock, Calendar, User, Bookmark, Share2, BookOpen, Quote, Check, ArrowLeft, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -130,10 +131,11 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
               fontSize === 'large' ? 'text-lg sm:text-xl' : 'text-base sm:text-lg'
             }`}>
               <div 
-                dangerouslySetInnerHTML={{ __html: article.content }} 
-                className="prose prose-stone max-w-none space-y-4 prose-headings:font-serif prose-headings:text-[#0D1B2A] prose-a:text-[#C79B3A]"
+                dangerouslySetInnerHTML={{ __html: formatArticleContent(article.content || '') }} 
+                className="prose prose-stone max-w-none space-y-4 prose-headings:font-serif prose-headings:text-[#0D1B2A] prose-a:text-[#C79B3A] prose-img:rounded-2xl prose-img:shadow-md prose-img:mx-auto prose-img:my-6 prose-img:border prose-img:border-[#E6DDCB]"
               />
             </div>
+
 
             {/* Primary Sources Section */}
             {article.primarySources && article.primarySources.length > 0 && (

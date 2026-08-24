@@ -200,3 +200,47 @@ export const uploadBlogImage = async (file: File): Promise<string> => {
     });
   }
 };
+
+// Helper function to format article content (converting linebreaks and images into clean HTML)
+export const formatArticleContent = (content: string): string => {
+  if (!content) return '';
+
+  // If content already contains HTML block elements like <p>, <div>, <section>, return formatted
+  if (/<p\b|<div\b|<section\b/i.test(content)) {
+    return content;
+  }
+
+  // Otherwise split content by double line breaks
+  const blocks = content.split(/\n\s*\n/);
+
+  return blocks
+    .map((block) => {
+      const trimmed = block.trim();
+      if (!trimmed) return '';
+
+      // If block starts with an HTML element tag (like <figure>, <img>, <h2>, <h3>, <blockquote>, <ul>, etc.)
+      if (/^<(figure|img|h[1-6]|blockquote|ul|ol|table|div)\b/i.test(trimmed)) {
+        return trimmed;
+      }
+
+      // Convert Markdown H2 (##)
+      if (trimmed.startsWith('## ')) {
+        return `<h2 class="font-serif font-bold text-2xl text-[#13253D] mt-8 mb-4">${trimmed.replace(/^##\s+/, '')}</h2>`;
+      }
+
+      // Convert Markdown H3 (###)
+      if (trimmed.startsWith('### ')) {
+        return `<h3 class="font-serif font-bold text-xl text-[#13253D] mt-6 mb-3">${trimmed.replace(/^###\s+/, '')}</h3>`;
+      }
+
+      // Convert Markdown Quote (> )
+      if (trimmed.startsWith('> ')) {
+        return `<blockquote class="border-l-4 border-[#C79B3A] pl-4 py-2 my-4 italic text-[#13253D] bg-[#FAF8F3] rounded-r-xl">${trimmed.replace(/^>\s+/, '')}</blockquote>`;
+      }
+
+      // Convert plain paragraph, replacing single linebreaks with <br />
+      return `<p class="mb-4 leading-relaxed">${trimmed.replace(/\n/g, '<br />')}</p>`;
+    })
+    .join('\n');
+};
+
