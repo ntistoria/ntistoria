@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Upload, Image as ImageIcon, Bold, Italic, Heading1, Heading2, List, Quote, Code, Eye, Edit3, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, Upload, Image as ImageIcon, Bold, Italic, Underline, Heading2, Heading3, List, ListOrdered, Quote, Eye, Edit3, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Article, HistoricalCategory } from '../types';
 import { uploadBlogImage, formatArticleContent } from '../lib/blogService';
 
@@ -18,6 +18,51 @@ const CATEGORIES: HistoricalCategory[] = [
   'ეროვნული გამოცდები',
   'სხვა ტესტები'
 ];
+
+// Sanitize HTML pasted from Microsoft Word or external rich sources
+const sanitizePastedHtml = (rawHtml: string): string => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(rawHtml, 'text/html');
+
+  // Remove Word specific non-rendering tags & scripts
+  const invalid = doc.querySelectorAll('script, style, meta, link, xml, o\\:p, title, head');
+  invalid.forEach(el => el.remove());
+
+  const cleanNode = (node: Node) => {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as HTMLElement;
+      const tagName = el.tagName.toLowerCase();
+
+      // Strip Word font-family, font-size, line-height, color, margin inline styles
+      el.removeAttribute('style');
+      el.removeAttribute('class');
+      el.removeAttribute('lang');
+      el.removeAttribute('align');
+
+      if (tagName === 'a') {
+        const href = el.getAttribute('href');
+        Array.from(el.attributes).forEach(a => el.removeAttribute(a.name));
+        if (href) el.setAttribute('href', href);
+        el.setAttribute('target', '_blank');
+        el.setAttribute('rel', 'noopener noreferrer');
+      } else if (tagName === 'img') {
+        const src = el.getAttribute('src');
+        const alt = el.getAttribute('alt') || '';
+        Array.from(el.attributes).forEach(a => el.removeAttribute(a.name));
+        if (src) el.setAttribute('src', src);
+        if (alt) el.setAttribute('alt', alt);
+        el.className = 'rounded-2xl max-w-full mx-auto my-6 shadow-md border border-[#E6DDCB]';
+      } else {
+        Array.from(el.attributes).forEach(a => el.removeAttribute(a.name));
+      }
+
+      Array.from(el.childNodes).forEach(cleanNode);
+    }
+  };
+
+  Array.from(doc.body.childNodes).forEach(cleanNode);
+  return doc.body.innerHTML;
+};
 
 export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
   isOpen,
@@ -46,25 +91,27 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
   const [inlineCaption, setInlineCaption] = useState('');
   const [uploadingInline, setUploadingInline] = useState(false);
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inlineFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    let initialHtml = '';
     if (articleToEdit) {
       setTitle(articleToEdit.title || '');
       setCategory(articleToEdit.category || 'საქართველოს ისტორია');
       setExcerpt(articleToEdit.excerpt || '');
-      setContent(articleToEdit.content || '');
+      initialHtml = formatArticleContent(articleToEdit.content || '');
+      setContent(initialHtml);
       setImageUrl(articleToEdit.imageUrl || '');
       setTagsInput(articleToEdit.tags?.join(', ') || 'ისტორია');
       setAuthor(articleToEdit.author || 'ნოდარ თოთაძე');
       setFeatured(articleToEdit.featured || false);
     } else {
-      // Reset form for new article
       setTitle('');
       setCategory('საქართველოს ისტორია');
       setExcerpt('');
+      initialHtml = '';
       setContent('');
       setImageUrl('');
       setTagsInput('ისტორია, ეროვნული გამოცდები');
@@ -73,27 +120,50 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
     }
     setErrorMessage('');
     setSuccessMessage('');
+
+    // Load initial HTML into editor editable area
+    setTimeout(() => {
+      if (editorRef.current) {
+        editorRef.current.innerHTML = initialHtml;
+      }
+    }, 50);
   }, [articleToEdit, isOpen]);
 
   if (!isOpen) return null;
 
-  // Insert formatted text snippets at cursor position in textarea
-  const insertFormatting = (prefix: string, suffix: string = '') => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
+  // Execute rich text formatting commands
+  const executeCommand = (command: string, value: string = '') => {
+    if (editorRef.current) {
+      editorRef.current.focus();
+    }
+    document.execCommand(command, false, value);
+    if (editorRef.current) {
+      setContent(editorRef.current.innerHTML);
+    }
+  };
 
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = content.substring(start, end) || 'ტექსტი';
-    const replacement = `${prefix}${selectedText}${suffix}`;
+  // Handle Pasting from MS Word / External Rich Sources
+  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const htmlData = e.clipboardData.getData('text/html');
+    const textData = e.clipboardData.getData('text/plain');
 
-    const newContent = content.substring(0, start) + replacement + content.substring(end);
-    setContent(newContent);
+    let cleanHtml = '';
+    if (htmlData) {
+      cleanHtml = sanitizePastedHtml(htmlData);
+    } else if (textData) {
+      cleanHtml = textData
+        .split(/\n\s*\n/)
+        .map(p => `<p class="mb-4 leading-relaxed">${p.replace(/\n/g, '<br />')}</p>`)
+        .join('');
+    }
 
-    setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(start + prefix.length, start + prefix.length + selectedText.length);
-    }, 50);
+    if (cleanHtml) {
+      document.execCommand('insertHTML', false, cleanHtml);
+      if (editorRef.current) {
+        setContent(editorRef.current.innerHTML);
+      }
+    }
   };
 
   // Image Upload Handler for Cover Image
@@ -136,47 +206,41 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
     }
   };
 
-  // Insert Inline Image into Textarea Content
+  // Insert Inline Image into Editor Content
   const handleInsertInlineImage = (finalUrl?: string, captionText?: string) => {
     const urlToUse = finalUrl || inlineImageUrl;
     if (!urlToUse.trim()) return;
 
     const caption = captionText !== undefined ? captionText : inlineCaption;
-    const textarea = textareaRef.current;
-    const start = textarea ? textarea.selectionStart : content.length;
-    const end = textarea ? textarea.selectionEnd : content.length;
+    const figureHtml = `<figure class="my-6 text-center"><img src="${urlToUse.trim()}" alt="${caption.trim()}" class="rounded-2xl max-w-full mx-auto shadow-md border border-[#E6DDCB]" />${caption.trim() ? `<figcaption class="text-xs text-[#666666] italic mt-2">${caption.trim()}</figcaption>` : ''}</figure><p><br /></p>`;
 
-    const imageSnippet = `\n\n<figure class="my-6 text-center">\n  <img src="${urlToUse.trim()}" alt="${caption.trim()}" class="rounded-2xl max-w-full mx-auto shadow-md border border-[#E6DDCB]" />\n  ${caption.trim() ? `<figcaption class="text-xs text-[#666666] italic mt-2">${caption.trim()}</figcaption>` : ''}\n</figure>\n\n`;
-
-    const newContent = content.substring(0, start) + imageSnippet + content.substring(end);
-    setContent(newContent);
+    if (editorRef.current) {
+      editorRef.current.focus();
+      document.execCommand('insertHTML', false, figureHtml);
+      setContent(editorRef.current.innerHTML);
+    } else {
+      setContent(prev => prev + figureHtml);
+    }
 
     // Reset inline modal form
     setInlineImageUrl('');
     setInlineCaption('');
     setShowImageModal(false);
-
-    setTimeout(() => {
-      if (textarea) {
-        textarea.focus();
-        const newPos = start + imageSnippet.length;
-        textarea.setSelectionRange(newPos, newPos);
-      }
-    }, 80);
   };
-
 
   // Save / Submit Form
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
 
+    const finalContent = editorRef.current ? editorRef.current.innerHTML : content;
+
     if (!title.trim()) {
       setErrorMessage('გთხოვთ შეიყვანოთ ბლოგის სათაური');
       return;
     }
 
-    if (!content.trim()) {
+    if (!finalContent.trim() || finalContent === '<br>') {
       setErrorMessage('გთხოვთ შეიყვანოთ ბლოგის ტექსტი');
       return;
     }
@@ -194,7 +258,7 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
         title: title.trim(),
         slug: title.trim().toLowerCase().replace(/[^a-z0-9georgian]/g, '-'),
         excerpt: excerpt.trim() || title.trim().substring(0, 120),
-        content: content.trim(),
+        content: finalContent.trim(),
         category,
         author: author.trim() || 'ნოდარ თოთაძე',
         date: articleToEdit?.date || new Date().toISOString().split('T')[0],
@@ -238,7 +302,12 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
             <div className="flex bg-[#E6DDCB]/40 p-1 rounded-xl">
               <button
                 type="button"
-                onClick={() => setActiveTab('write')}
+                onClick={() => {
+                  if (editorRef.current) {
+                    setContent(editorRef.current.innerHTML);
+                  }
+                  setActiveTab('write');
+                }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                   activeTab === 'write'
                     ? 'bg-white text-[#13253D] shadow-sm'
@@ -251,7 +320,12 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
 
               <button
                 type="button"
-                onClick={() => setActiveTab('preview')}
+                onClick={() => {
+                  if (editorRef.current) {
+                    setContent(editorRef.current.innerHTML);
+                  }
+                  setActiveTab('preview');
+                }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
                   activeTab === 'preview'
                     ? 'bg-white text-[#13253D] shadow-sm'
@@ -414,72 +488,84 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
                 </div>
               </div>
 
-              {/* Rich Formatting Toolbar + Content Textarea */}
+              {/* Rich WYSIWYG Formatting Toolbar + Content Editor */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <label className="text-xs font-bold text-[#13253D] uppercase tracking-wider">
                     ბლოგის სრული ტექსტი *
                   </label>
 
-                  {/* Formatting Toolbar */}
+                  {/* WYSIWYG Formatting Toolbar */}
                   <div className="flex items-center gap-1 bg-[#FAF8F3] border border-[#E6DDCB] p-1 rounded-xl flex-wrap">
                     <button
                       type="button"
-                      title="Bold (მუქი)"
-                      onClick={() => insertFormatting('**', '**')}
+                      title="Bold / გამუქება (Ctrl+B)"
+                      onClick={() => executeCommand('bold')}
                       className="p-1.5 hover:bg-white text-[#13253D] rounded-lg transition-colors cursor-pointer"
                     >
                       <Bold className="w-4 h-4" />
                     </button>
                     <button
                       type="button"
-                      title="Italic (დახრილი)"
-                      onClick={() => insertFormatting('*', '*')}
+                      title="Italic / დახრა (Ctrl+I)"
+                      onClick={() => executeCommand('italic')}
                       className="p-1.5 hover:bg-white text-[#13253D] rounded-lg transition-colors cursor-pointer"
                     >
                       <Italic className="w-4 h-4" />
                     </button>
+                    <button
+                      type="button"
+                      title="Underline / ხაზგასმა (Ctrl+U)"
+                      onClick={() => executeCommand('underline')}
+                      className="p-1.5 hover:bg-white text-[#13253D] rounded-lg transition-colors cursor-pointer"
+                    >
+                      <Underline className="w-4 h-4" />
+                    </button>
+
                     <div className="h-4 w-[1px] bg-[#E6DDCB] mx-1" />
+
                     <button
                       type="button"
                       title="Heading 2 (ქვესათაური)"
-                      onClick={() => insertFormatting('\n## ', '\n')}
+                      onClick={() => executeCommand('formatBlock', 'h2')}
                       className="p-1.5 hover:bg-white text-[#13253D] text-xs font-bold rounded-lg transition-colors cursor-pointer"
                     >
                       H2
                     </button>
                     <button
                       type="button"
-                      title="Heading 3 (პარაგრაფი)"
-                      onClick={() => insertFormatting('\n### ', '\n')}
+                      title="Heading 3 (მცირე ქვესათაური)"
+                      onClick={() => executeCommand('formatBlock', 'h3')}
                       className="p-1.5 hover:bg-white text-[#13253D] text-xs font-bold rounded-lg transition-colors cursor-pointer"
                     >
                       H3
                     </button>
+
                     <div className="h-4 w-[1px] bg-[#E6DDCB] mx-1" />
+
                     <button
                       type="button"
                       title="Quote (ციტატა)"
-                      onClick={() => insertFormatting('\n> „', '“\n')}
+                      onClick={() => executeCommand('formatBlock', 'blockquote')}
                       className="p-1.5 hover:bg-white text-[#13253D] rounded-lg transition-colors cursor-pointer"
                     >
                       <Quote className="w-4 h-4" />
                     </button>
                     <button
                       type="button"
-                      title="Bullet List (სია)"
-                      onClick={() => insertFormatting('\n- ')}
+                      title="Bullet List (მარკირებული სია)"
+                      onClick={() => executeCommand('insertUnorderedList')}
                       className="p-1.5 hover:bg-white text-[#13253D] rounded-lg transition-colors cursor-pointer"
                     >
                       <List className="w-4 h-4" />
                     </button>
                     <button
                       type="button"
-                      title="Code Block"
-                      onClick={() => insertFormatting('```\n', '\n```')}
+                      title="Numbered List (დანომრილი სია)"
+                      onClick={() => executeCommand('insertOrderedList')}
                       className="p-1.5 hover:bg-white text-[#13253D] rounded-lg transition-colors cursor-pointer"
                     >
-                      <Code className="w-4 h-4" />
+                      <ListOrdered className="w-4 h-4" />
                     </button>
 
                     <div className="h-4 w-[1px] bg-[#E6DDCB] mx-1" />
@@ -497,14 +583,18 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
                   </div>
                 </div>
 
-                <textarea
-                  ref={textareaRef}
-                  rows={12}
-                  required
-                  placeholder="დაწერეთ ბლოგის სრული ტექსტი აქ... შეგიძლიათ გამოიყენოთ ქვესათაურები, ციტატები, სიები და ჩასვათ ფოტოები."
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  className="w-full bg-[#FAF8F3] border border-[#E6DDCB] rounded-2xl p-4 text-sm font-sans leading-relaxed text-[#13253D] focus:outline-none focus:border-[#C79B3A]"
+                {/* WYSIWYG ContentEditable Area */}
+                <div
+                  ref={editorRef}
+                  contentEditable
+                  onInput={() => {
+                    if (editorRef.current) {
+                      setContent(editorRef.current.innerHTML);
+                    }
+                  }}
+                  onPaste={handlePaste}
+                  className="w-full min-h-[320px] max-h-[500px] overflow-y-auto bg-[#FAF8F3] border border-[#E6DDCB] rounded-2xl p-5 text-sm font-serif leading-relaxed text-[#13253D] focus:outline-none focus:ring-2 focus:ring-[#C79B3A]/50 focus:border-[#C79B3A] prose prose-stone max-w-none prose-headings:font-serif prose-headings:text-[#0D1B2A] prose-headings:font-bold prose-blockquote:border-l-4 prose-blockquote:border-[#C79B3A] prose-blockquote:pl-4 prose-blockquote:italic prose-img:rounded-2xl prose-img:shadow-md prose-img:mx-auto prose-img:my-4"
+                  data-placeholder="დაწერეთ ან დააკოპირეთ MS Word-იდან ტექსტი აქ..."
                 />
               </div>
 
@@ -682,7 +772,6 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
             </div>
           )}
 
-
           {/* Footer Actions */}
           <div className="pt-4 border-t border-[#E6DDCB] flex items-center justify-end gap-3">
             <button
@@ -718,3 +807,5 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
     </div>
   );
 };
+
+
