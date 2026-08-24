@@ -18,34 +18,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
 }) => {
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [fontSize, setFontSize] = useState<'normal' | 'large'>('normal');
-  const [copied, setCopied] = useState(false);
-
   if (!article) return null;
-
-  const articleSlugOrId = article.slug || article.id;
-  const shareUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/?article=${encodeURIComponent(articleSlugOrId)}`
-    : `https://ntistoria.vercel.app/?article=${encodeURIComponent(articleSlugOrId)}`;
-
-  const handleShare = async () => {
-    if (typeof navigator !== 'undefined' && 'share' in navigator) {
-      try {
-        await navigator.share({
-          title: article.title,
-          text: article.excerpt,
-          url: shareUrl,
-        });
-        return;
-      } catch (err) {
-        // Fallback to copy link if native share dialog is cancelled
-      }
-    }
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(shareUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    }
-  };
 
   const related = allArticles.filter(a => a.id !== article.id).slice(0, 2);
 
@@ -94,15 +67,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                 <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-[#C79B3A]' : ''}`} />
               </button>
 
-              <button
-                onClick={handleShare}
-                className="p-2 text-[#666666] hover:text-[#0D1B2A] hover:bg-[#E6DDCB]/50 rounded-full transition-colors relative"
-                title="გაზიარება"
-              >
-                {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4" />}
-              </button>
 
-              <div className="w-[1px] h-5 bg-[#E6DDCB] mx-1" />
 
               <button
                 onClick={onClose}

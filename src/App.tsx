@@ -249,18 +249,6 @@ export function App() {
       handleSession(session);
     });
 
-    // Check for direct article URL parameter e.g. ?article=slug_or_id
-    const params = new URLSearchParams(window.location.search);
-    const articleParam = params.get('article');
-    if (articleParam) {
-      fetchAllArticles().then(articles => {
-        const match = articles.find(a => a.slug === articleParam || a.id === articleParam);
-        if (match) {
-          setSelectedArticle(match);
-        }
-      }).catch(console.error);
-    }
-
     return () => {
       subscription.unsubscribe();
     };
@@ -277,19 +265,11 @@ export function App() {
 
   const handleOpenArticle = (article: Article) => {
     setSelectedArticle(article);
-    const articleSlugOrId = article.slug || article.id;
-    if (window.history.pushState) {
-      const newUrl = `${window.location.pathname}?article=${encodeURIComponent(articleSlugOrId)}`;
-      window.history.pushState({ path: newUrl }, '', newUrl);
-    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleCloseArticle = () => {
     setSelectedArticle(null);
-    if (window.history.pushState) {
-      window.history.pushState({}, '', window.location.pathname);
-    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
