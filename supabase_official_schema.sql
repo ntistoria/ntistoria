@@ -84,3 +84,23 @@ GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+
+-- =========================================================
+-- STORAGE 'photos' BUCKET RLS POLICIES (ფოტოების ატვირთვის უფლებები)
+-- =========================================================
+
+-- photos ბაკეტის შექმნა (თუ არ არსებობს) და Public წვდომის მიცემა
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('photos', 'photos', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- Storage RLS პოლიტიკები storage.objects-ზე
+DROP POLICY IF EXISTS "Public Select photos" ON storage.objects;
+DROP POLICY IF EXISTS "Public Insert photos" ON storage.objects;
+DROP POLICY IF EXISTS "Public Update photos" ON storage.objects;
+DROP POLICY IF EXISTS "Public Delete photos" ON storage.objects;
+
+CREATE POLICY "Public Select photos" ON storage.objects FOR SELECT USING (bucket_id = 'photos');
+CREATE POLICY "Public Insert photos" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'photos');
+CREATE POLICY "Public Update photos" ON storage.objects FOR UPDATE USING (bucket_id = 'photos') WITH CHECK (bucket_id = 'photos');
+CREATE POLICY "Public Delete photos" ON storage.objects FOR DELETE USING (bucket_id = 'photos');
