@@ -451,10 +451,13 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
 
           // Item Number
           const itemNum = Number(
+            item.chronology_number || 
             item.illustration_number || 
             item.source_number || 
             item.analogy_number || 
             item.map_number || 
+            item.question_number || 
+            item.id || 
             (idx + 1)
           );
 

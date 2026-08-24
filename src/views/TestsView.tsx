@@ -576,10 +576,23 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
               
               {/* Question Header & Title */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="px-3 py-1 bg-[#FAF8F3] border border-[#C79B3A]/40 text-[#C79B3A] text-[10px] font-bold uppercase tracking-widest rounded-full">
                     {activeInlineTest.title}
                   </span>
+
+                  {/* Question Number & Database ID Badge for quick identification */}
+                  {(() => {
+                    const q = activeInlineTest.questions[currentQIndex];
+                    if (!q) return null;
+                    const num = q.itemNumber || q.id;
+                    return (
+                      <span className="px-3 py-1 bg-[#0D1B2A] text-[#C79B3A] text-[11px] font-mono font-bold rounded-full border border-[#C79B3A]/40 shadow-xs flex items-center gap-1.5">
+                        <span>{q.questionType === 'chronology' ? `ქრონოლოგია N${num}` : `კითხვა N${num}`}</span>
+                        <span className="opacity-70 text-[10px]">(ID: {q.id})</span>
+                      </span>
+                    );
+                  })()}
                 </div>
 
                 <h2 className="font-serif font-bold text-2xl sm:text-3xl text-[#0D1B2A] leading-snug">
@@ -628,10 +641,17 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
                   return (
                     <div className="space-y-6 pt-4 border-t border-[#E6DDCB]">
-                      <div className="space-y-1">
-                        <span className="text-xs font-bold text-[#C79B3A] uppercase tracking-wider block">
-                          დაალაგეთ ქრონოლოგიური თანმიმდევრობა:
-                        </span>
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-[#C79B3A] uppercase tracking-wider block">
+                            დაალაგეთ ქრონოლოგიური თანმიმდევრობა:
+                          </span>
+
+                          {/* Explicit Chronology Number Display */}
+                          <span className="px-3 py-1 bg-[#FAF8F3] text-[#0D1B2A] text-xs font-mono font-bold rounded-lg border border-[#C79B3A]/40 shadow-xs">
+                            ქრონოლოგია N{currentQ.itemNumber || currentQ.id}
+                          </span>
+                        </div>
                         <p className="text-xs text-[#666666]">
                           ისრებით (▲ / ▼) გადააადგილეთ 3 მოვლენა სწორი თანმიმდევრობით (1-ლიდან 3-მდე).
                         </p>
