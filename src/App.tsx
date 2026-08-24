@@ -97,7 +97,19 @@ export function App() {
 
     if (pathname.startsWith('/blog/')) {
       const slugOrId = decodeURIComponent(pathname.replace('/blog/', '').replace(/\/$/, ''));
-      const found = articlesList.find(a => a.slug === slugOrId || a.id === slugOrId || generateSlug(a.title, a.id) === slugOrId);
+      const found = articlesList.find(a => {
+        if (!a) return false;
+        const aSlug = a.slug ? a.slug.trim() : '';
+        const genSlug = generateSlug(a.title, a.id);
+        const target = slugOrId.trim();
+        return (
+          a.id === target ||
+          aSlug === target ||
+          genSlug === target ||
+          (a.title && generateSlug(a.title).startsWith(target)) ||
+          (target && genSlug.startsWith(target))
+        );
+      });
       setActiveTab('blog');
       if (found) {
         setSelectedArticle(found);

@@ -3,6 +3,13 @@
   "rewrites": [
     {
       "source": "/blog/:slug",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|LinkedInBot|Twitterbot|TelegramBot|WhatsApp|Slackbot|Discordbot|SkypeUriPreview|googlebot|bingbot|facebookcatalog|vkShare).*|.*bot.*|.*crawler.*|.*spider.*"
+        }
+      ],
       "destination": "/api/og?slug=:slug"
     },
     {

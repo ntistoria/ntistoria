@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+
 function transliterateGeorgian(str) {
   if (!str) return '';
   const geoMap = {
@@ -63,7 +66,9 @@ export default async function handler(req, res) {
               a.id === decodedSlug ||
               aSlug === decodedSlug ||
               genSlug === decodedSlug ||
-              (aSlug.startsWith('---') && genSlug === decodedSlug)
+              (aSlug.startsWith('---') && genSlug === decodedSlug) ||
+              genSlug.startsWith(decodedSlug) ||
+              decodedSlug.startsWith(genSlug)
             );
           }) || articles[0];
 
@@ -122,7 +127,26 @@ export default async function handler(req, res) {
     }
   }) : '';
 
-  const html = `<!doctype html>
+  // Attempt reading production dist/index.html to use built script tags if available
+  let baseHtml = '';
+  try {
+    const distPath = path.join(process.cwd(), 'dist', 'index.html');
+    if (fs.existsSync(distPath)) {
+      baseHtml = fs.readFileSync(distPath, 'utf8');
+    }
+  } catch (e) {}
+
+  let html = '';
+  if (baseHtml) {
+    html = baseHtml
+      .replace(/<title>.*?<\/title>/gi, `<title>${titleHtml}</title>`)
+      .replace(/<meta name="description" content=".*?" \/>/gi, `<meta name="description" content="${descHtml}" />`)
+      .replace(/<meta property="og:title" content=".*?" \/>/gi, `<meta property="og:title" content="${titleHtml}" />`)
+      .replace(/<meta property="og:description" content=".*?" \/>/gi, `<meta property="og:description" content="${descHtml}" />`)
+      .replace(/<meta property="og:image" content=".*?" \/>/gi, `<meta property="og:image" content="${imageHtml}" />`)
+      .replace(/<meta property="og:url" content=".*?" \/>/gi, `<meta property="og:url" content="${urlHtml}" />`);
+  } else {
+    html = `<!doctype html>
 <html lang="ka">
   <head>
     <meta charset="UTF-8" />
@@ -143,8 +167,6 @@ export default async function handler(req, res) {
     <meta property="og:title" content="${titleHtml}" />
     <meta property="og:description" content="${descHtml}" />
     <meta property="og:image" content="${imageHtml}" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
@@ -161,9 +183,9 @@ export default async function handler(req, res) {
   </head>
   <body class="bg-[#FAF8F3] text-[#1B1B1B] antialiased selection:bg-[#C79B3A] selection:text-[#0D1B2A]">
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>`;
+  }
 
   if (res && typeof res.setHeader === 'function') {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
