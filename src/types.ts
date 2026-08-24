@@ -47,6 +47,8 @@ export interface QuizQuestion {
   chronologyItems?: string[];
   correctSequence?: number[];
   itemNumber?: number;
+  parentItemNumber?: number;
+  subProgramNumber?: number;
 }
 
 export interface HistoryTest {

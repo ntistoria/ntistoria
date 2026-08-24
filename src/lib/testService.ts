@@ -220,22 +220,48 @@ export interface CategoryItemDetails {
   unitLabel: string;
 }
 
+export interface CategoryUnitInfo {
+  qPerItem: number;
+  unitLabel: string;
+}
+
+/**
+ * Helper to get questions per item and unit label for a category
+ * Every map has 6 questions, source has 10, analogy has 4, illustration has 3 questions.
+ */
+export const getCategoryUnitInfo = (categoryKey: string | null): CategoryUnitInfo => {
+  switch (categoryKey) {
+    case 'map':
+      return { qPerItem: 6, unitLabel: 'რუკა' };
+    case 'source':
+      return { qPerItem: 10, unitLabel: 'წყარო' };
+    case 'analogies':
+      return { qPerItem: 4, unitLabel: 'ანალოგია' };
+    case 'illustrations':
+      return { qPerItem: 3, unitLabel: 'ილუსტრაცია' };
+    default:
+      return { qPerItem: 1, unitLabel: 'კითხვა' };
+  }
+};
+
 /**
  * Fetch total item count and unit label for a category (maps -> "რუკა", sources -> "წყარო", analogies -> "ანალოგია", illustrations -> "ილუსტრაცია", mcq/chronology -> "კითხვა")
  */
 export const fetchCategoryItemDetails = async (categoryKey: string): Promise<CategoryItemDetails> => {
+  const { qPerItem, unitLabel } = getCategoryUnitInfo(categoryKey);
+
   if (categoryKey === 'map') {
     try {
       const { count, error } = await supabase.from('maps').select('*', { count: 'exact', head: true });
       if (!error && typeof count === 'number' && count > 0) {
-        return { count, unitLabel: 'რუკა' };
+        return { count, unitLabel };
       }
     } catch (e) {}
 
     const questions = await fetchQuestionsForCategory('map');
     const groupKeys = new Set(questions.map(q => q.mapImage || (q.itemNumber ? `item-${q.itemNumber}` : q.id)));
-    const c = groupKeys.size > 0 ? groupKeys.size : questions.length;
-    return { count: c, unitLabel: 'რუკა' };
+    const c = groupKeys.size > 0 ? groupKeys.size : Math.round(questions.length / qPerItem);
+    return { count: c, unitLabel };
   }
 
   if (categoryKey === 'source') {
@@ -243,15 +269,15 @@ export const fetchCategoryItemDetails = async (categoryKey: string): Promise<Cat
       try {
         const { count, error } = await supabase.from(t).select('*', { count: 'exact', head: true });
         if (!error && typeof count === 'number' && count > 0) {
-          return { count, unitLabel: 'წყარო' };
+          return { count, unitLabel };
         }
       } catch (e) {}
     }
 
     const questions = await fetchQuestionsForCategory('source');
     const groupKeys = new Set(questions.map(q => q.sourceContext?.substring(0, 100) || (q.itemNumber ? `item-${q.itemNumber}` : q.id)));
-    const c = groupKeys.size > 0 ? groupKeys.size : questions.length;
-    return { count: c, unitLabel: 'წყარო' };
+    const c = groupKeys.size > 0 ? groupKeys.size : Math.round(questions.length / qPerItem);
+    return { count: c, unitLabel };
   }
 
   if (categoryKey === 'analogies') {
@@ -259,15 +285,15 @@ export const fetchCategoryItemDetails = async (categoryKey: string): Promise<Cat
       try {
         const { count, error } = await supabase.from(t).select('*', { count: 'exact', head: true });
         if (!error && typeof count === 'number' && count > 0) {
-          return { count, unitLabel: 'ანალოგია' };
+          return { count, unitLabel };
         }
       } catch (e) {}
     }
 
     const questions = await fetchQuestionsForCategory('analogies');
     const groupKeys = new Set(questions.map(q => q.sourceContext?.substring(0, 100) || (q.itemNumber ? `item-${q.itemNumber}` : q.id)));
-    const c = groupKeys.size > 0 ? groupKeys.size : questions.length;
-    return { count: c, unitLabel: 'ანალოგია' };
+    const c = groupKeys.size > 0 ? groupKeys.size : Math.round(questions.length / qPerItem);
+    return { count: c, unitLabel };
   }
 
   if (categoryKey === 'illustrations') {
@@ -275,19 +301,19 @@ export const fetchCategoryItemDetails = async (categoryKey: string): Promise<Cat
       try {
         const { count, error } = await supabase.from(t).select('*', { count: 'exact', head: true });
         if (!error && typeof count === 'number' && count > 0) {
-          return { count, unitLabel: 'ილუსტრაცია' };
+          return { count, unitLabel };
         }
       } catch (e) {}
     }
 
     const questions = await fetchQuestionsForCategory('illustrations');
     const groupKeys = new Set(questions.map(q => q.mapImage || (q.itemNumber ? `item-${q.itemNumber}` : q.id)));
-    const c = groupKeys.size > 0 ? groupKeys.size : questions.length;
-    return { count: c, unitLabel: 'ილუსტრაცია' };
+    const c = groupKeys.size > 0 ? groupKeys.size : Math.round(questions.length / qPerItem);
+    return { count: c, unitLabel };
   }
 
   const count = await fetchCategoryQuestionsCount(categoryKey);
-  return { count, unitLabel: 'კითხვა' };
+  return { count, unitLabel };
 };
 
 /**
@@ -359,10 +385,10 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
 
       if (rawQuestions.length > 0) {
         // Fetch parent lookup tables if not embedded
-        let mapsMap: Record<number, { map_url: string; program_number: number }> = {};
-        let analogyMap: Record<number, { analogy: string; program_number: number }> = {};
-        let sourceMap: Record<number, { source: string; program_number: number }> = {};
-        let illustrationMap: Record<number, { illustration_url: string; program_number: number }> = {};
+        let mapsMap: Record<number, { map_url: string; program_number: number; sub_program_number: number }> = {};
+        let analogyMap: Record<number, { analogy: string; program_number: number; sub_program_number: number }> = {};
+        let sourceMap: Record<number, { source: string; program_number: number; sub_program_number: number }> = {};
+        let illustrationMap: Record<number, { illustration_url: string; program_number: number; sub_program_number: number }> = {};
 
         if (categoryKey === 'map' && !rawQuestions[0].maps) {
           const { data: mData } = await supabase.from('maps').select('*');
@@ -370,7 +396,8 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
             mData.forEach((m: any) => {
               mapsMap[m.map_number || m.id] = {
                 map_url: m.map_url || m.image_url || m.url,
-                program_number: Number(m.program_number || 1)
+                program_number: Number(m.program_number || 1),
+                sub_program_number: Number(m.sub_program_number || 1)
               };
             });
           }
@@ -382,7 +409,8 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
             aData.forEach((a: any) => {
               analogyMap[a.analogy_number || a.id] = {
                 analogy: a.analogy || a.text,
-                program_number: Number(a.program_number || 1)
+                program_number: Number(a.program_number || 1),
+                sub_program_number: Number(a.sub_program_number || 1)
               };
             });
           }
@@ -394,7 +422,8 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
             sData.forEach((s: any) => {
               sourceMap[s.source_number || s.id] = {
                 source: s.source || s.text,
-                program_number: Number(s.program_number || 1)
+                program_number: Number(s.program_number || 1),
+                sub_program_number: Number(s.sub_program_number || 1)
               };
             });
           }
@@ -406,7 +435,8 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
             iData.forEach((i: any) => {
               illustrationMap[i.illustration_number || i.id] = {
                 illustration_url: i.illustration_url || i.image_url || i.url,
-                program_number: Number(i.program_number || 1)
+                program_number: Number(i.program_number || 1),
+                sub_program_number: Number(i.sub_program_number || 1)
               };
             });
           }
@@ -446,7 +476,27 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
             ((idx % 11) + 1)
           );
 
+          let subProgNum: number = Number(
+            item.sub_program_number ||
+            item.maps?.sub_program_number ||
+            item.analogy?.sub_program_number ||
+            item.source?.sub_program_number ||
+            item.illustrations?.sub_program_number ||
+            mapsMap[item.map_number]?.sub_program_number ||
+            analogyMap[item.analogy_number]?.sub_program_number ||
+            sourceMap[item.source_number]?.sub_program_number ||
+            illustrationMap[item.illustration_number]?.sub_program_number ||
+            1
+          );
+
           const chapterId = `ch-${pNum}`;
+
+          // Parent Item Number mapping (map_number, source_number, analogy_number, illustration_number)
+          let parentItemNum: number | undefined = undefined;
+          if (item.map_number) parentItemNum = Number(item.map_number);
+          else if (item.source_number) parentItemNum = Number(item.source_number);
+          else if (item.analogy_number) parentItemNum = Number(item.analogy_number);
+          else if (item.illustration_number) parentItemNum = Number(item.illustration_number);
 
           // Correct Answer Index mapping (1-based integer from DB -> 0-based index for FE)
           let correctIdx = 0;
@@ -524,14 +574,10 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
           // Correct Answer Text for open-ended questions
           const corrText = String(item.answer || item.correct_answer || item.correct_text || '').trim();
 
-          // Item Number mapping (chronology_number, question_number, map_number, analogy_number, source_number, illustration_number)
+          // Item Number mapping (question_number, chronology_number, etc.)
           let itemNum = Number(
-            item.chronology_number || 
             item.question_number || 
-            item.illustration_number || 
-            item.source_number || 
-            item.analogy_number || 
-            item.map_number ||
+            item.chronology_number || 
             item.number ||
             item.id
           );
@@ -552,7 +598,9 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
             correctAnswerText: corrText,
             chronologyItems: chronItems,
             correctSequence: chronSeq,
-            itemNumber: itemNum
+            itemNumber: itemNum,
+            parentItemNumber: parentItemNum,
+            subProgramNumber: subProgNum
           };
         });
       }

@@ -9,6 +9,7 @@ import {
   fetchCategoryQuestionsCount,
   fetchCategoryItemDetails,
   CategoryItemDetails,
+  getCategoryUnitInfo,
   buildHistoryTest 
 } from '../lib/testService';
 import { supabase } from '../lib/supabase';
@@ -270,12 +271,14 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
       return;
     }
 
-    // Group questions by mapImage / sourceContext / itemNumber
+    // Group questions by parentItemNumber (e.g. map_number, source_number, analogy_number, illustration_number)
     const groupMap = new Map<string, (QuizQuestion & { chapterId: string })[]>();
     
     chapterQuestions.forEach((q, idx) => {
       let groupKey = '';
-      if (selectedCategoryKey === 'map' || selectedCategoryKey === 'illustrations') {
+      if (q.parentItemNumber) {
+        groupKey = `parent-${q.parentItemNumber}`;
+      } else if (selectedCategoryKey === 'map' || selectedCategoryKey === 'illustrations') {
         groupKey = q.mapImage || (q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`);
       } else if (selectedCategoryKey === 'source' || selectedCategoryKey === 'analogies') {
         groupKey = q.sourceContext?.substring(0, 100) || (q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`);
@@ -294,7 +297,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
     const groups: TaskGroup[] = Array.from(groupMap.entries()).map(([key, qList], index) => {
       const firstQ = qList[0];
-      const itemNum = firstQ.itemNumber || (index + 1);
+      const itemNum = firstQ.parentItemNumber || firstQ.itemNumber || (index + 1);
       let taskTitle = '';
 
       if (selectedCategoryKey === 'map') taskTitle = `რუკა N${itemNum}`;
@@ -428,6 +431,43 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
     const pct = totalQ > 0 ? Math.round((correct / totalQ) * 100) : 0;
 
     return { correct, incorrect, unattempted, total: totalQ, pct };
+  };
+
+  // Helper to format chapter item count display in dropdown (maps, sources, analogies, illustrations, questions)
+  const getChapterItemDisplay = (chId: string) => {
+    const qCount = questionsCountMap[chId] ?? 0;
+    const { qPerItem, unitLabel } = getCategoryUnitInfo(selectedCategoryKey);
+
+    if (qPerItem <= 1) {
+      return `${qCount} ${unitLabel}`;
+    }
+
+    const chQuestions = categoryQuestions.filter(
+      q => q.chapterId === chId || q.chapterId === `ch-${chId.replace('ch-', '')}`
+    );
+
+    let count = 0;
+    if (chQuestions.length > 0) {
+      const groupSet = new Set<string>();
+      chQuestions.forEach((q, idx) => {
+        let key = '';
+        if (q.parentItemNumber) {
+          key = `parent-${q.parentItemNumber}`;
+        } else if (selectedCategoryKey === 'map' || selectedCategoryKey === 'illustrations') {
+          key = q.mapImage || (q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`);
+        } else if (selectedCategoryKey === 'source' || selectedCategoryKey === 'analogies') {
+          key = q.sourceContext?.substring(0, 100) || (q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`);
+        } else {
+          key = q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`;
+        }
+        groupSet.add(key);
+      });
+      count = groupSet.size;
+    } else {
+      count = Math.round(qCount / qPerItem);
+    }
+
+    return `${count} ${unitLabel}`;
   };
 
   // INLINE TEST RUNNER HANDLERS
@@ -610,17 +650,18 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                     {activeInlineTest.title}
                   </span>
 
-                  {/* Question Badge displaying chronology_number / question_number */}
+                  {/* Question Badge displaying parent/item number e.g. რუკა N4.1 */}
                   {(() => {
                     const q = activeInlineTest.questions[currentQIndex];
                     if (!q) return null;
                     const num = q.itemNumber || (currentQIndex + 1);
-                    let label = `კითხვა N${num}`;
+                    const displayNum = q.parentItemNumber ? `${q.parentItemNumber}.${num}` : `${num}`;
+                    let label = `კითხვა N${displayNum}`;
                     if (q.questionType === 'chronology') label = `ქრონოლოგია N${num}`;
-                    else if (selectedCategoryKey === 'map') label = `რუკა N${num}`;
-                    else if (selectedCategoryKey === 'analogies') label = `ანალოგია N${num}`;
-                    else if (selectedCategoryKey === 'source') label = `წყარო N${num}`;
-                    else if (selectedCategoryKey === 'illustrations') label = `ილუსტრაცია N${num}`;
+                    else if (selectedCategoryKey === 'map') label = `რუკა N${displayNum}`;
+                    else if (selectedCategoryKey === 'analogies') label = `ანალოგია N${displayNum}`;
+                    else if (selectedCategoryKey === 'source') label = `წყარო N${displayNum}`;
+                    else if (selectedCategoryKey === 'illustrations') label = `ილუსტრაცია N${displayNum}`;
 
                     return (
                       <span className="px-3.5 py-1 bg-[#0D1B2A] text-[#C79B3A] text-xs font-mono font-bold rounded-full border border-[#C79B3A]/40 shadow-xs">
@@ -1240,7 +1281,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                         >
                           {programs.map((prog) => (
                             <option key={prog.id} value={prog.id}>
-                              {prog.title} ({questionsCountMap[prog.id] ?? 0} კითხვა)
+                              {prog.title} ({getChapterItemDisplay(prog.id)})
                             </option>
                           ))}
                         </select>
@@ -1349,7 +1390,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                       </option>
                       {programs.map((prog) => (
                         <option key={prog.id} value={prog.id}>
-                          {prog.title} ({questionsCountMap[prog.id] ?? 0} კითხვა)
+                          {prog.title} ({getChapterItemDisplay(prog.id)})
                         </option>
                       ))}
                     </select>
