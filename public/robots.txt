@@ -1,0 +1,6 @@
+# Allow all web crawlers and search engine bots
+User-agent: *
+Allow: /
+
+# Google Search Console Sitemap location
+Sitemap: https://ntistoria.vercel.app/sitemap.xml

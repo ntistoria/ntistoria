@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  
+  <!-- Homepage -->
+  <url>
+    <loc>https://ntistoria.vercel.app/</loc>
+    <lastmod>2026-08-24</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://enjnwxpzafroxapksdlt.supabase.co/storage/v1/object/public/photos/logpng.png</image:loc>
+      <image:title>NT ისტორიის მასწავლებელი — პრემიუმ ისტორიის პლატფორმა</image:title>
+    </image:image>
+  </url>
+
+  <!-- Tests Section -->
+  <url>
+    <loc>https://ntistoria.vercel.app/?tab=tests</loc>
+    <lastmod>2026-08-24</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Blog Section -->
+  <url>
+    <loc>https://ntistoria.vercel.app/?tab=blog</loc>
+    <lastmod>2026-08-24</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <!-- Videos Section -->
+  <url>
+    <loc>https://ntistoria.vercel.app/?tab=videos</loc>
+    <lastmod>2026-08-24</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Quizzes Section -->
+  <url>
+    <loc>https://ntistoria.vercel.app/?tab=quizzes</loc>
+    <lastmod>2026-08-24</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Contact Section -->
+  <url>
+    <loc>https://ntistoria.vercel.app/?tab=contact</loc>
+    <lastmod>2026-08-24</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+</urlset>
