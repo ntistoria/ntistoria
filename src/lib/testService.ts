@@ -449,17 +449,20 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
           // Correct Answer Text for open-ended questions
           const corrText = String(item.answer || item.correct_answer || item.correct_text || '').trim();
 
-          // Item Number
-          const itemNum = Number(
+          // Item Number mapping (chronology_number, question_number, map_number, analogy_number, source_number, illustration_number)
+          let itemNum = Number(
             item.chronology_number || 
+            item.question_number || 
             item.illustration_number || 
             item.source_number || 
             item.analogy_number || 
-            item.map_number || 
-            item.question_number || 
-            item.id || 
-            (idx + 1)
+            item.map_number ||
+            item.number ||
+            item.id
           );
+          if (isNaN(itemNum) || itemNum <= 0) {
+            itemNum = idx + 1;
+          }
 
           return {
             id: String(item.id || `${categoryKey}-${idx}`),

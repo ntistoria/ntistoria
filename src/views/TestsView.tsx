@@ -581,15 +581,21 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                     {activeInlineTest.title}
                   </span>
 
-                  {/* Question Number & Database ID Badge for quick identification */}
+                  {/* Question Badge displaying chronology_number / question_number */}
                   {(() => {
                     const q = activeInlineTest.questions[currentQIndex];
                     if (!q) return null;
-                    const num = q.itemNumber || q.id;
+                    const num = q.itemNumber || (currentQIndex + 1);
+                    let label = `კითხვა N${num}`;
+                    if (q.questionType === 'chronology') label = `ქრონოლოგია N${num}`;
+                    else if (selectedCategoryKey === 'map') label = `რუკა N${num}`;
+                    else if (selectedCategoryKey === 'analogies') label = `ანალოგია N${num}`;
+                    else if (selectedCategoryKey === 'source') label = `წყარო N${num}`;
+                    else if (selectedCategoryKey === 'illustrations') label = `ილუსტრაცია N${num}`;
+
                     return (
-                      <span className="px-3 py-1 bg-[#0D1B2A] text-[#C79B3A] text-[11px] font-mono font-bold rounded-full border border-[#C79B3A]/40 shadow-xs flex items-center gap-1.5">
-                        <span>{q.questionType === 'chronology' ? `ქრონოლოგია N${num}` : `კითხვა N${num}`}</span>
-                        <span className="opacity-70 text-[10px]">(ID: {q.id})</span>
+                      <span className="px-3.5 py-1 bg-[#0D1B2A] text-[#C79B3A] text-xs font-mono font-bold rounded-full border border-[#C79B3A]/40 shadow-xs">
+                        {label}
                       </span>
                     );
                   })()}
@@ -647,9 +653,9 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                             დაალაგეთ ქრონოლოგიური თანმიმდევრობა:
                           </span>
 
-                          {/* Explicit Chronology Number Display */}
+                          {/* Explicit Chronology Number Display (chronology_number) */}
                           <span className="px-3 py-1 bg-[#FAF8F3] text-[#0D1B2A] text-xs font-mono font-bold rounded-lg border border-[#C79B3A]/40 shadow-xs">
-                            ქრონოლოგია N{currentQ.itemNumber || currentQ.id}
+                            ქრონოლოგია N{currentQ.itemNumber || (currentQIndex + 1)}
                           </span>
                         </div>
                         <p className="text-xs text-[#666666]">
