@@ -17,6 +17,8 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
 
+  if (!article) return null;
+
   // Compute exact shareable URL for this specific article
   const articleSlugOrId = article.slug || article.id;
   const shareUrl = typeof window !== 'undefined'
@@ -164,10 +166,20 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
 
         {/* Main Content Body */}
         <div className="prose prose-serif max-w-none text-[#1B1B1B] text-base sm:text-lg leading-relaxed space-y-6">
-          <div 
-            dangerouslySetInnerHTML={{ __html: article.content }} 
-            className="prose prose-stone max-w-none space-y-5 prose-headings:font-serif prose-headings:text-[#0D1B2A] prose-headings:font-bold prose-a:text-[#C79B3A] prose-img:rounded-xl"
-          />
+          {article.content && article.content.includes('<') ? (
+            <div 
+              dangerouslySetInnerHTML={{ __html: article.content }} 
+              className="prose prose-stone max-w-none space-y-5 prose-headings:font-serif prose-headings:text-[#0D1B2A] prose-headings:font-bold prose-a:text-[#C79B3A] prose-img:rounded-xl"
+            />
+          ) : (
+            <div className="space-y-4">
+              {(article.content || '').split('\n\n').map((para, pIdx) => (
+                <p key={pIdx} className="text-[#2D2D2D] leading-relaxed">
+                  {para}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Quote Block if present */}

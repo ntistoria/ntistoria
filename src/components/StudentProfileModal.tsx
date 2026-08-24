@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Award, CheckCircle2, XCircle, RotateCcw, ShieldCheck, BookOpen, MapPin, Layers, FileText, Clock, Image as ImageIcon, BookMarked, HelpCircle } from 'lucide-react';
 import { getStudentProgress, resetStudentProgress, StudentProfileProgress, ChapterProgressStats } from '../lib/progressService';
 import { TEST_CATEGORIES, fetchProgramsAndSubprograms, ProgramChapter } from '../lib/testService';
+import { isAdminUser } from '../lib/blogService';
 import { fetchUserProfile, syncUserProfile } from '../lib/userService';
 
 interface StudentProfileModalProps {
