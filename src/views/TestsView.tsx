@@ -475,6 +475,30 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
     }
   };
 
+  // Restart active inline test completely (clears typed open answers, chronology orders, and choices)
+  const handleRestartInlineTest = () => {
+    if (!activeInlineTest) return;
+    setCurrentQIndex(0);
+    setSelectedAnswers(new Array(activeInlineTest.questions.length).fill(-1));
+    setIsTestFinished(false);
+
+    // Completely clear all open-ended answers and checked states
+    setOpenTextAnswers({});
+    setOpenTextChecked({});
+
+    // Completely reset all chronology orders and checked states
+    const initChronOrders: Record<number, string[]> = {};
+    activeInlineTest.questions.forEach((q, idx) => {
+      if (q.questionType === 'chronology' && q.chronologyItems && q.chronologyItems.length > 0) {
+        initChronOrders[idx] = [...q.chronologyItems];
+      }
+    });
+    setChronologyOrders(initChronOrders);
+    setChronologyChecked({});
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleFinishInlineTest = () => {
     if (!activeInlineTest) return;
     setIsTestFinished(true);
@@ -718,18 +742,30 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                           <span>პასუხის გაგზავნა</span>
                         </button>
                       ) : (
-                        <div className={`p-4 rounded-2xl border text-xs sm:text-sm font-semibold flex items-center gap-2 ${
+                        <div className={`p-4 rounded-2xl border text-xs sm:text-sm font-semibold flex items-center justify-between gap-3 ${
                           isCorrect ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-rose-50 border-rose-300 text-rose-800'
                         }`}>
-                          {isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" /> : <XCircle className="w-5 h-5 text-rose-600 shrink-0" />}
-                          <div>
-                            <div>{isCorrect ? 'სწორია! თქვენი პასუხი ემთხვევა სწორ პასუხს.' : 'არასწორია.'}</div>
-                            {currentQ.correctAnswerText && (
-                              <div className="text-xs font-normal opacity-90 mt-0.5">
-                                ბაზის სწორი პასუხი: <strong>{currentQ.correctAnswerText}</strong>
-                              </div>
-                            )}
+                          <div className="flex items-center gap-2">
+                            {isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" /> : <XCircle className="w-5 h-5 text-rose-600 shrink-0" />}
+                            <div>
+                              <div>{isCorrect ? 'სწორია! თქვენი პასუხი ემთხვევა სწორ პასუხს.' : 'არასწორია.'}</div>
+                              {currentQ.correctAnswerText && (
+                                <div className="text-xs font-normal opacity-90 mt-0.5">
+                                  ბაზის სწორი პასუხი: <strong>{currentQ.correctAnswerText}</strong>
+                                </div>
+                              )}
+                            </div>
                           </div>
+
+                          <button
+                            onClick={() => {
+                              setOpenTextChecked({ ...openTextChecked, [currentQIndex]: false });
+                              setOpenTextAnswers({ ...openTextAnswers, [currentQIndex]: '' });
+                            }}
+                            className="px-3 py-1.5 bg-white border border-[#E6DDCB] hover:bg-[#FAF8F3] text-[#0D1B2A] text-xs font-bold rounded-xl transition-colors cursor-pointer shrink-0 shadow-xs"
+                          >
+                            ხელახლა აკრეფა
+                          </button>
                         </div>
                       )}
                     </div>
@@ -871,11 +907,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
                     <div className="flex flex-col sm:flex-row items-center gap-4 pt-4">
                       <button
-                        onClick={() => {
-                          setCurrentQIndex(0);
-                          setSelectedAnswers(new Array(activeInlineTest.questions.length).fill(-1));
-                          setIsTestFinished(false);
-                        }}
+                        onClick={handleRestartInlineTest}
                         className="w-full py-3.5 bg-[#FAF8F3] hover:bg-[#E6DDCB] border border-[#E6DDCB] text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
                       >
                         <RotateCcw className="w-4 h-4 text-[#C79B3A]" />
