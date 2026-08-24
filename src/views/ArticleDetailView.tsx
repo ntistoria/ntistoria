@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Article } from '../types';
-import { ArrowLeft, Calendar, User, Share2, Check, Bookmark, Quote, BookOpen } from 'lucide-react';
+import { ArrowLeft, Calendar, User, Share2, Check, Quote, BookOpen, Facebook, Twitter, Linkedin, Link2 } from 'lucide-react';
 
 interface ArticleDetailViewProps {
   article: Article;
@@ -15,15 +15,13 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
   onSelectRelated,
   allArticles = []
 }) => {
-  const [isBookmarked, setIsBookmarked] = useState(false);
-  const [fontSize, setFontSize] = useState<'normal' | 'large'>('normal');
   const [copied, setCopied] = useState(false);
 
   const handleShare = () => {
     if (navigator.clipboard) {
       navigator.clipboard.writeText(window.location.href);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 2500);
     }
   };
 
@@ -33,7 +31,7 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
     <div className="max-w-[1000px] mx-auto space-y-8 pb-24 py-6 px-4 sm:px-6 animate-in fade-in duration-300">
       
       {/* Top Back Navigation Bar */}
-      <div className="flex items-center justify-between border-b border-[#E6DDCB] pb-4">
+      <div className="border-b border-[#E6DDCB] pb-4">
         <button
           onClick={onBack}
           className="inline-flex items-center gap-2 px-4 py-2 bg-[#FAF8F3] hover:bg-[#E6DDCB]/60 border border-[#E6DDCB] text-[#13253D] text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
@@ -41,36 +39,6 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
           <ArrowLeft className="w-4 h-4 text-[#C79B3A]" />
           <span>ბლოგებში დაბრუნება</span>
         </button>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setFontSize(fontSize === 'normal' ? 'large' : 'normal')}
-            className="px-3 py-1.5 text-xs font-serif font-bold text-[#13253D] bg-[#FAF8F3] border border-[#E6DDCB] hover:bg-[#E6DDCB]/50 rounded-xl transition-colors cursor-pointer"
-            title="შრიფტის ზომის შეცვლა"
-          >
-            {fontSize === 'normal' ? 'A+' : 'A-'}
-          </button>
-
-          <button
-            onClick={() => setIsBookmarked(!isBookmarked)}
-            className={`p-2 rounded-xl border transition-colors cursor-pointer ${
-              isBookmarked 
-                ? 'text-[#C79B3A] bg-[#C79B3A]/15 border-[#C79B3A]' 
-                : 'text-[#666666] bg-[#FAF8F3] border-[#E6DDCB] hover:text-[#0D1B2A]'
-            }`}
-            title="შენახვა"
-          >
-            <Bookmark className={`w-4 h-4 ${isBookmarked ? 'fill-[#C79B3A]' : ''}`} />
-          </button>
-
-          <button
-            onClick={handleShare}
-            className="p-2 text-[#666666] bg-[#FAF8F3] border border-[#E6DDCB] hover:text-[#0D1B2A] rounded-xl transition-colors cursor-pointer"
-            title="გაზიარება"
-          >
-            {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4" />}
-          </button>
-        </div>
       </div>
 
       {/* Main Article Container */}
@@ -132,9 +100,7 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
         )}
 
         {/* Article Body Content */}
-        <div className={`text-[#1B1B1B] leading-relaxed font-sans ${
-          fontSize === 'large' ? 'text-lg sm:text-xl' : 'text-base sm:text-lg'
-        }`}>
+        <div className="text-[#1B1B1B] leading-relaxed font-sans text-base sm:text-lg">
           <div 
             dangerouslySetInnerHTML={{ __html: article.content }} 
             className="prose prose-stone max-w-none space-y-5 prose-headings:font-serif prose-headings:text-[#0D1B2A] prose-headings:font-bold prose-a:text-[#C79B3A] prose-img:rounded-xl"
@@ -169,6 +135,66 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
             ))}
           </div>
         )}
+
+        {/* Social Share Section Below Tags */}
+        <div className="p-6 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-[#0D1B2A] flex items-center gap-2">
+              <Share2 className="w-4 h-4 text-[#C79B3A]" />
+              <span>გააზიარეთ სტატია:</span>
+            </span>
+            {copied && (
+              <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full animate-fade-in flex items-center gap-1">
+                <Check className="w-3.5 h-3.5" />
+                <span>ლინკი კოპირებულია!</span>
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Facebook Share */}
+            <a
+              href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(typeof window !== 'undefined' ? window.location.href : '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#1877F2] hover:bg-[#166fe5] text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
+            >
+              <Facebook className="w-4 h-4" />
+              <span>Facebook</span>
+            </a>
+
+            {/* Twitter / X Share */}
+            <a
+              href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(article.title)}&url=${encodeURIComponent(typeof window !== 'undefined' ? window.location.href : '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#000000] hover:bg-gray-800 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
+            >
+              <Twitter className="w-4 h-4" />
+              <span>X (Twitter)</span>
+            </a>
+
+            {/* LinkedIn Share */}
+            <a
+              href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(typeof window !== 'undefined' ? window.location.href : '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#0A66C2] hover:bg-[#084e96] text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
+            >
+              <Linkedin className="w-4 h-4" />
+              <span>LinkedIn</span>
+            </a>
+
+            {/* Copy Link Button */}
+            <button
+              onClick={handleShare}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white text-[#13253D] border border-[#E6DDCB] hover:bg-[#E6DDCB]/50 text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
+            >
+              {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Link2 className="w-4 h-4 text-[#C79B3A]" />}
+              <span>{copied ? 'კოპირებულია' : 'ლინკის კოპირება'}</span>
+            </button>
+          </div>
+        </div>
 
         {/* Author Bio Footer */}
         <div className="p-6 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] flex items-center gap-4">
