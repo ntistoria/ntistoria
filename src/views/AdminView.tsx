@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Search, Filter, FileText, CheckCircle2, ShieldCheck, RefreshCw, AlertTriangle, Eye, BarChart3 } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Filter, FileText, CheckCircle2, ShieldCheck, RefreshCw, AlertTriangle, Eye } from 'lucide-react';
 import { Article, HistoricalCategory } from '../types';
 import { fetchAllArticles, saveArticle, deleteArticle } from '../lib/blogService';
 import { BlogEditorModal } from '../components/BlogEditorModal';
-import { AnalyticsDashboard } from '../components/AnalyticsDashboard';
 
 interface AdminViewProps {
   user: { name: string; email: string } | null;
@@ -11,7 +10,6 @@ interface AdminViewProps {
 }
 
 export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => {
-  const [adminTab, setAdminTab] = useState<'analytics' | 'articles'>('analytics');
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -121,37 +119,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => 
         </button>
       </div>
 
-      {/* Sub-Navigation Tabs: Analytics vs Articles Management */}
-      <div className="flex items-center gap-3 border-b border-[#E6DDCB] pb-1">
-        <button
-          onClick={() => setAdminTab('analytics')}
-          className={`px-6 py-3 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
-            adminTab === 'analytics'
-              ? 'bg-[#0D1B2A] text-white shadow-md'
-              : 'bg-[#FAF8F3] text-[#666666] hover:text-[#0D1B2A] border border-[#E6DDCB]'
-          }`}
-        >
-          <BarChart3 className="w-4 h-4 text-[#C79B3A]" />
-          <span>ვიზიტორების ანალიტიკა</span>
-        </button>
-
-        <button
-          onClick={() => setAdminTab('articles')}
-          className={`px-6 py-3 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer flex items-center gap-2 ${
-            adminTab === 'articles'
-              ? 'bg-[#0D1B2A] text-white shadow-md'
-              : 'bg-[#FAF8F3] text-[#666666] hover:text-[#0D1B2A] border border-[#E6DDCB]'
-          }`}
-        >
-          <FileText className="w-4 h-4 text-[#C79B3A]" />
-          <span>ბლოგების მართვა ({articles.length})</span>
-        </button>
-      </div>
-
-      {adminTab === 'analytics' ? (
-        <AnalyticsDashboard />
-      ) : (
-        <div className="space-y-8">
+      <div className="space-y-8">
 
       {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-[#E6DDCB] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -292,7 +260,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => 
         )}
       </div>
       </div>
-      )}
 
       {/* Editor Modal */}
       <BlogEditorModal

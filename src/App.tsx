@@ -17,7 +17,6 @@ import { AuthModal } from './components/AuthModal';
 import { StudentProfileModal } from './components/StudentProfileModal';
 import { supabase } from './lib/supabase';
 import { isAdminUser, fetchAllArticles } from './lib/blogService';
-import { trackPageView } from './lib/analyticsService';
 
 // Dynamic SEO Meta Manager Helper for SPA
 function updateSeoMetaData(options: {
@@ -186,15 +185,6 @@ export function App() {
           canonicalUrl: 'https://ntistoria.vercel.app/'
         });
     }
-
-    // Automatically track page view in Supabase / LocalStorage Analytics
-    let currentPath = '/';
-    if (selectedArticle) {
-      currentPath = `/?article=${encodeURIComponent(selectedArticle.slug || selectedArticle.id)}`;
-    } else if (activeTab && activeTab !== 'home') {
-      currentPath = `/?tab=${activeTab}`;
-    }
-    trackPageView(currentPath);
   }, [activeTab, selectedArticle]);
 
   useEffect(() => {
