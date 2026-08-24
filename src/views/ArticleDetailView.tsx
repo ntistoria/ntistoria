@@ -20,28 +20,45 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
   // Compute exact shareable URL for this specific article
   const articleSlugOrId = article.slug || article.id;
   const shareUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}${window.location.pathname}?article=${encodeURIComponent(articleSlugOrId)}`
-    : '';
+    ? `${window.location.origin}/?article=${encodeURIComponent(articleSlugOrId)}`
+    : `https://ntistoria.vercel.app/?article=${encodeURIComponent(articleSlugOrId)}`;
 
   // Update Document Title and Dynamic Meta Tags for Social Preview Scraping
   useEffect(() => {
     const originalTitle = document.title;
     document.title = `${article.title} — NT ისტორიის მასწავლებელი`;
 
-    const updateMetaTag = (property: string, content: string) => {
-      let element = document.querySelector(`meta[property="${property}"]`) as HTMLMetaElement;
+    const updateMetaTag = (property: string, content: string, isName = false) => {
+      let element = document.querySelector(
+        isName ? `meta[name="${property}"]` : `meta[property="${property}"]`
+      ) as HTMLMetaElement;
       if (!element) {
         element = document.createElement('meta');
-        element.setAttribute('property', property);
+        if (isName) element.setAttribute('name', property);
+        else element.setAttribute('property', property);
         document.head.appendChild(element);
       }
       element.setAttribute('content', content);
     };
 
-    if (article.title) updateMetaTag('og:title', article.title);
-    if (article.excerpt) updateMetaTag('og:description', article.excerpt);
-    if (article.imageUrl) updateMetaTag('og:image', article.imageUrl);
-    if (shareUrl) updateMetaTag('og:url', shareUrl);
+    if (article.title) {
+      updateMetaTag('og:title', article.title);
+      updateMetaTag('twitter:title', article.title, true);
+    }
+    if (article.excerpt) {
+      updateMetaTag('og:description', article.excerpt);
+      updateMetaTag('twitter:description', article.excerpt, true);
+    }
+    if (article.imageUrl) {
+      updateMetaTag('og:image', article.imageUrl);
+      updateMetaTag('og:image:secure_url', article.imageUrl);
+      updateMetaTag('twitter:image', article.imageUrl, true);
+    }
+    if (shareUrl) {
+      updateMetaTag('og:url', shareUrl);
+    }
+    updateMetaTag('og:type', 'article');
+    updateMetaTag('twitter:card', 'summary_large_image', true);
 
     return () => {
       document.title = originalTitle;
@@ -57,7 +74,7 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
   };
 
   const handleNativeShare = async () => {
-    if (navigator.share) {
+    if (typeof navigator !== 'undefined' && 'share' in navigator) {
       try {
         await navigator.share({
           title: article.title,
@@ -72,111 +89,139 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
     }
   };
 
-  const related = allArticles.filter(a => a.id !== article.id).slice(0, 3);
-
   return (
-    <div className="max-w-[1000px] mx-auto space-y-8 pb-24 py-6 px-4 sm:px-6 animate-in fade-in duration-300">
+    <div className="max-w-4xl mx-auto py-6 sm:py-8 px-4 sm:px-6 space-y-8 animate-in fade-in duration-300">
       
       {/* Top Back Navigation Bar */}
-      <div className="border-b border-[#E6DDCB] pb-4">
+      <div className="flex items-center justify-between">
         <button
           onClick={onBack}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-[#FAF8F3] hover:bg-[#E6DDCB]/60 border border-[#E6DDCB] text-[#13253D] text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-[#FAF8F3] text-[#13253D] text-xs font-semibold rounded-xl border border-[#E6DDCB] transition-all shadow-sm cursor-pointer hover:border-[#C79B3A]"
         >
           <ArrowLeft className="w-4 h-4 text-[#C79B3A]" />
-          <span>ბლოგებში დაბრუნება</span>
+          <span>უკან დაბრუნება</span>
         </button>
+
+        <div className="flex items-center gap-2">
+          <span className="px-3 py-1 bg-[#13253D] text-[#FAF8F3] text-[11px] font-bold uppercase tracking-wider rounded-full">
+            {article.category}
+          </span>
+        </div>
       </div>
 
       {/* Main Article Container */}
-      <article className="bg-white rounded-3xl border border-[#E6DDCB] p-6 sm:p-10 space-y-8 shadow-sm">
+      <article className="bg-white rounded-3xl border border-[#E6DDCB] shadow-sm overflow-hidden space-y-8 p-6 sm:p-10">
         
-        {/* Article Header */}
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="px-3 py-1 bg-[#FAF8F3] border border-[#C79B3A]/40 text-[#C79B3A] text-[11px] font-bold uppercase tracking-wider rounded-full">
-              {article.category}
-            </span>
-          </div>
-
-          <h1 className="font-serif font-bold text-3xl sm:text-4xl md:text-5xl text-[#0D1B2A] leading-tight">
+        {/* Header Block */}
+        <header className="space-y-4 border-b border-[#E6DDCB] pb-8">
+          <h1 className="font-serif font-bold text-3xl sm:text-4xl md:text-5xl text-[#13253D] leading-tight">
             {article.title}
           </h1>
 
-          <p className="text-base sm:text-lg text-[#666666] leading-relaxed italic font-serif border-l-3 border-[#C79B3A] pl-4">
-            {article.excerpt}
-          </p>
+          {/* Meta bar */}
+          <div className="flex items-center justify-between flex-wrap gap-4 text-xs text-[#666666]">
+            <div className="flex items-center gap-4">
+              <span className="flex items-center gap-1.5 font-medium text-[#13253D]">
+                <User className="w-4 h-4 text-[#C79B3A]" />
+                {article.author}
+              </span>
+              <span className="flex items-center gap-1.5 font-medium">
+                <Calendar className="w-4 h-4 text-[#C79B3A]" />
+                {article.date}
+              </span>
+            </div>
 
-          <div className="flex flex-wrap items-center gap-4 text-xs sm:text-sm text-[#666666] pt-4 border-t border-[#E6DDCB]">
-            <span className="flex items-center gap-1.5 font-bold text-[#13253D]">
-              <User className="w-4 h-4 text-[#C79B3A]" /> {article.author}
-            </span>
-            <span>•</span>
-            <span className="flex items-center gap-1.5">
-              <Calendar className="w-4 h-4 text-[#C79B3A]" /> {article.date}
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleNativeShare}
+                className="px-3 py-1.5 bg-[#FAF8F3] hover:bg-[#E6DDCB]/50 text-[#13253D] text-xs font-semibold rounded-lg border border-[#E6DDCB] transition-colors flex items-center gap-1.5 cursor-pointer"
+                title="გაზიარება"
+              >
+                <Share2 className="w-3.5 h-3.5 text-[#C79B3A]" />
+                <span>გაზიარება</span>
+              </button>
+            </div>
           </div>
-        </div>
+
+          {/* Excerpt Lead */}
+          {article.excerpt && (
+            <p className="text-base sm:text-lg text-[#444444] font-serif italic leading-relaxed border-l-4 border-[#C79B3A] pl-4 py-1">
+              {article.excerpt}
+            </p>
+          )}
+        </header>
 
         {/* Featured Image */}
         {article.imageUrl && (
-          <div className="relative rounded-2xl overflow-hidden border border-[#E6DDCB] shadow-md aspect-video max-h-[420px] bg-[#0D1B2A]">
-            <img 
-              src={article.imageUrl} 
-              alt={article.title} 
+          <div className="relative rounded-2xl overflow-hidden shadow-md border border-[#E6DDCB] aspect-[16/9] sm:aspect-[21/9]">
+            <img
+              src={article.imageUrl}
+              alt={article.title}
               className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
             />
           </div>
         )}
 
-        {/* Quote Block if available */}
-        {article.quote && (
-          <div className="bg-[#FAF8F3] p-6 rounded-2xl border-l-4 border-[#C79B3A] space-y-2 shadow-inner">
-            <div className="flex items-center gap-2 text-[#C79B3A]">
-              <Quote className="w-5 h-5 fill-[#C79B3A]/20" />
-              <span className="text-xs uppercase tracking-wider font-bold">ისტორიული ციტატა</span>
-            </div>
-            <p className="font-serif italic text-base sm:text-lg text-[#0D1B2A] leading-relaxed">
-              {article.quote.text}
-            </p>
-            <p className="text-xs text-[#666666] font-semibold text-right">
-              — {article.quote.author}
-            </p>
-          </div>
-        )}
-
-        {/* Article Body Content */}
-        <div className="text-[#1B1B1B] leading-relaxed font-sans text-base sm:text-lg">
+        {/* Main Content Body */}
+        <div className="prose prose-serif max-w-none text-[#1B1B1B] text-base sm:text-lg leading-relaxed space-y-6">
           <div 
             dangerouslySetInnerHTML={{ __html: article.content }} 
             className="prose prose-stone max-w-none space-y-5 prose-headings:font-serif prose-headings:text-[#0D1B2A] prose-headings:font-bold prose-a:text-[#C79B3A] prose-img:rounded-xl"
           />
         </div>
 
-        {/* Primary Sources Section if present */}
-        {article.primarySources && article.primarySources.length > 0 && (
-          <div className="pt-8 border-t border-[#E6DDCB] space-y-4">
-            <h3 className="font-serif font-bold text-xl text-[#0D1B2A] flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-[#C79B3A]" /> პირველწყაროები და ისტორიული დოკუმენტები
-            </h3>
-            {article.primarySources.map((src, i) => (
-              <div key={i} className="bg-[#FAF8F3] p-5 rounded-2xl border border-[#E6DDCB] space-y-2">
-                <h4 className="font-semibold text-sm text-[#13253D]">{src.title}</h4>
-                <p className="font-serif italic text-sm text-[#666666] leading-relaxed">
-                  „{src.text}“
-                </p>
-                <p className="text-xs text-[#C79B3A] font-bold">{src.authorOrPeriod}</p>
-              </div>
-            ))}
+        {/* Quote Block if present */}
+        {article.quote && (
+          <div className="bg-[#FAF8F3] p-6 sm:p-8 rounded-2xl border border-[#E6DDCB] space-y-3">
+            <Quote className="w-8 h-8 text-[#C79B3A] opacity-60" />
+            <p className="font-serif italic text-lg sm:text-xl text-[#13253D] leading-snug">
+              "{article.quote.text}"
+            </p>
+            <p className="text-xs font-bold text-[#C79B3A] uppercase tracking-wider">
+              — {article.quote.author}
+            </p>
           </div>
         )}
 
-        {/* Tags */}
+        {/* Primary Sources if present */}
+        {article.primarySources && article.primarySources.length > 0 && (
+          <div className="space-y-4 pt-4 border-t border-[#E6DDCB]">
+            <h3 className="font-serif font-bold text-xl text-[#13253D] flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-[#C79B3A]" />
+              <span>ისტორიული წყაროები & დოკუმენტები</span>
+            </h3>
+
+            <div className="grid gap-4 sm:grid-cols-1">
+              {article.primarySources.map((source, sIdx) => (
+                <div key={sIdx} className="bg-[#F8F9FA] p-5 rounded-2xl border border-[#E6DDCB] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-serif font-bold text-base text-[#13253D]">
+                      {source.title}
+                    </h4>
+                    <span className="text-[11px] font-mono text-[#8A8A8A]">
+                      {source.authorOrPeriod}
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-[#555555] font-serif italic leading-relaxed bg-white p-3 rounded-xl border border-[#E6DDCB]">
+                    "{source.text}"
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Article Tags */}
         {article.tags && article.tags.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-[#E6DDCB]">
-            {article.tags.map((tag, idx) => (
-              <span key={idx} className="text-xs bg-[#FAF8F3] text-[#666666] px-3 py-1 rounded-lg border border-[#E6DDCB] font-medium">
+            <span className="text-xs font-bold text-[#8A8A8A] uppercase tracking-wider mr-1">
+              თეგები:
+            </span>
+            {article.tags.map((tag, tIdx) => (
+              <span
+                key={tIdx}
+                className="px-3 py-1 bg-[#FAF8F3] border border-[#E6DDCB] text-[#13253D] text-xs font-medium rounded-lg"
+              >
                 #{tag}
               </span>
             ))}
@@ -201,13 +246,33 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
           <div className="flex flex-wrap items-center gap-3">
             {/* Facebook Share */}
             <a
-              href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`}
+              href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}&quote=${encodeURIComponent(article.title + ' — ' + (article.excerpt || ''))}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-4 py-2.5 bg-[#1877F2] hover:bg-[#166fe5] text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
             >
               <Facebook className="w-4 h-4" />
               <span>Facebook</span>
+            </a>
+
+            {/* WhatsApp Share */}
+            <a
+              href={`https://api.whatsapp.com/send?text=${encodeURIComponent('*' + article.title + '*\n' + (article.excerpt ? article.excerpt + '\n\n' : '') + shareUrl)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
+            >
+              <span className="font-bold">WhatsApp</span>
+            </a>
+
+            {/* Telegram Share */}
+            <a
+              href={`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(article.title + (article.excerpt ? '\n' + article.excerpt : ''))}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#0088cc] hover:bg-[#0077b3] text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
+            >
+              <span className="font-bold">Telegram</span>
             </a>
 
             {/* Twitter / X Share */}
@@ -218,18 +283,7 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
               className="flex items-center gap-2 px-4 py-2.5 bg-[#000000] hover:bg-gray-800 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
             >
               <Twitter className="w-4 h-4" />
-              <span>X (Twitter)</span>
-            </a>
-
-            {/* LinkedIn Share */}
-            <a
-              href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#0A66C2] hover:bg-[#084e96] text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
-            >
-              <Linkedin className="w-4 h-4" />
-              <span>LinkedIn</span>
+              <span>X</span>
             </a>
 
             {/* Copy Direct Article Link */}
@@ -240,17 +294,6 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
               {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Link2 className="w-4 h-4 text-[#C79B3A]" />}
               <span>{copied ? 'კოპირებულია' : 'ლინკის კოპირება'}</span>
             </button>
-
-            {/* Mobile Native Share if supported */}
-            {typeof navigator !== 'undefined' && 'share' in navigator && (
-              <button
-                onClick={handleNativeShare}
-                className="flex items-center gap-2 px-4 py-2.5 bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
-              >
-                <Share2 className="w-4 h-4" />
-                <span>გაზიარება</span>
-              </button>
-            )}
           </div>
         </div>
 

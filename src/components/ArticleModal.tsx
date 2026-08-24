@@ -22,10 +22,29 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
 
   if (!article) return null;
 
-  const handleShare = () => {
-    navigator.clipboard?.writeText(window.location.href);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const articleSlugOrId = article.slug || article.id;
+  const shareUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/?article=${encodeURIComponent(articleSlugOrId)}`
+    : `https://ntistoria.vercel.app/?article=${encodeURIComponent(articleSlugOrId)}`;
+
+  const handleShare = async () => {
+    if (typeof navigator !== 'undefined' && 'share' in navigator) {
+      try {
+        await navigator.share({
+          title: article.title,
+          text: article.excerpt,
+          url: shareUrl,
+        });
+        return;
+      } catch (err) {
+        // Fallback to copy link if native share dialog is cancelled
+      }
+    }
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    }
   };
 
   const related = allArticles.filter(a => a.id !== article.id).slice(0, 2);
