@@ -17,6 +17,7 @@ import { AuthModal } from './components/AuthModal';
 import { StudentProfileModal } from './components/StudentProfileModal';
 import { supabase } from './lib/supabase';
 import { isAdminUser, fetchAllArticles } from './lib/blogService';
+import { fetchUserProfile, syncUserProfile } from './lib/userService';
 
 // Dynamic SEO Meta Manager Helper for SPA
 function updateSeoMetaData(options: {
@@ -200,13 +201,30 @@ export function App() {
 
   useEffect(() => {
     // Process Supabase session (without forcing activeTab='admin' on refresh)
-    const handleSession = (session: any) => {
+    const handleSession = async (session: any) => {
       if (session?.user) {
         const meta = session.user.user_metadata;
-        const name = meta?.full_name || 
+        const metaName = meta?.full_name || 
                      `${meta?.first_name || ''} ${meta?.last_name || ''}`.trim() || 
                      session.user.email?.split('@')[0] || 'მომხმარებელი';
-        const userData = { name, email: session.user.email || '' };
+        const userEmail = session.user.email || '';
+
+        let finalName = metaName;
+        try {
+          const dbProfile = await fetchUserProfile(userEmail);
+          if (dbProfile && dbProfile.full_name) {
+            finalName = dbProfile.full_name;
+          } else {
+            await syncUserProfile({
+              id: session.user.id,
+              email: userEmail,
+              full_name: metaName,
+              avatar_url: meta?.avatar_url
+            });
+          }
+        } catch (e) {}
+
+        const userData = { name: finalName, email: userEmail };
         setUser(userData);
 
         // Clean up URL hash or search params from Google OAuth redirect if needed

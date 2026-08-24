@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Award, CheckCircle2, XCircle, RotateCcw, ShieldCheck, BookOpen, MapPin, Layers, FileText, Clock, Image as ImageIcon, BookMarked, HelpCircle } from 'lucide-react';
 import { getStudentProgress, resetStudentProgress, StudentProfileProgress, ChapterProgressStats } from '../lib/progressService';
 import { TEST_CATEGORIES, fetchProgramsAndSubprograms, ProgramChapter } from '../lib/testService';
-import { isAdminUser } from '../lib/blogService';
+import { fetchUserProfile, syncUserProfile } from '../lib/userService';
 
 interface StudentProfileModalProps {
   isOpen: boolean;
@@ -21,6 +21,10 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
   const [isResetting, setIsResetting] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
 
+  const [profileName, setProfileName] = useState('');
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [isSavingName, setIsSavingName] = useState(false);
+
   const userEmail = user?.email || '';
 
   useEffect(() => {
@@ -31,12 +35,37 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
 
         const data = await getStudentProgress(userEmail);
         setProgress(data);
+
+        // Fetch profile from Supabase profiles table
+        const dbProf = await fetchUserProfile(userEmail);
+        if (dbProf && dbProf.full_name) {
+          setProfileName(dbProf.full_name);
+        } else {
+          setProfileName(user?.name || userEmail.split('@')[0]);
+        }
       };
       load();
     }
-  }, [isOpen, userEmail]);
+  }, [isOpen, userEmail, user]);
 
   if (!isOpen || !user) return null;
+
+  const handleSaveName = async () => {
+    if (!profileName.trim() || !userEmail) return;
+    setIsSavingName(true);
+    try {
+      await syncUserProfile({
+        email: userEmail,
+        full_name: profileName.trim()
+      });
+      user.name = profileName.trim();
+      setIsEditingName(false);
+    } catch (err) {
+      console.error('Error saving profile name:', err);
+    } finally {
+      setIsSavingName(false);
+    }
+  };
 
   const isAdmin = isAdminUser(user);
 
@@ -98,9 +127,35 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="font-serif font-bold text-lg text-[#FAF8F3]">
-                  {user.name}
-                </h2>
+                {isEditingName ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={profileName}
+                      onChange={(e) => setProfileName(e.target.value)}
+                      className="bg-white/10 text-white border border-[#C79B3A] px-2 py-0.5 rounded text-sm focus:outline-none"
+                    />
+                    <button
+                      onClick={handleSaveName}
+                      disabled={isSavingName}
+                      className="px-2 py-0.5 bg-[#C79B3A] text-[#0D1B2A] text-xs font-bold rounded hover:bg-[#E6C86B]"
+                    >
+                      {isSavingName ? '...' : 'შენახვა'}
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <h2 className="font-serif font-bold text-lg text-[#FAF8F3]">
+                      {profileName || user.name}
+                    </h2>
+                    <button
+                      onClick={() => setIsEditingName(true)}
+                      className="text-[10px] text-[#C79B3A] underline hover:text-white cursor-pointer ml-1"
+                    >
+                      შეცვლა
+                    </button>
+                  </>
+                )}
                 {isAdmin && (
                   <span className="px-2 py-0.5 bg-[#C79B3A] text-[#0D1B2A] text-[9px] font-bold uppercase rounded-md flex items-center gap-1">
                     <ShieldCheck className="w-3 h-3" />

@@ -463,18 +463,31 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
           }
 
           // Program / Chapter Number mapping
-          let pNum: number = Number(
-            item.program_number ||
-            item.maps?.program_number ||
-            item.analogy?.program_number ||
-            item.source?.program_number ||
-            item.illustrations?.program_number ||
-            mapsMap[item.map_number]?.program_number ||
-            analogyMap[item.analogy_number]?.program_number ||
-            sourceMap[item.source_number]?.program_number ||
-            illustrationMap[item.illustration_number]?.program_number ||
-            ((idx % 11) + 1)
-          );
+          let rawProg = 
+            item.program_number ??
+            item.chapter_number ??
+            item.chapter_id ??
+            item.chapter ??
+            item.topic_number ??
+            item.program ??
+            item.maps?.program_number ??
+            item.analogy?.program_number ??
+            item.source?.program_number ??
+            item.illustrations?.program_number ??
+            mapsMap[item.map_number]?.program_number ??
+            analogyMap[item.analogy_number]?.program_number ??
+            sourceMap[item.source_number]?.program_number ??
+            illustrationMap[item.illustration_number]?.program_number;
+
+          if (typeof rawProg === 'string') {
+            const numMatch = rawProg.match(/\d+/);
+            if (numMatch) rawProg = parseInt(numMatch[0], 10);
+          }
+
+          let pNum: number = Number(rawProg);
+          if (isNaN(pNum) || pNum <= 0) {
+            pNum = 1;
+          }
 
           let subProgNum: number = Number(
             item.sub_program_number ||
@@ -624,9 +637,12 @@ export const buildHistoryTest = async (
 
   let filteredQuestions = allQuestions;
   if (chapterId && chapterId !== 'all') {
-    filteredQuestions = allQuestions.filter(q => q.chapterId === chapterId || q.chapterId === `ch-${chapterId}`);
-    if (filteredQuestions.length === 0) {
-      filteredQuestions = allQuestions;
+    const targetNum = Number(String(chapterId).replace(/[^0-9]/g, ''));
+    if (targetNum > 0) {
+      filteredQuestions = allQuestions.filter(q => {
+        const qNum = Number(String(q.chapterId).replace(/[^0-9]/g, ''));
+        return qNum === targetNum || q.chapterId === chapterId || q.chapterId === `ch-${chapterId}`;
+      });
     }
   }
 

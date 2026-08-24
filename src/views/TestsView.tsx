@@ -262,9 +262,12 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
       return;
     }
 
-    const chapterQuestions = categoryQuestions.filter(
-      q => selectedChapterId === 'all' || q.chapterId === selectedChapterId || q.chapterId === `ch-${selectedChapterId.replace('ch-', '')}`
-    );
+    const targetNum = Number(String(selectedChapterId).replace(/[^0-9]/g, ''));
+    const chapterQuestions = categoryQuestions.filter(q => {
+      if (selectedChapterId === 'all') return true;
+      const qNum = Number(String(q.chapterId).replace(/[^0-9]/g, ''));
+      return qNum === targetNum || q.chapterId === selectedChapterId || q.chapterId === `ch-${selectedChapterId.replace('ch-', '')}`;
+    });
 
     if (chapterQuestions.length === 0) {
       setTaskGroups([]);

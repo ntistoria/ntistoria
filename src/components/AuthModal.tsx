@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Mail, Lock, User, LogIn, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { isAdminUser } from '../lib/blogService';
+import { syncUserProfile } from '../lib/userService';
 
 interface AuthModalProps {
   isOpen: boolean;
