@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Article } from '../types';
-import { formatArticleContent } from '../lib/blogService';
+import { formatArticleContent, generateSlug } from '../lib/blogService';
 import { ArrowLeft, Calendar, User, Quote, BookOpen, Share2, Copy, Check } from 'lucide-react';
 
 interface ArticleDetailViewProps {
@@ -21,8 +21,8 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
   if (!article) return null;
 
   const related = allArticles.filter(a => a.id !== article.id).slice(0, 3);
-  const postSlugOrId = article.slug || article.id;
-  const currentPostUrl = `https://ntistoria.vercel.app/blog/${encodeURIComponent(postSlugOrId)}`;
+  const postSlugOrId = generateSlug(article.title, article.slug || article.id);
+  const currentPostUrl = `https://ntistoria.vercel.app/blog/${postSlugOrId}`;
 
   // Update Document Title & Canonical URL on article open
   useEffect(() => {
@@ -44,7 +44,18 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(currentPostUrl);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(currentPostUrl);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = currentPostUrl;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+      }
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch (err) {
@@ -52,13 +63,45 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
     }
   };
 
-  const shareLinks = {
-    facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(currentPostUrl)}`,
-    linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(currentPostUrl)}`,
-    twitter: `https://twitter.com/intent/tweet?url=${encodeURIComponent(currentPostUrl)}&text=${encodeURIComponent(article.title)}`,
-    telegram: `https://t.me/share/url?url=${encodeURIComponent(currentPostUrl)}&text=${encodeURIComponent(article.title)}`,
-    whatsapp: `https://api.whatsapp.com/send?text=${encodeURIComponent(article.title + ' ' + currentPostUrl)}`
+  const handleShare = (platform: 'facebook' | 'linkedin' | 'twitter' | 'telegram' | 'whatsapp' | 'native') => {
+    if (platform === 'native') {
+      if (typeof navigator !== 'undefined' && (navigator as any).share) {
+        (navigator as any).share({
+          title: article.title,
+          text: article.excerpt || article.title,
+          url: currentPostUrl
+        }).catch(() => {});
+        return;
+      }
+      handleCopyLink();
+      return;
+    }
+
+    let shareUrl = '';
+    switch (platform) {
+      case 'facebook':
+        shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(currentPostUrl)}`;
+        break;
+      case 'linkedin':
+        shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(currentPostUrl)}`;
+        break;
+      case 'twitter':
+        shareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(currentPostUrl)}&text=${encodeURIComponent(article.title)}`;
+        break;
+      case 'telegram':
+        shareUrl = `https://t.me/share/url?url=${encodeURIComponent(currentPostUrl)}&text=${encodeURIComponent(article.title)}`;
+        break;
+      case 'whatsapp':
+        shareUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(article.title + ' ' + currentPostUrl)}`;
+        break;
+    }
+
+    if (shareUrl) {
+      window.open(shareUrl, '_blank', 'noopener,noreferrer,width=600,height=550');
+    }
   };
+
+  const isNativeShareSupported = typeof navigator !== 'undefined' && Boolean((navigator as any).share);
 
   return (
     <div className="max-w-4xl mx-auto py-6 sm:py-8 px-4 sm:px-6 space-y-8 animate-in fade-in duration-300">
@@ -104,6 +147,16 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
 
             {/* Quick Share Widget */}
             <div className="flex items-center gap-2">
+              {isNativeShareSupported && (
+                <button
+                  onClick={() => handleShare('native')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[#C79B3A] hover:bg-[#D4AF37] text-[#0D1B2A] text-xs font-bold rounded-lg transition-colors cursor-pointer shadow-sm"
+                  title="გაზიარება"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>გაზიარება</span>
+                </button>
+              )}
               <button
                 onClick={handleCopyLink}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-[#FAF8F3] hover:bg-[#E6DDCB]/60 text-[#13253D] text-xs font-semibold rounded-lg border border-[#E6DDCB] transition-colors cursor-pointer"
@@ -193,61 +246,58 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
 
             <div className="flex items-center gap-2 flex-wrap">
               {/* Facebook */}
-              <a
-                href={shareLinks.facebook}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3.5 py-2 bg-[#1877F2] hover:bg-[#166FE5] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
+              <button
+                type="button"
+                onClick={() => handleShare('facebook')}
+                className="px-3.5 py-2 bg-[#1877F2] hover:bg-[#166FE5] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-95"
               >
                 <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                   <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                 </svg>
                 <span>Facebook</span>
-              </a>
+              </button>
 
               {/* LinkedIn */}
-              <a
-                href={shareLinks.linkedin}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3.5 py-2 bg-[#0A66C2] hover:bg-[#08529C] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
+              <button
+                type="button"
+                onClick={() => handleShare('linkedin')}
+                className="px-3.5 py-2 bg-[#0A66C2] hover:bg-[#08529C] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-95"
               >
                 <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                   <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-1.3.36-2.5 1.9-2.5s1.65 1.44 1.65 2.57v4.86h2.79M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/>
                 </svg>
                 <span>LinkedIn</span>
-              </a>
+              </button>
 
               {/* Telegram */}
-              <a
-                href={shareLinks.telegram}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3.5 py-2 bg-[#26A5E4] hover:bg-[#2092CB] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
+              <button
+                type="button"
+                onClick={() => handleShare('telegram')}
+                className="px-3.5 py-2 bg-[#26A5E4] hover:bg-[#2092CB] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-95"
               >
                 <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                   <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.96 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.831-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/>
                 </svg>
                 <span>Telegram</span>
-              </a>
+              </button>
 
               {/* WhatsApp */}
-              <a
-                href={shareLinks.whatsapp}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3.5 py-2 bg-[#25D366] hover:bg-[#20BD5A] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-sm"
+              <button
+                type="button"
+                onClick={() => handleShare('whatsapp')}
+                className="px-3.5 py-2 bg-[#25D366] hover:bg-[#20BD5A] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer active:scale-95"
               >
                 <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
                   <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981z"/>
                 </svg>
                 <span>WhatsApp</span>
-              </a>
+              </button>
 
               {/* Copy URL */}
               <button
+                type="button"
                 onClick={handleCopyLink}
-                className="px-3.5 py-2 bg-[#13253D] hover:bg-[#C79B3A] hover:text-[#0D1B2A] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                className="px-3.5 py-2 bg-[#13253D] hover:bg-[#C79B3A] hover:text-[#0D1B2A] text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95"
               >
                 {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-[#C79B3A]" />}
                 <span>{copied ? 'დაკოპირდა!' : 'ბმულის კოპირება'}</span>
