@@ -20,6 +20,54 @@ export const isAdminUser = (user: { email: string } | null): boolean => {
   return isMatch || isLocalOverride || isAdminPattern;
 };
 
+// Georgian Transliteration helper for clean URLs
+export function transliterateGeorgian(str: string): string {
+  if (!str) return '';
+  const geoMap: { [key: string]: string } = {
+    'ა': 'a', 'ბ': 'b', 'გ': 'g', 'დ': 'd', 'ე': 'e', 'ვ': 'v', 'ზ': 'z',
+    'თ': 't', 'ი': 'i', 'კ': 'k', 'ლ': 'l', 'მ': 'm', 'ნ': 'n', 'ო': 'o',
+    'პ': 'p', 'ჟ': 'zh', 'რ': 'r', 'ს': 's', 'ტ': 't', 'უ': 'u', 'ფ': 'p',
+    'ქ': 'q', 'ღ': 'gh', 'ყ': 'q', 'შ': 'sh', 'ჩ': 'ch', 'ც': 'ts', 'ძ': 'dz',
+    'წ': 'ts', 'ჭ': 'ch', 'ხ': 'kh', 'ჯ': 'j', 'ჰ': 'h'
+  };
+
+  return str
+    .split('')
+    .map(char => geoMap[char] || char)
+    .join('');
+}
+
+// Generate clean, readable, websafe slug from Georgian or English title
+export function generateSlug(title: string, fallbackId?: string): string {
+  if (!title) return fallbackId || `art-${Date.now()}`;
+  
+  const latinized = transliterateGeorgian(title.trim().toLowerCase());
+  const cleanSlug = latinized
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  if (!cleanSlug || cleanSlug.length < 2 || /^[-]+$/.test(cleanSlug)) {
+    return fallbackId || `art-${Date.now()}`;
+  }
+
+  return cleanSlug;
+}
+
+// Ensure article object has a clean, non-dashed slug
+export function cleanArticleSlug(article: Article): Article {
+  let currentSlug = article.slug ? article.slug.trim() : '';
+  
+  if (!currentSlug || /^[-]+$/.test(currentSlug) || currentSlug.length < 2) {
+    currentSlug = generateSlug(article.title, article.id);
+  } else {
+    currentSlug = generateSlug(currentSlug, article.id);
+  }
+
+  return {
+    ...article,
+    slug: currentSlug
+  };
+}
 
 // Get initial articles instantly from local storage & defaults (0ms sync)
 export const getInitialArticles = (): Article[] => {
@@ -32,8 +80,8 @@ export const getInitialArticles = (): Article[] => {
   } catch (err) {}
 
   const combinedMap = new Map<string, Article>();
-  DEFAULT_ARTICLES.forEach(a => combinedMap.set(a.id, a));
-  localArticles.forEach(a => combinedMap.set(a.id, a));
+  DEFAULT_ARTICLES.map(cleanArticleSlug).forEach(a => combinedMap.set(a.id, a));
+  localArticles.map(cleanArticleSlug).forEach(a => combinedMap.set(a.id, a));
   return Array.from(combinedMap.values());
 };
 
@@ -48,10 +96,10 @@ export const fetchAllArticles = async (): Promise<Article[]> => {
       .order('date', { ascending: false });
 
     if (!error && data && data.length > 0) {
-      dbArticles = data.map((item: any) => ({
+      dbArticles = data.map((item: any) => cleanArticleSlug({
         id: item.id || `db-${Date.now()}`,
         title: item.title,
-        slug: item.slug || item.id,
+        slug: generateSlug(item.title, item.slug || item.id),
         excerpt: item.excerpt || '',
         content: item.content || '',
         category: item.category || 'საქართველოს ისტორია',
@@ -78,9 +126,12 @@ export const fetchAllArticles = async (): Promise<Article[]> => {
 
 // Save (Create or Update) an article
 export const saveArticle = async (article: Article): Promise<Article> => {
+  const cleanSlug = generateSlug(article.title, article.id || `art-${Date.now()}`);
+  
   const articleToSave: Article = {
     ...article,
     id: article.id || `art-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+    slug: cleanSlug,
     date: article.date || new Date().toISOString().split('T')[0],
     author: article.author || 'ნოდარ თოთაძე',
     tags: article.tags?.length ? article.tags : ['ისტორია', article.category],
@@ -94,7 +145,7 @@ export const saveArticle = async (article: Article): Promise<Article> => {
     const payload: any = {
       id: articleToSave.id,
       title: articleToSave.title,
-      slug: articleToSave.slug || articleToSave.id,
+      slug: articleToSave.slug,
       excerpt: articleToSave.excerpt,
       content: articleToSave.content,
       category: articleToSave.category,
@@ -156,7 +207,6 @@ export const extractStoragePath = (url: string, bucketName: string = 'photos'): 
   if (match && match[1]) {
     return decodeURIComponent(match[1]);
   }
-  // Also check if URL ends with bucketName/filename
   const bucketPattern = new RegExp(`${bucketName}/([^?#]+)`);
   const bucketMatch = url.match(bucketPattern);
   if (bucketMatch && bucketMatch[1]) {
@@ -255,7 +305,6 @@ export const uploadBlogImage = async (file: File): Promise<string> => {
   const fileName = `blog-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
   
   try {
-    // Attempt upload to 'photos' bucket
     const { data, error } = await supabase.storage
       .from('photos')
       .upload(fileName, file, {
@@ -265,7 +314,6 @@ export const uploadBlogImage = async (file: File): Promise<string> => {
 
     if (error) {
       console.warn('Supabase storage upload error, trying fallback:', error.message);
-      // Fallback to data URL
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
@@ -274,7 +322,6 @@ export const uploadBlogImage = async (file: File): Promise<string> => {
       });
     }
 
-    // Get public URL
     const { data: publicUrlData } = supabase.storage
       .from('photos')
       .getPublicUrl(data.path);
@@ -291,16 +338,14 @@ export const uploadBlogImage = async (file: File): Promise<string> => {
   }
 };
 
-// Helper function to format article content (converting linebreaks and images into clean HTML)
+// Helper function to format article content
 export const formatArticleContent = (content: string): string => {
   if (!content) return '';
 
-  // If content already contains HTML block elements like <p>, <div>, <section>, return formatted
   if (/<p\b|<div\b|<section\b/i.test(content)) {
     return content;
   }
 
-  // Otherwise split content by double line breaks
   const blocks = content.split(/\n\s*\n/);
 
   return blocks
@@ -308,29 +353,23 @@ export const formatArticleContent = (content: string): string => {
       const trimmed = block.trim();
       if (!trimmed) return '';
 
-      // If block starts with an HTML element tag (like <figure>, <img>, <h2>, <h3>, <blockquote>, <ul>, etc.)
       if (/^<(figure|img|h[1-6]|blockquote|ul|ol|table|div)\b/i.test(trimmed)) {
         return trimmed;
       }
 
-      // Convert Markdown H2 (##)
       if (trimmed.startsWith('## ')) {
         return `<h2 class="font-serif font-bold text-2xl text-[#13253D] mt-8 mb-4">${trimmed.replace(/^##\s+/, '')}</h2>`;
       }
 
-      // Convert Markdown H3 (###)
       if (trimmed.startsWith('### ')) {
         return `<h3 class="font-serif font-bold text-xl text-[#13253D] mt-6 mb-3">${trimmed.replace(/^###\s+/, '')}</h3>`;
       }
 
-      // Convert Markdown Quote (> )
       if (trimmed.startsWith('> ')) {
         return `<blockquote class="border-l-4 border-[#C79B3A] pl-4 py-2 my-4 italic text-[#13253D] bg-[#FAF8F3] rounded-r-xl">${trimmed.replace(/^>\s+/, '')}</blockquote>`;
       }
 
-      // Convert plain paragraph, replacing single linebreaks with <br />
       return `<p class="mb-4 leading-relaxed">${trimmed.replace(/\n/g, '<br />')}</p>`;
     })
     .join('\n');
 };
-

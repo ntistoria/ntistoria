@@ -16,7 +16,7 @@ import { SearchModal } from './components/SearchModal';
 import { AuthModal } from './components/AuthModal';
 import { StudentProfileModal } from './components/StudentProfileModal';
 import { supabase } from './lib/supabase';
-import { isAdminUser, fetchAllArticles, getInitialArticles } from './lib/blogService';
+import { isAdminUser, fetchAllArticles, getInitialArticles, generateSlug } from './lib/blogService';
 import { fetchUserProfile, syncUserProfile } from './lib/userService';
 
 // Dynamic SEO Meta Manager Helper for SPA
@@ -97,7 +97,7 @@ export function App() {
 
     if (pathname.startsWith('/blog/')) {
       const slugOrId = decodeURIComponent(pathname.replace('/blog/', '').replace(/\/$/, ''));
-      const found = articlesList.find(a => a.slug === slugOrId || a.id === slugOrId);
+      const found = articlesList.find(a => a.slug === slugOrId || a.id === slugOrId || generateSlug(a.title, a.id) === slugOrId);
       setActiveTab('blog');
       if (found) {
         setSelectedArticle(found);
@@ -145,7 +145,7 @@ export function App() {
 
     if (queryArticle) {
       const decodedQuery = decodeURIComponent(queryArticle);
-      const found = articlesList.find(a => a.slug === decodedQuery || a.id === decodedQuery);
+      const found = articlesList.find(a => a.slug === decodedQuery || a.id === decodedQuery || generateSlug(a.title, a.id) === decodedQuery);
       if (found) {
         setActiveTab('blog');
         setSelectedArticle(found);

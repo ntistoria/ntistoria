@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Upload, Image as ImageIcon, Bold, Italic, Underline, Heading2, Heading3, List, ListOrdered, Quote, Eye, Edit3, Loader2, CheckCircle2, AlertCircle, FileText, Trash2 } from 'lucide-react';
 import { Article, HistoricalCategory } from '../types';
-import { uploadBlogImage, formatArticleContent, deleteStorageImages } from '../lib/blogService';
+import { uploadBlogImage, formatArticleContent, deleteStorageImages, generateSlug } from '../lib/blogService';
 
 interface BlogEditorModalProps {
   isOpen: boolean;
@@ -277,7 +277,7 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
       const newArticle: Article = {
         id: articleToEdit?.id || `art-${Date.now()}`,
         title: title.trim(),
-        slug: title.trim().toLowerCase().replace(/[^a-z0-9georgian]/g, '-'),
+        slug: generateSlug(title.trim(), articleToEdit?.id),
         excerpt: excerpt.trim() || title.trim().substring(0, 120),
         content: finalContent.trim(),
         category,

@@ -1,3 +1,25 @@
+function transliterateGeorgian(str) {
+  if (!str) return '';
+  const geoMap = {
+    'ა': 'a', 'ბ': 'b', 'გ': 'g', 'დ': 'd', 'ე': 'e', 'ვ': 'v', 'ზ': 'z',
+    'თ': 't', 'ი': 'i', 'კ': 'k', 'ლ': 'l', 'მ': 'm', 'ნ': 'n', 'ო': 'o',
+    'პ': 'p', 'ჟ': 'zh', 'რ': 'r', 'ს': 's', 'ტ': 't', 'უ': 'u', 'ფ': 'p',
+    'ქ': 'q', 'ღ': 'gh', 'ყ': 'q', 'შ': 'sh', 'ჩ': 'ch', 'ც': 'ts', 'ძ': 'dz',
+    'წ': 'ts', 'ჭ': 'ch', 'ხ': 'kh', 'ჯ': 'j', 'ჰ': 'h'
+  };
+  return str.split('').map(char => geoMap[char] || char).join('');
+}
+
+function generateSlug(title, fallbackId) {
+  if (!title) return fallbackId || `art-${Date.now()}`;
+  const latinized = transliterateGeorgian(title.trim().toLowerCase());
+  const cleanSlug = latinized.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  if (!cleanSlug || cleanSlug.length < 2 || /^[-]+$/.test(cleanSlug)) {
+    return fallbackId || `art-${Date.now()}`;
+  }
+  return cleanSlug;
+}
+
 export default async function handler(req, res) {
   const urlObj = new URL(req.url, `https://${req.headers.host || 'ntistoria.vercel.app'}`);
   let slug = req.query?.slug || urlObj.searchParams.get('slug');
@@ -23,7 +45,7 @@ export default async function handler(req, res) {
   if (slug) {
     try {
       const decodedSlug = decodeURIComponent(slug);
-      const supabaseUrl = `https://enjnwxpzafroxapksdlt.supabase.co/rest/v1/articles?select=*&or=(slug.eq.${encodeURIComponent(decodedSlug)},id.eq.${encodeURIComponent(decodedSlug)})`;
+      const supabaseUrl = `https://enjnwxpzafroxapksdlt.supabase.co/rest/v1/articles?select=*`;
       const response = await fetch(supabaseUrl, {
         headers: {
           'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVuam53eHB6YWZyb3hhcGtzZGx0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAzNzc1MzUsImV4cCI6MjA1NTk1MzUzNX0.V5VvG1R8FkLd_dZk',
@@ -34,14 +56,27 @@ export default async function handler(req, res) {
       if (response.ok) {
         const articles = await response.json();
         if (articles && articles.length > 0) {
-          const article = articles[0];
-          articleData = article;
-          meta.title = `${article.title} — NT ისტორიის მასწავლებელი`;
-          meta.description = article.excerpt 
-            ? (article.excerpt.length > 155 ? `${article.excerpt.slice(0, 155)}...` : article.excerpt)
-            : `წაიკითხეთ სტატია "${article.title}" - NT ისტორიის მასწავლებელი ნოდარ თოთაძე.`;
-          meta.imageUrl = article.image_url || article.imageUrl || defaultMeta.imageUrl;
-          meta.url = `https://ntistoria.vercel.app/blog/${encodeURIComponent(article.slug || article.id)}`;
+          const article = articles.find(a => {
+            const aSlug = a.slug ? a.slug.trim() : '';
+            const genSlug = generateSlug(a.title, a.id);
+            return (
+              a.id === decodedSlug ||
+              aSlug === decodedSlug ||
+              genSlug === decodedSlug ||
+              (aSlug.startsWith('---') && genSlug === decodedSlug)
+            );
+          }) || articles[0];
+
+          if (article) {
+            articleData = article;
+            const finalSlug = generateSlug(article.title, article.id);
+            meta.title = `${article.title} — NT ისტორიის მასწავლებელი`;
+            meta.description = article.excerpt 
+              ? (article.excerpt.length > 155 ? `${article.excerpt.slice(0, 155)}...` : article.excerpt)
+              : `წაიკითხეთ სტატია "${article.title}" - NT ისტორიის მასწავლებელი ნოდარ თოთაძე.`;
+            meta.imageUrl = article.image_url || article.imageUrl || defaultMeta.imageUrl;
+            meta.url = `https://ntistoria.vercel.app/blog/${encodeURIComponent(finalSlug)}`;
+          }
         }
       }
     } catch (err) {
