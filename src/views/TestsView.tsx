@@ -7,6 +7,8 @@ import {
   fetchProgramsAndSubprograms, 
   fetchQuestionsForCategory, 
   fetchCategoryQuestionsCount,
+  fetchCategoryItemDetails,
+  CategoryItemDetails,
   buildHistoryTest 
 } from '../lib/testService';
 import { supabase } from '../lib/supabase';
@@ -103,9 +105,10 @@ const checkChronologyItemsMatch = (
 export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
   const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(null);
   const [programs, setPrograms] = useState<ProgramChapter[]>([]);
-  const [selectedChapterId, setSelectedChapterId] = useState<string>('ch-1');
+  const [selectedChapterId, setSelectedChapterId] = useState<string>('all');
   const [questionsCountMap, setQuestionsCountMap] = useState<Record<string, number>>({});
   const [categoryTotalCounts, setCategoryTotalCounts] = useState<Record<string, number>>({});
+  const [categoryItemDetailsMap, setCategoryItemDetailsMap] = useState<Record<string, CategoryItemDetails>>({});
   const [progressData, setProgressData] = useState<StudentProfileProgress | null>(null);
   const [loading, setLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -130,7 +133,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
   const userEmail = user?.email || 'guest_user';
 
-  // Load programs, total question counts per category, and student progress
+  // Load programs, total question counts per category, item details, and student progress
   useEffect(() => {
     let isMounted = true;
 
@@ -140,22 +143,26 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
         const progs = await fetchProgramsAndSubprograms();
         if (isMounted) {
           setPrograms(progs);
-          if (progs.length > 0) {
-            setSelectedChapterId(progs[0].id);
-          }
           setLoading(false);
         }
 
         const catEntries = await Promise.all(
           TEST_CATEGORIES.map(async (cat) => {
             const count = await fetchCategoryQuestionsCount(cat.key);
-            return [cat.key, count] as [string, number];
+            const details = await fetchCategoryItemDetails(cat.key);
+            return { key: cat.key, count, details };
           })
         );
 
         if (isMounted) {
-          const totalCounts: Record<string, number> = Object.fromEntries(catEntries);
+          const totalCounts: Record<string, number> = {};
+          const detailsMap: Record<string, CategoryItemDetails> = {};
+          catEntries.forEach(item => {
+            totalCounts[item.key] = item.count;
+            detailsMap[item.key] = item.details;
+          });
           setCategoryTotalCounts(totalCounts);
+          setCategoryItemDetailsMap(detailsMap);
         }
 
         const prog = await getStudentProgress(userEmail);
@@ -186,14 +193,23 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
         'postgres_changes',
         { event: '*', schema: 'public' },
         async () => {
-          // Re-fetch counts
+          // Re-fetch counts and details
           const catEntries = await Promise.all(
             TEST_CATEGORIES.map(async (cat) => {
               const count = await fetchCategoryQuestionsCount(cat.key);
-              return [cat.key, count] as [string, number];
+              const details = await fetchCategoryItemDetails(cat.key);
+              return { key: cat.key, count, details };
             })
           );
-          setCategoryTotalCounts(Object.fromEntries(catEntries));
+
+          const totalCounts: Record<string, number> = {};
+          const detailsMap: Record<string, CategoryItemDetails> = {};
+          catEntries.forEach(item => {
+            totalCounts[item.key] = item.count;
+            detailsMap[item.key] = item.details;
+          });
+          setCategoryTotalCounts(totalCounts);
+          setCategoryItemDetailsMap(detailsMap);
 
           // If a category is active, re-fetch questions
           if (selectedCategoryKey) {
@@ -246,7 +262,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
     }
 
     const chapterQuestions = categoryQuestions.filter(
-      q => q.chapterId === selectedChapterId || q.chapterId === `ch-${selectedChapterId.replace('ch-', '')}`
+      q => selectedChapterId === 'all' || q.chapterId === selectedChapterId || q.chapterId === `ch-${selectedChapterId.replace('ch-', '')}`
     );
 
     if (chapterQuestions.length === 0) {
@@ -254,11 +270,23 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
       return;
     }
 
-    // Group questions by itemNumber / mapImage / sourceContext
+    // Group questions by mapImage / sourceContext / itemNumber
     const groupMap = new Map<string, (QuizQuestion & { chapterId: string })[]>();
     
     chapterQuestions.forEach((q, idx) => {
-      const groupKey = String(q.itemNumber || q.mapImage || q.sourceContext?.substring(0, 40) || Math.floor(idx / 3));
+      let groupKey = '';
+      if (selectedCategoryKey === 'map' || selectedCategoryKey === 'illustrations') {
+        groupKey = q.mapImage || (q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`);
+      } else if (selectedCategoryKey === 'source' || selectedCategoryKey === 'analogies') {
+        groupKey = q.sourceContext?.substring(0, 100) || (q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`);
+      } else {
+        groupKey = q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`;
+      }
+
+      if (selectedChapterId === 'all') {
+        groupKey = `${q.chapterId}_${groupKey}`;
+      }
+
       const existing = groupMap.get(groupKey) || [];
       existing.push(q);
       groupMap.set(groupKey, existing);
@@ -276,7 +304,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
       else taskTitle = `დავალება N${itemNum}`;
 
       return {
-        id: `task-${itemNum}-${index}-${Date.now()}`,
+        id: `task-${selectedCategoryKey}-${itemNum}-${index}`,
         title: taskTitle,
         subtitle: `${qList.length} შეკითხვა დავალებაში`,
         image: firstQ.mapImage,
@@ -291,6 +319,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
   const handleSelectCategory = (key: string) => {
     setSelectedCategoryKey(key);
+    setSelectedChapterId('all');
     setActiveInlineTest(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -937,7 +966,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                         className="w-full py-3.5 bg-[#FAF8F3] hover:bg-[#E6DDCB] border border-[#E6DDCB] text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
                       >
                         <RotateCcw className="w-4 h-4 text-[#C79B3A]" />
-                        <span>თავიდან ცდა</span>
+                        <span>თავიდან გაკეთება</span>
                       </button>
 
                       <button
@@ -984,7 +1013,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {TEST_CATEGORIES.slice(0, 4).map((cat) => {
-                    const totalInDb = categoryTotalCounts[cat.key] || 0;
+                    const details = categoryItemDetailsMap[cat.key];
                     return (
                       <div
                         key={cat.key}
@@ -1004,7 +1033,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                             <span className="px-2.5 py-0.5 bg-[#FAF8F3] text-[#13253D] text-[11px] font-bold rounded-full border border-[#E6DDCB] flex items-center gap-1">
                               <Database className="w-3 h-3 text-[#C79B3A]" />
                               <span>
-                                {loading ? 'ტვირთვა...' : totalInDb > 0 ? `${totalInDb} კითხვა ბაზაში` : 'ბაზა ემზადება'}
+                                {loading ? 'ტვირთვა...' : details && details.count > 0 ? `${details.count} ${details.unitLabel} ბაზაში` : 'ბაზა ემზადება'}
                               </span>
                             </span>
                           </div>
@@ -1037,7 +1066,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {TEST_CATEGORIES.slice(4).map((cat) => {
-                    const totalInDb = categoryTotalCounts[cat.key] || 0;
+                    const details = categoryItemDetailsMap[cat.key];
                     return (
                       <div
                         key={cat.key}
@@ -1057,7 +1086,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                             <span className="px-2.5 py-0.5 bg-[#FAF8F3] text-[#13253D] text-[11px] font-bold rounded-full border border-[#E6DDCB] flex items-center gap-1">
                               <Database className="w-3 h-3 text-[#C79B3A]" />
                               <span>
-                                {loading ? 'ტვირთვა...' : totalInDb > 0 ? `${totalInDb} კითხვა ბაზაში` : 'ბაზა ემზადება'}
+                                {loading ? 'ტვირთვა...' : details && details.count > 0 ? `${details.count} ${details.unitLabel} ბაზაში` : 'ბაზა ემზადება'}
                               </span>
                             </span>
                           </div>
@@ -1101,7 +1130,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                         არჩეული კატეგორია
                       </span>
                       <span className="px-3 py-1 bg-white/10 text-[#FAF8F3] text-[11px] font-bold rounded-full border border-white/20">
-                        ბაზაშია {categoryTotalCounts[selectedCategoryKey] || 0} კითხვა
+                        ბაზაშია {categoryItemDetailsMap[selectedCategoryKey]?.count || 0} {categoryItemDetailsMap[selectedCategoryKey]?.unitLabel || 'კითხვა'}
                       </span>
                     </div>
                     <h2 className="font-serif font-bold text-2xl sm:text-4xl text-[#FAF8F3]">
@@ -1315,6 +1344,9 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                       onChange={(e) => setSelectedChapterId(e.target.value)}
                       className="w-full bg-[#FAF8F3] border border-[#C79B3A] rounded-xl px-4 py-3 text-xs font-bold text-[#0D1B2A] focus:outline-none focus:ring-2 focus:ring-[#C79B3A]"
                     >
+                      <option value="all">
+                        ყველა თავი (სულ {categoryItemDetailsMap[selectedCategoryKey]?.count || 0} {categoryItemDetailsMap[selectedCategoryKey]?.unitLabel || 'დავალება'})
+                      </option>
                       {programs.map((prog) => (
                         <option key={prog.id} value={prog.id}>
                           {prog.title} ({questionsCountMap[prog.id] ?? 0} კითხვა)
@@ -1325,14 +1357,19 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                     {/* Progress Bar for selected chapter */}
                     {(() => {
                       const currProg = programs.find(p => p.id === selectedChapterId);
-                      const totalQ = questionsCountMap[selectedChapterId] ?? 0;
+                      const displayTitle = selectedChapterId === 'all'
+                        ? 'ყველა თავი'
+                        : currProg?.title || 'არჩეული თავი';
+                      const totalQ = selectedChapterId === 'all'
+                        ? categoryQuestions.length
+                        : (questionsCountMap[selectedChapterId] ?? 0);
                       const stats = getChapterStats(selectedCategoryKey, selectedChapterId, totalQ);
 
                       return (
                         <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-3 pt-4 border-t">
                           <div className="flex items-center justify-between">
                             <span className="text-xs font-bold text-[#0D1B2A]">
-                              {currProg?.title} — პროგრესი
+                              {displayTitle} — პროგრესი
                             </span>
                             <span className="text-[11px] font-mono font-bold text-[#C79B3A]">
                               {stats.pct}% შესრულებული

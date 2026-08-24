@@ -215,6 +215,81 @@ export const fetchProgramsAndSubprograms = async (): Promise<ProgramChapter[]> =
   return DEFAULT_PROGRAMS;
 };
 
+export interface CategoryItemDetails {
+  count: number;
+  unitLabel: string;
+}
+
+/**
+ * Fetch total item count and unit label for a category (maps -> "რუკა", sources -> "წყარო", analogies -> "ანალოგია", illustrations -> "ილუსტრაცია", mcq/chronology -> "კითხვა")
+ */
+export const fetchCategoryItemDetails = async (categoryKey: string): Promise<CategoryItemDetails> => {
+  if (categoryKey === 'map') {
+    try {
+      const { count, error } = await supabase.from('maps').select('*', { count: 'exact', head: true });
+      if (!error && typeof count === 'number' && count > 0) {
+        return { count, unitLabel: 'რუკა' };
+      }
+    } catch (e) {}
+
+    const questions = await fetchQuestionsForCategory('map');
+    const groupKeys = new Set(questions.map(q => q.mapImage || (q.itemNumber ? `item-${q.itemNumber}` : q.id)));
+    const c = groupKeys.size > 0 ? groupKeys.size : questions.length;
+    return { count: c, unitLabel: 'რუკა' };
+  }
+
+  if (categoryKey === 'source') {
+    for (const t of ['sources', 'source']) {
+      try {
+        const { count, error } = await supabase.from(t).select('*', { count: 'exact', head: true });
+        if (!error && typeof count === 'number' && count > 0) {
+          return { count, unitLabel: 'წყარო' };
+        }
+      } catch (e) {}
+    }
+
+    const questions = await fetchQuestionsForCategory('source');
+    const groupKeys = new Set(questions.map(q => q.sourceContext?.substring(0, 100) || (q.itemNumber ? `item-${q.itemNumber}` : q.id)));
+    const c = groupKeys.size > 0 ? groupKeys.size : questions.length;
+    return { count: c, unitLabel: 'წყარო' };
+  }
+
+  if (categoryKey === 'analogies') {
+    for (const t of ['analogies', 'analogy']) {
+      try {
+        const { count, error } = await supabase.from(t).select('*', { count: 'exact', head: true });
+        if (!error && typeof count === 'number' && count > 0) {
+          return { count, unitLabel: 'ანალოგია' };
+        }
+      } catch (e) {}
+    }
+
+    const questions = await fetchQuestionsForCategory('analogies');
+    const groupKeys = new Set(questions.map(q => q.sourceContext?.substring(0, 100) || (q.itemNumber ? `item-${q.itemNumber}` : q.id)));
+    const c = groupKeys.size > 0 ? groupKeys.size : questions.length;
+    return { count: c, unitLabel: 'ანალოგია' };
+  }
+
+  if (categoryKey === 'illustrations') {
+    for (const t of ['illustrations', 'illustration']) {
+      try {
+        const { count, error } = await supabase.from(t).select('*', { count: 'exact', head: true });
+        if (!error && typeof count === 'number' && count > 0) {
+          return { count, unitLabel: 'ილუსტრაცია' };
+        }
+      } catch (e) {}
+    }
+
+    const questions = await fetchQuestionsForCategory('illustrations');
+    const groupKeys = new Set(questions.map(q => q.mapImage || (q.itemNumber ? `item-${q.itemNumber}` : q.id)));
+    const c = groupKeys.size > 0 ? groupKeys.size : questions.length;
+    return { count: c, unitLabel: 'ილუსტრაცია' };
+  }
+
+  const count = await fetchCategoryQuestionsCount(categoryKey);
+  return { count, unitLabel: 'კითხვა' };
+};
+
 /**
  * Fetch Total Question Count for a Category directly from Supabase DB (public schema)
  */
