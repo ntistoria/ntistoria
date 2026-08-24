@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { NavTab, Article, HistoryTest, VideoLesson } from './types';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
@@ -16,7 +16,7 @@ import { SearchModal } from './components/SearchModal';
 import { AuthModal } from './components/AuthModal';
 import { StudentProfileModal } from './components/StudentProfileModal';
 import { supabase } from './lib/supabase';
-import { isAdminUser, fetchAllArticles } from './lib/blogService';
+import { isAdminUser, fetchAllArticles, getInitialArticles } from './lib/blogService';
 import { fetchUserProfile, syncUserProfile } from './lib/userService';
 
 // Dynamic SEO Meta Manager Helper for SPA
@@ -80,6 +80,7 @@ function updateSeoMetaData(options: {
 
 export function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('home');
+  const [allArticles, setAllArticles] = useState<Article[]>(() => getInitialArticles());
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [selectedTest, setSelectedTest] = useState<HistoryTest | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<VideoLesson | null>(null);
@@ -88,6 +89,106 @@ export function App() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
 
+  // Route syncing helper
+  const syncRouteWithState = useCallback((articlesList: Article[]) => {
+    const pathname = window.location.pathname;
+    const searchParams = new URLSearchParams(window.location.search);
+    const queryArticle = searchParams.get('article');
+
+    if (pathname.startsWith('/blog/')) {
+      const slugOrId = decodeURIComponent(pathname.replace('/blog/', '').replace(/\/$/, ''));
+      const found = articlesList.find(a => a.slug === slugOrId || a.id === slugOrId);
+      setActiveTab('blog');
+      if (found) {
+        setSelectedArticle(found);
+      } else {
+        setSelectedArticle(null);
+      }
+      return;
+    }
+
+    if (pathname === '/blog') {
+      setActiveTab('blog');
+      setSelectedArticle(null);
+      return;
+    }
+
+    if (pathname === '/tests') {
+      setActiveTab('tests');
+      setSelectedArticle(null);
+      return;
+    }
+
+    if (pathname === '/videos') {
+      setActiveTab('videos');
+      setSelectedArticle(null);
+      return;
+    }
+
+    if (pathname === '/quizzes') {
+      setActiveTab('quizzes');
+      setSelectedArticle(null);
+      return;
+    }
+
+    if (pathname === '/contact') {
+      setActiveTab('contact');
+      setSelectedArticle(null);
+      return;
+    }
+
+    if (pathname === '/admin') {
+      setActiveTab('admin');
+      setSelectedArticle(null);
+      return;
+    }
+
+    if (queryArticle) {
+      const decodedQuery = decodeURIComponent(queryArticle);
+      const found = articlesList.find(a => a.slug === decodedQuery || a.id === decodedQuery);
+      if (found) {
+        setActiveTab('blog');
+        setSelectedArticle(found);
+        return;
+      }
+    }
+
+    const tabParam = searchParams.get('tab') as NavTab;
+    if (tabParam) {
+      setActiveTab(tabParam);
+      setSelectedArticle(null);
+      return;
+    }
+
+    if (pathname === '/' || pathname === '') {
+      setActiveTab('home');
+      setSelectedArticle(null);
+    }
+  }, []);
+
+  // Fetch articles and sync route on mount
+  useEffect(() => {
+    let isMounted = true;
+    const init = async () => {
+      const fetched = await fetchAllArticles();
+      if (isMounted) {
+        setAllArticles(fetched);
+        syncRouteWithState(fetched);
+      }
+    };
+    init();
+
+    const handlePopState = () => {
+      syncRouteWithState(allArticles);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [syncRouteWithState]);
+
   // Dynamic SEO title, description, canonical & Open Graph manager
   useEffect(() => {
     if (selectedArticle) {
@@ -95,7 +196,8 @@ export function App() {
       const artDesc = selectedArticle.excerpt 
         ? (selectedArticle.excerpt.length > 155 ? `${selectedArticle.excerpt.slice(0, 155)}...` : selectedArticle.excerpt)
         : `წაიკითხეთ სტატია "${selectedArticle.title}" - NT ისტორიის მასწავლებელი ნოდარ თოთაძე.`;
-      const artUrl = `https://ntistoria.vercel.app/?article=${encodeURIComponent(selectedArticle.slug || selectedArticle.id)}`;
+      const postSlugOrId = selectedArticle.slug || selectedArticle.id;
+      const artUrl = `https://ntistoria.vercel.app/blog/${encodeURIComponent(postSlugOrId)}`;
 
       updateSeoMetaData({
         title: artTitle,
@@ -130,12 +232,13 @@ export function App() {
       return;
     }
 
+    const domain = 'https://ntistoria.vercel.app';
     switch (activeTab) {
       case 'home':
         updateSeoMetaData({
           title: 'NT ისტორიის მასწავლებელი — ეროვნული გამოცდების მოსამზადებელი',
           description: 'ისტორიის პედაგოგ ნოდარ თოთაძის მოსამზადებელი პორტალი. ეროვნული გამოცდების ტესტები, ისტორიული ბლოგი, რუკები და ვიდეო გაკვეთილები.',
-          canonicalUrl: 'https://ntistoria.vercel.app/'
+          canonicalUrl: `${domain}/`
         });
         break;
 
@@ -143,7 +246,7 @@ export function App() {
         updateSeoMetaData({
           title: 'ისტორიული ბლოგი და სტატიები — NT ისტორიის მასწავლებელი',
           description: 'საქართველოსა და მსოფლიო ისტორიის სამეცნიერო და შემეცნებითი სტატიები, ისტორიული წყაროების ანალიზი და ეროვნული გამოცდების დამხმარე მასალები.',
-          canonicalUrl: 'https://ntistoria.vercel.app/?tab=blog'
+          canonicalUrl: `${domain}/blog`
         });
         break;
 
@@ -151,7 +254,7 @@ export function App() {
         updateSeoMetaData({
           title: 'ისტორიის ტესტები და ეროვნული გამოცდები — NT ისტორია',
           description: 'ეროვნული გამოცდების ისტორიის ტესტები: არჩევითპასუხიანი, რუკები, წყაროები, ანალოგიები, ქრონოლოგია და ილუსტრაციები.',
-          canonicalUrl: 'https://ntistoria.vercel.app/?tab=tests'
+          canonicalUrl: `${domain}/tests`
         });
         break;
 
@@ -159,7 +262,7 @@ export function App() {
         updateSeoMetaData({
           title: 'ვიდეო გაკვეთილები ისტორიაში — ეროვნული გამოცდები',
           description: 'ისტორიის ვიდეო გაკვეთილები, ლექციები და ეროვნული გამოცდების საგამოცდო მასალების მიმოხილვა ნოდარ თოთაძისგან.',
-          canonicalUrl: 'https://ntistoria.vercel.app/?tab=videos'
+          canonicalUrl: `${domain}/videos`
         });
         break;
 
@@ -167,7 +270,7 @@ export function App() {
         updateSeoMetaData({
           title: 'ონლაინ ვიქტორინები და ქვიზები ისტორიაში — NT ისტორია',
           description: 'ინტერაქტიული ვიქტორინები და სწრაფი ქვიზები საქართველოსა და მსოფლიო ისტორიაში ეროვნული გამოცდებისთვის.',
-          canonicalUrl: 'https://ntistoria.vercel.app/?tab=quizzes'
+          canonicalUrl: `${domain}/quizzes`
         });
         break;
 
@@ -175,7 +278,7 @@ export function App() {
         updateSeoMetaData({
           title: 'კონტაქტი — NT ისტორიის მასწავლებელი ნოდარ თოთაძე',
           description: 'დაუკავშირდით ისტორიის პედაგოგ ნოდარ თოთაძეს. ეროვნული გამოცდების მოსამზადებელი ჯგუფები, მისამართი და საკონტაქტო ინფორმაცია.',
-          canonicalUrl: 'https://ntistoria.vercel.app/?tab=contact'
+          canonicalUrl: `${domain}/contact`
         });
         break;
 
@@ -183,7 +286,7 @@ export function App() {
         updateSeoMetaData({
           title: 'NT ისტორიის მასწავლებელი — ეროვნული გამოცდების მოსამზადებელი',
           description: 'ისტორიის პედაგოგ ნოდარ თოთაძის მოსამზადებელი პორტალი. ეროვნული გამოცდების ტესტები, ისტორიული ბლოგი, რუკები და ვიდეო გაკვეთილები.',
-          canonicalUrl: 'https://ntistoria.vercel.app/'
+          canonicalUrl: `${domain}/`
         });
     }
 
@@ -191,9 +294,9 @@ export function App() {
     if (typeof window !== 'undefined' && (window as any).gtag) {
       let currentPath = '/';
       if (selectedArticle) {
-        currentPath = `/?article=${encodeURIComponent(selectedArticle.slug || selectedArticle.id)}`;
+        currentPath = `/blog/${encodeURIComponent(selectedArticle.slug || selectedArticle.id)}`;
       } else if (activeTab && activeTab !== 'home') {
-        currentPath = `/?tab=${activeTab}`;
+        currentPath = `/${activeTab}`;
       }
       (window as any).gtag('config', 'G-VHKM6K967T', { page_path: currentPath });
     }
@@ -265,11 +368,20 @@ export function App() {
 
   const handleOpenArticle = (article: Article) => {
     setSelectedArticle(article);
+    setActiveTab('blog');
+    const slugOrId = encodeURIComponent(article.slug || article.id);
+    const newPath = `/blog/${slugOrId}`;
+    if (window.location.pathname !== newPath) {
+      window.history.pushState({ articleId: article.id }, '', newPath);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleCloseArticle = () => {
     setSelectedArticle(null);
+    if (window.location.pathname !== '/blog') {
+      window.history.pushState({}, '', '/blog');
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -282,8 +394,12 @@ export function App() {
   };
 
   const handleTabChange = (tab: NavTab) => {
-    handleCloseArticle();
+    setSelectedArticle(null);
     setActiveTab(tab);
+    const newPath = tab === 'home' ? '/' : `/${tab}`;
+    if (window.location.pathname !== newPath) {
+      window.history.pushState({ tab }, '', newPath);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -301,12 +417,13 @@ export function App() {
       />
 
       {/* Main Dynamic View Area */}
-      <main className="flex-1">
+      <main className="flex-1 pt-20">
         {selectedArticle ? (
           <ArticleDetailView 
             article={selectedArticle}
             onBack={handleCloseArticle}
             onSelectRelated={(art) => handleOpenArticle(art)}
+            allArticles={allArticles}
           />
         ) : (
           <>
@@ -381,8 +498,7 @@ export function App() {
         onSuccessLogin={(userData) => {
           setUser(userData);
           if (isAdminUser(userData)) {
-            setActiveTab('admin');
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            handleTabChange('admin');
           }
           setIsAuthOpen(false);
         }}
