@@ -37,7 +37,7 @@ export default async function handler(req, res) {
   const defaultMeta = {
     title: 'NT ისტორიის მასწავლებელი — ეროვნული გამოცდების მოსამზადებელი',
     description: 'ისტორიის პედაგოგ ნოდარ თოთაძის მოსამზადებელი პორტალი. ეროვნული გამოცდების ტესტები, ისტორიული ბლოგი, რუკები და ვიდეო გაკვეთილები.',
-    imageUrl: 'https://enjnwxpzafroxapksdlt.supabase.co/storage/v1/object/public/photos/logpng.png',
+    imageUrl: 'https://enjnwxpzafroxapksdlt.supabase.co/storage/v1/object/public/photos/logooo.png',
     url: `https://ntistoria.vercel.app${slug ? `/blog/${encodeURIComponent(slug)}` : '/'}`,
     type: slug ? 'article' : 'website'
   };
@@ -117,7 +117,7 @@ export default async function handler(req, res) {
       "name": "NT ისტორიის მასწავლებელი",
       "logo": {
         "@type": "ImageObject",
-        "url": "https://enjnwxpzafroxapksdlt.supabase.co/storage/v1/object/public/photos/logpng.png"
+        "url": "https://enjnwxpzafroxapksdlt.supabase.co/storage/v1/object/public/photos/logooo.png"
       }
     },
     "datePublished": articleData.date || "2026-08-24",
@@ -175,7 +175,7 @@ export default async function handler(req, res) {
     <meta name="twitter:description" content="${descHtml}" />
     <meta name="twitter:image" content="${imageHtml}" />
 
-    <link rel="icon" type="image/png" href="https://enjnwxpzafroxapksdlt.supabase.co/storage/v1/object/public/photos/logpng.png" />
+    <link rel="icon" type="image/png" href="https://enjnwxpzafroxapksdlt.supabase.co/storage/v1/object/public/photos/logooo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Georgian:wght@300;400;500;600;700&family=Noto+Serif+Georgian:wght@400;500;600;700&display=swap" rel="stylesheet">
