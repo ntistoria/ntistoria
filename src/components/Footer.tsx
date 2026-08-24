@@ -31,7 +31,7 @@ export const Footer: React.FC<FooterProps> = ({ setActiveTab }) => {
           <div className="md:col-span-4 space-y-5">
             <Logo 
               variant="compact" 
-              src="https://vqkpacwswksgvhuczrbw.supabase.co/storage/v1/object/public/photos/logooo.png"
+              src="https://enjnwxpzafroxapksdlt.supabase.co/storage/v1/object/public/photos/logooo.png"
               imgClassName="h-16 sm:h-20 md:h-24 max-w-[280px]" 
               onClick={() => setActiveTab('home')} 
             />

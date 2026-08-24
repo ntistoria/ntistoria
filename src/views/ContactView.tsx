@@ -248,7 +248,7 @@ export const ContactView: React.FC = () => {
           <div className="bg-white p-8 sm:p-10 rounded-2xl border-2 border-[#E6DDCB] shadow-luxury text-center space-y-6">
             <div className="p-8 rounded-2xl bg-[#FAF8F3] border border-[#E6DDCB] flex items-center justify-center transition-all hover:border-[#C79B3A]/50 shadow-inner">
               <img 
-                src="https://vqkpacwswksgvhuczrbw.supabase.co/storage/v1/object/public/photos/logooo.png" 
+                src="https://enjnwxpzafroxapksdlt.supabase.co/storage/v1/object/public/photos/logooo.png" 
                 alt="NT ისტორიის მასწავლებელი ლოგო" 
                 className="w-full max-w-[280px] sm:max-w-[320px] h-auto object-contain drop-shadow-md transition-transform duration-500 hover:scale-105"
                 referrerPolicy="no-referrer"
