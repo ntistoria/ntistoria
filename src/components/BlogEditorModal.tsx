@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Upload, Image as ImageIcon, Bold, Italic, Underline, Heading2, Heading3, List, ListOrdered, Quote, Eye, Edit3, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, Upload, Image as ImageIcon, Bold, Italic, Underline, Heading2, Heading3, List, ListOrdered, Quote, Eye, Edit3, Loader2, CheckCircle2, AlertCircle, FileText, Trash2 } from 'lucide-react';
 import { Article, HistoricalCategory } from '../types';
 import { uploadBlogImage, formatArticleContent } from '../lib/blogService';
 
@@ -212,7 +212,7 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
     if (!urlToUse.trim()) return;
 
     const caption = captionText !== undefined ? captionText : inlineCaption;
-    const figureHtml = `<figure class="my-6 text-center"><img src="${urlToUse.trim()}" alt="${caption.trim()}" class="rounded-2xl max-w-full mx-auto shadow-md border border-[#E6DDCB]" />${caption.trim() ? `<figcaption class="text-xs text-[#666666] italic mt-2">${caption.trim()}</figcaption>` : ''}</figure><p><br /></p>`;
+    const figureHtml = `<figure class="my-6 text-center relative group inline-block max-w-full"><img src="${urlToUse.trim()}" alt="${caption.trim()}" class="rounded-2xl max-w-full mx-auto shadow-md border border-[#E6DDCB]" />${caption.trim() ? `<figcaption class="text-xs text-[#666666] italic mt-2">${caption.trim()}</figcaption>` : ''}<button type="button" contenteditable="false" onclick="this.closest('figure').remove()" class="absolute top-2 right-2 bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg shadow cursor-pointer transition-all opacity-80 group-hover:opacity-100 flex items-center gap-1"><span>წაშლა</span></button></figure><p><br /></p>`;
 
     if (editorRef.current) {
       editorRef.current.focus();
@@ -228,8 +228,8 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
     setShowImageModal(false);
   };
 
-  // Save / Submit Form
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Save / Submit Form (supports targetStatus: 'published' | 'draft')
+  const handleSubmit = async (e: React.FormEvent, targetStatus: 'published' | 'draft' = 'published') => {
     e.preventDefault();
     setErrorMessage('');
 
@@ -264,11 +264,12 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
         date: articleToEdit?.date || new Date().toISOString().split('T')[0],
         imageUrl: imageUrl || 'https://images.unsplash.com/photo-1544967082-d9d25d867d66',
         featured,
-        tags: tags.length ? tags : ['ისტორია']
+        tags: tags.length ? tags : ['ისტორია'],
+        status: targetStatus
       };
 
       await onSave(newArticle);
-      setSuccessMessage('ბლოგი წარმატებით შენახულია!');
+      setSuccessMessage(targetStatus === 'draft' ? 'ბლოგი წარმატებით შეინახა დრაფტებში!' : 'ბლოგი წარმატებით შენახულია!');
       
       setTimeout(() => {
         setIsSaving(false);
@@ -593,7 +594,7 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
                     }
                   }}
                   onPaste={handlePaste}
-                  className="w-full min-h-[320px] max-h-[500px] overflow-y-auto bg-[#FAF8F3] border border-[#E6DDCB] rounded-2xl p-5 text-sm font-serif leading-relaxed text-[#13253D] focus:outline-none focus:ring-2 focus:ring-[#C79B3A]/50 focus:border-[#C79B3A] prose prose-stone max-w-none prose-headings:font-serif prose-headings:text-[#0D1B2A] prose-headings:font-bold prose-blockquote:border-l-4 prose-blockquote:border-[#C79B3A] prose-blockquote:pl-4 prose-blockquote:italic prose-img:rounded-2xl prose-img:shadow-md prose-img:mx-auto prose-img:my-4"
+                  className="w-full min-h-[320px] max-h-[500px] overflow-y-auto bg-[#FAF8F3] border border-[#E6DDCB] rounded-2xl p-5 text-sm font-serif leading-relaxed text-[#13253D] focus:outline-none focus:ring-2 focus:ring-[#C79B3A]/50 focus:border-[#C79B3A] prose prose-stone max-w-none prose-headings:font-serif prose-headings:text-[#0D1B2A] prose-headings:font-bold prose-blockquote:border-l-4 prose-blockquote:border-[#C79B3A] prose-blockquote:pl-4 prose-blockquote:italic prose-img:rounded-2xl prose-img:shadow-md prose-img:mx-auto prose-img:my-4 prose-ul:list-disc prose-ul:pl-6 prose-ol:list-decimal prose-ol:pl-6 prose-li:my-1"
                   data-placeholder="დაწერეთ ან დააკოპირეთ MS Word-იდან ტექსტი აქ..."
                 />
               </div>
@@ -773,18 +774,33 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
           )}
 
           {/* Footer Actions */}
-          <div className="pt-4 border-t border-[#E6DDCB] flex items-center justify-end gap-3">
+          <div className="pt-4 border-t border-[#E6DDCB] flex items-center justify-end gap-3 flex-wrap">
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 border border-[#E6DDCB] text-[#13253D] text-xs uppercase tracking-wider font-bold rounded-xl hover:bg-[#FAF8F3] transition-colors cursor-pointer"
+              className="px-4 py-2.5 border border-[#E6DDCB] text-[#13253D] text-xs uppercase tracking-wider font-bold rounded-xl hover:bg-[#FAF8F3] transition-colors cursor-pointer"
             >
               გაუქმება
             </button>
 
             <button
-              type="submit"
+              type="button"
               disabled={isSaving || uploadingImage}
+              onClick={(e) => handleSubmit(e, 'draft')}
+              className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              {isSaving ? (
+                <Loader2 className="w-4 h-4 animate-spin text-white" />
+              ) : (
+                <FileText className="w-4 h-4 text-white" />
+              )}
+              <span>დრაფტად შენახვა</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={isSaving || uploadingImage}
+              onClick={(e) => handleSubmit(e, 'published')}
               className="px-6 py-2.5 bg-[#13253D] hover:bg-[#C79B3A] text-white text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {isSaving ? (

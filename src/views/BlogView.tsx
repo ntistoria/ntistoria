@@ -42,6 +42,7 @@ export const BlogView: React.FC<BlogViewProps> = ({ onOpenArticle }) => {
   }, []);
 
   const filteredArticles = articles.filter(art => {
+    if (art.status === 'draft') return false;
     const matchesCat = selectedCategory === 'ყველა' || art.category === selectedCategory;
     const matchesSearch = searchQuery === '' || 
       art.title.toLowerCase().includes(searchQuery.toLowerCase()) ||

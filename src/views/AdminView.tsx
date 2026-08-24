@@ -14,6 +14,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => 
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedStatus, setSelectedStatus] = useState<'all' | 'published' | 'draft'>('all');
 
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
@@ -78,7 +79,9 @@ export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => 
     const matchesSearch = art.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           art.excerpt.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCat = selectedCategory === 'all' || art.category === selectedCategory;
-    return matchesSearch && matchesCat;
+    const matchesStatus = selectedStatus === 'all' || 
+                          (selectedStatus === 'draft' ? art.status === 'draft' : art.status !== 'draft');
+    return matchesSearch && matchesCat && matchesStatus;
   });
 
   return (
@@ -105,7 +108,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => 
             ბლოგებისა და კონტენტის მართვა
           </h1>
           <p className="text-xs sm:text-sm text-[#FAF8F3]/80 max-w-xl font-normal">
-            დაამატეთ ახალი ისტორიული სტატიები, დაარედაქტირეთ არსებული ბლოგები და ატვირთეთ ფოტოები Supabase Storage-ში.
+            დაამატეთ ახალი ისტორიული სტატიები, დაარედაქტირეთ არსებული ბლოგები და შეინახეთ დრაფტებში.
           </p>
         </div>
 
@@ -125,7 +128,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => 
       <div className="bg-white p-4 rounded-2xl border border-[#E6DDCB] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
         
         {/* Search */}
-        <div className="relative w-full sm:w-80">
+        <div className="relative w-full sm:w-72">
           <Search className="w-4 h-4 text-[#C79B3A] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -136,13 +139,13 @@ export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => 
           />
         </div>
 
-        {/* Category Filter */}
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
           <Filter className="w-4 h-4 text-[#C79B3A] shrink-0" />
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="w-full sm:w-60 bg-[#FAF8F3] border border-[#E6DDCB] rounded-xl px-3 py-2 text-xs font-medium text-[#13253D] focus:outline-none focus:border-[#C79B3A]"
+            className="bg-[#FAF8F3] border border-[#E6DDCB] rounded-xl px-3 py-2 text-xs font-medium text-[#13253D] focus:outline-none focus:border-[#C79B3A]"
           >
             <option value="all">ყველა კატეგორია</option>
             <option value="საქართველოს ისტორია">საქართველოს ისტორია</option>
@@ -150,6 +153,16 @@ export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => 
             <option value="შუა საუკუნეები">შუა საუკუნეები</option>
             <option value="ახალი და უახლესი ისტორია">ახალი და უახლესი ისტორია</option>
             <option value="ეროვნული გამოცდები">ეროვნული გამოცდები</option>
+          </select>
+
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value as any)}
+            className="bg-[#FAF8F3] border border-[#E6DDCB] rounded-xl px-3 py-2 text-xs font-medium text-[#13253D] focus:outline-none focus:border-[#C79B3A]"
+          >
+            <option value="all">ყველა სტატუსი</option>
+            <option value="published">გამოქვეყნებული</option>
+            <option value="draft">დრაფტები</option>
           </select>
         </div>
 
@@ -173,19 +186,14 @@ export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => 
         </div>
 
         {loading ? (
-          <div className="p-12 text-center text-[#666666] text-xs">
-            ბლოგების ჩატვირთვა...
+          <div className="p-12 text-center text-[#8A8A8A]">
+            <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[#C79B3A] mb-2" />
+            <span>იტვირთება სტატიები...</span>
           </div>
         ) : filteredArticles.length === 0 ? (
-          <div className="p-12 text-center space-y-3">
-            <FileText className="w-10 h-10 text-[#C79B3A] mx-auto opacity-50" />
-            <p className="text-sm font-semibold text-[#13253D]">ბლოგები ვერ მოიძებნა</p>
-            <button
-              onClick={handleCreateNew}
-              className="px-4 py-2 bg-[#13253D] text-white text-xs font-bold rounded-xl"
-            >
-              დაწერეთ პირველი ბლოგი
-            </button>
+          <div className="p-12 text-center text-[#8A8A8A] space-y-2">
+            <FileText className="w-8 h-8 text-[#C79B3A] mx-auto opacity-60" />
+            <p className="font-serif text-sm font-semibold">სტატიები ვერ მოიძებნა</p>
           </div>
         ) : (
           <div className="divide-y divide-[#E6DDCB]">
@@ -206,6 +214,15 @@ export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => 
                       <span className="px-2.5 py-0.5 bg-[#FAF8F3] border border-[#E6DDCB] text-[#C79B3A] text-[10px] font-bold rounded-md uppercase">
                         {art.category}
                       </span>
+                      {art.status === 'draft' ? (
+                        <span className="px-2 py-0.5 bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-bold rounded-md">
+                          📝 დრაფტი
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold rounded-md">
+                          ✓ გამოქვეყნებული
+                        </span>
+                      )}
                       {art.featured && (
                         <span className="px-2 py-0.5 bg-[#C79B3A] text-[#0D1B2A] text-[10px] font-bold rounded-md">
                           ★ რჩეული

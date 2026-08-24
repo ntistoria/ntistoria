@@ -59,7 +59,8 @@ export const fetchAllArticles = async (): Promise<Article[]> => {
         date: item.date || new Date().toISOString().split('T')[0],
         imageUrl: item.image_url || item.imageUrl || 'https://images.unsplash.com/photo-1544967082-d9d25d867d66',
         featured: item.featured || false,
-        tags: item.tags ? (typeof item.tags === 'string' ? JSON.parse(item.tags) : item.tags) : ['ისტორია']
+        tags: item.tags ? (typeof item.tags === 'string' ? JSON.parse(item.tags) : item.tags) : ['ისტორია'],
+        status: item.status || 'published'
       }));
     }
   } catch (err) {
@@ -82,14 +83,15 @@ export const saveArticle = async (article: Article): Promise<Article> => {
     id: article.id || `art-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
     date: article.date || new Date().toISOString().split('T')[0],
     author: article.author || 'ნოდარ თოთაძე',
-    tags: article.tags?.length ? article.tags : ['ისტორია', article.category]
+    tags: article.tags?.length ? article.tags : ['ისტორია', article.category],
+    status: article.status || 'published'
   };
 
   let supabaseError: any = null;
 
   // Try saving to Supabase first
   try {
-    const { error } = await supabase.from('articles').upsert({
+    const payload: any = {
       id: articleToSave.id,
       title: articleToSave.title,
       slug: articleToSave.slug || articleToSave.id,
@@ -100,8 +102,18 @@ export const saveArticle = async (article: Article): Promise<Article> => {
       date: articleToSave.date,
       image_url: articleToSave.imageUrl,
       featured: articleToSave.featured || false,
-      tags: articleToSave.tags
-    });
+      tags: articleToSave.tags,
+      status: articleToSave.status
+    };
+
+    let { error } = await supabase.from('articles').upsert(payload);
+
+    // If status column is not present in Supabase table yet, retry without status column
+    if (error && error.message && error.message.includes('status')) {
+      delete payload.status;
+      const retryResult = await supabase.from('articles').upsert(payload);
+      error = retryResult.error;
+    }
 
     if (error) {
       console.error('Supabase article save error:', error);

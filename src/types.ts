@@ -23,6 +23,7 @@ export interface Article {
   imageUrl: string;
   featured?: boolean;
   tags: string[];
+  status?: 'published' | 'draft';
   primarySources?: {
     title: string;
     text: string;
