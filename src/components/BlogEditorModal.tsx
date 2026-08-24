@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Upload, Image as ImageIcon, Bold, Italic, Underline, Heading2, Heading3, List, ListOrdered, Quote, Eye, Edit3, Loader2, CheckCircle2, AlertCircle, FileText, Trash2 } from 'lucide-react';
 import { Article, HistoricalCategory } from '../types';
-import { uploadBlogImage, formatArticleContent } from '../lib/blogService';
+import { uploadBlogImage, formatArticleContent, deleteStorageImages } from '../lib/blogService';
 
 interface BlogEditorModalProps {
   isOpen: boolean;
@@ -162,6 +162,27 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
       document.execCommand('insertHTML', false, cleanHtml);
       if (editorRef.current) {
         setContent(editorRef.current.innerHTML);
+      }
+    }
+  };
+
+  // Handle Click on Inline Image Delete Buttons
+  const handleEditorClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const deleteBtn = target.closest('.delete-inline-img-btn');
+    if (deleteBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const figure = deleteBtn.closest('figure');
+      if (figure) {
+        const img = figure.querySelector('img');
+        if (img && img.src) {
+          deleteStorageImages([img.src]);
+        }
+        figure.remove();
+        if (editorRef.current) {
+          setContent(editorRef.current.innerHTML);
+        }
       }
     }
   };
@@ -588,6 +609,7 @@ export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
                 <div
                   ref={editorRef}
                   contentEditable
+                  onClick={handleEditorClick}
                   onInput={() => {
                     if (editorRef.current) {
                       setContent(editorRef.current.innerHTML);

@@ -148,11 +148,89 @@ export const saveArticle = async (article: Article): Promise<Article> => {
   return articleToSave;
 };
 
-// Delete an article by ID
-export const deleteArticle = async (id: string): Promise<boolean> => {
+// Extract storage file path from a Supabase Storage public URL
+export const extractStoragePath = (url: string, bucketName: string = 'photos'): string | null => {
+  if (!url) return null;
+  const pattern = new RegExp(`/storage/v1/object/public/${bucketName}/([^?#]+)`);
+  const match = url.match(pattern);
+  if (match && match[1]) {
+    return decodeURIComponent(match[1]);
+  }
+  // Also check if URL ends with bucketName/filename
+  const bucketPattern = new RegExp(`${bucketName}/([^?#]+)`);
+  const bucketMatch = url.match(bucketPattern);
+  if (bucketMatch && bucketMatch[1]) {
+    return decodeURIComponent(bucketMatch[1]);
+  }
+  return null;
+};
+
+// Delete multiple image files from Supabase Storage bucket
+export const deleteStorageImages = async (urls: string[], bucketName: string = 'photos'): Promise<void> => {
+  if (!urls || urls.length === 0) return;
+
+  const paths = urls
+    .map(url => extractStoragePath(url, bucketName))
+    .filter((p): p is string => Boolean(p));
+
+  if (paths.length === 0) return;
+
+  try {
+    const { data, error } = await supabase.storage.from(bucketName).remove(paths);
+    if (error) {
+      console.warn('Supabase storage delete notice:', error.message);
+    } else {
+      console.log('Successfully deleted files from Supabase Storage:', paths);
+    }
+  } catch (err) {
+    console.warn('Error deleting images from Supabase storage:', err);
+  }
+};
+
+// Extract all <img> src URLs from HTML content
+export const extractImageUrlsFromContent = (content: string): string[] => {
+  if (!content) return [];
+  const imgRegex = /<img[^>]+src=["']([^"']+)["']/gi;
+  const urls: string[] = [];
+  let match;
+  while ((match = imgRegex.exec(content)) !== null) {
+    if (match[1]) {
+      urls.push(match[1]);
+    }
+  }
+  return urls;
+};
+
+// Delete an article by object or ID (and clean up associated photos in Supabase Storage)
+export const deleteArticle = async (articleOrId: Article | string): Promise<boolean> => {
+  let targetArticle: Article | undefined;
+  
+  if (typeof articleOrId === 'object') {
+    targetArticle = articleOrId;
+  } else {
+    const all = getInitialArticles();
+    targetArticle = all.find(a => a.id === articleOrId);
+  }
+
+  const idToDelete = typeof articleOrId === 'string' ? articleOrId : articleOrId.id;
+
+  // Clean up photos from Supabase Storage
+  if (targetArticle) {
+    const urlsToDelete: string[] = [];
+    if (targetArticle.imageUrl) {
+      urlsToDelete.push(targetArticle.imageUrl);
+    }
+    if (targetArticle.content) {
+      urlsToDelete.push(...extractImageUrlsFromContent(targetArticle.content));
+    }
+    if (urlsToDelete.length > 0) {
+      await deleteStorageImages(urlsToDelete);
+    }
+  }
+
   // Try Supabase delete
   try {
-    await supabase.from('articles').delete().eq('id', id);
+    await supabase.from('articles').delete().eq('id', idToDelete);
   } catch (err) {
     console.warn('Supabase article delete notice:', err);
   }
@@ -162,7 +240,7 @@ export const deleteArticle = async (id: string): Promise<boolean> => {
     const saved = localStorage.getItem(LOCAL_ARTICLES_KEY);
     if (saved) {
       let localArticles: Article[] = JSON.parse(saved);
-      localArticles = localArticles.filter(a => a.id !== id);
+      localArticles = localArticles.filter(a => a.id !== idToDelete);
       localStorage.setItem(LOCAL_ARTICLES_KEY, JSON.stringify(localArticles));
     }
   } catch (err) {
