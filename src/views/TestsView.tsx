@@ -9,6 +9,7 @@ import {
   fetchCategoryQuestionsCount,
   buildHistoryTest 
 } from '../lib/testService';
+import { supabase } from '../lib/supabase';
 import { 
   getStudentProgress, 
   recordUserAnswers,
@@ -176,6 +177,37 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
       isMounted = false;
     };
   }, [userEmail]);
+
+  // Real-time Database Subscription: Automatically sync new questions/updates in real time!
+  useEffect(() => {
+    const channel = supabase
+      .channel('public-db-questions-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public' },
+        async () => {
+          // Re-fetch counts
+          const catEntries = await Promise.all(
+            TEST_CATEGORIES.map(async (cat) => {
+              const count = await fetchCategoryQuestionsCount(cat.key);
+              return [cat.key, count] as [string, number];
+            })
+          );
+          setCategoryTotalCounts(Object.fromEntries(catEntries));
+
+          // If a category is active, re-fetch questions
+          if (selectedCategoryKey) {
+            const allQ = await fetchQuestionsForCategory(selectedCategoryKey);
+            setCategoryQuestions(allQ);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedCategoryKey]);
 
   // Fetch questions when category changes & calculate chapter counts + Task Groups
   useEffect(() => {

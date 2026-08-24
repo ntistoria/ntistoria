@@ -238,6 +238,40 @@ export const fetchCategoryQuestionsCount = async (categoryKey: string): Promise<
 };
 
 /**
+ * Helper to fetch all rows from a Supabase table using range pagination (bypasses default 1000 limit)
+ */
+export const fetchAllRowsFromTable = async (tableName: string): Promise<any[]> => {
+  let allRows: any[] = [];
+  let from = 0;
+  const pageSize = 1000;
+  let hasMore = true;
+
+  while (hasMore) {
+    try {
+      const { data, error } = await supabase
+        .from(tableName)
+        .select('*')
+        .range(from, from + pageSize - 1);
+
+      if (error || !data || data.length === 0) {
+        hasMore = false;
+      } else {
+        allRows = allRows.concat(data);
+        if (data.length < pageSize) {
+          hasMore = false;
+        } else {
+          from += pageSize;
+        }
+      }
+    } catch (e) {
+      hasMore = false;
+    }
+  }
+
+  return allRows;
+};
+
+/**
  * Fetch Real Test Questions for a category directly from Supabase tables
  */
 export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(QuizQuestion & { chapterId: string })[]> => {
@@ -246,13 +280,7 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
 
   for (const tableName of tablesToQuery) {
     try {
-      let rawQuestions: any[] = [];
-
-      // Direct select from the primary table (avoids fragile !inner join PostgREST cache issues)
-      const { data: pQuestions, error: pErr } = await supabase.from(tableName).select('*');
-      if (!pErr && pQuestions && pQuestions.length > 0) {
-        rawQuestions = pQuestions;
-      }
+      let rawQuestions: any[] = await fetchAllRowsFromTable(tableName);
 
       if (rawQuestions.length > 0) {
         // Fetch parent lookup tables if not embedded
