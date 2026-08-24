@@ -305,21 +305,45 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
     const updated = [...selectedAnswers];
     updated[currentQIndex] = optIndex;
     setSelectedAnswers(updated);
+
+    // Record instant answer progress for current question
+    const currentQ = activeInlineTest.questions[currentQIndex];
+    if (currentQ && selectedCategoryKey) {
+      const isCorrect = optIndex === currentQ.correctAnswerIndex;
+      const chId = currentQ.chapterId || selectedChapterId || 'ch-1';
+      recordUserAnswers(userEmail, selectedCategoryKey, chId, [
+        { questionId: currentQ.id, isCorrect }
+      ]).then(setProgressData).catch(console.error);
+    }
   };
 
   const handleFinishInlineTest = () => {
     if (!activeInlineTest) return;
     setIsTestFinished(true);
 
-    // Save progress to progressService
-    const results = activeInlineTest.questions.map((q, idx) => ({
-      questionId: q.id,
-      isCorrect: selectedAnswers[idx] === q.correctAnswerIndex
-    }));
+    // Group all answered questions by each question's actual chapterId
+    const resultsByChapter: Record<string, { questionId: string; isCorrect: boolean }[]> = {};
 
-    if (selectedCategoryKey && selectedChapterId) {
-      recordUserAnswers(userEmail, selectedCategoryKey, selectedChapterId, results).then(setProgressData).catch(console.error);
-    }
+    activeInlineTest.questions.forEach((q, idx) => {
+      if (selectedAnswers[idx] !== -1) {
+        const isCorrect = selectedAnswers[idx] === q.correctAnswerIndex;
+        const chId = q.chapterId || selectedChapterId || 'ch-1';
+        if (!resultsByChapter[chId]) {
+          resultsByChapter[chId] = [];
+        }
+        resultsByChapter[chId].push({
+          questionId: q.id,
+          isCorrect
+        });
+      }
+    });
+
+    const catKey = selectedCategoryKey || 'mcq';
+    Object.entries(resultsByChapter).forEach(([chId, resList]) => {
+      recordUserAnswers(userEmail, catKey, chId, resList)
+        .then(setProgressData)
+        .catch(console.error);
+    });
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -898,8 +922,8 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                 /* MAPS, ANALOGIES, SOURCES, ILLUSTRATIONS WORKFLOW (TASK BOXES BY CHAPTER) */
                 <div className="space-y-6">
                   
-                  {/* Chapter Selector Dropdown Header */}
-                  <div className="bg-white p-6 rounded-3xl border-2 border-[#E6DDCB] shadow-sm space-y-4">
+                  {/* Chapter Selector & Progress Bar Header */}
+                  <div className="bg-white p-6 sm:p-7 rounded-3xl border-2 border-[#E6DDCB] shadow-sm space-y-4">
                     <label className="text-xs font-bold text-[#0D1B2A] uppercase tracking-wider block">
                       აირჩიეთ პროგრამის თავი (11 თავი):
                     </label>
@@ -914,6 +938,61 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                         </option>
                       ))}
                     </select>
+
+                    {/* Progress Bar for selected chapter */}
+                    {(() => {
+                      const currProg = programs.find(p => p.id === selectedChapterId);
+                      const totalQ = questionsCountMap[selectedChapterId] ?? 0;
+                      const stats = getChapterStats(selectedCategoryKey, selectedChapterId, totalQ);
+
+                      return (
+                        <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-3 pt-4 border-t">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-[#0D1B2A]">
+                              {currProg?.title} — პროგრესი
+                            </span>
+                            <span className="text-[11px] font-mono font-bold text-[#C79B3A]">
+                              {stats.pct}% შესრულებული
+                            </span>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <div className="w-full h-3 bg-[#E6DDCB] rounded-full overflow-hidden flex">
+                              <div 
+                                style={{ width: `${stats.total > 0 ? (stats.correct / stats.total) * 100 : 0}%` }}
+                                className="bg-emerald-500 h-full transition-all duration-500"
+                                title={`სწორი: ${stats.correct}`}
+                              />
+                              <div 
+                                style={{ width: `${stats.total > 0 ? (stats.incorrect / stats.total) * 100 : 0}%` }}
+                                className="bg-rose-500 h-full transition-all duration-500"
+                                title={`არასწორი: ${stats.incorrect}`}
+                              />
+                              <div 
+                                style={{ width: `${stats.total > 0 ? (stats.unattempted / stats.total) * 100 : 0}%` }}
+                                className="bg-gray-200 h-full transition-all duration-500"
+                                title={`არ გაუკეთებია: ${stats.unattempted}`}
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-3 text-center text-[11px] font-semibold pt-1">
+                              <div className="flex items-center justify-center gap-1 text-emerald-700">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                <span>სწორი: {stats.correct}</span>
+                              </div>
+                              <div className="flex items-center justify-center gap-1 text-rose-700">
+                                <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                                <span>არასწორი: {stats.incorrect}</span>
+                              </div>
+                              <div className="flex items-center justify-center gap-1 text-gray-600">
+                                <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
+                                <span>დარჩა: {stats.unattempted}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Task Groups / Boxes for the Selected Chapter */}
