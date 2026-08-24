@@ -16,7 +16,7 @@ import { SearchModal } from './components/SearchModal';
 import { AuthModal } from './components/AuthModal';
 import { StudentProfileModal } from './components/StudentProfileModal';
 import { supabase } from './lib/supabase';
-import { isAdminUser } from './lib/blogService';
+import { isAdminUser, fetchAllArticles } from './lib/blogService';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('home');
@@ -29,7 +29,7 @@ export function App() {
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
 
   useEffect(() => {
-    // Process Supabase session (including Google OAuth redirect)
+    // Process Supabase session (without forcing activeTab='admin' on refresh)
     const handleSession = (session: any) => {
       if (session?.user) {
         const meta = session.user.user_metadata;
@@ -39,11 +39,7 @@ export function App() {
         const userData = { name, email: session.user.email || '' };
         setUser(userData);
 
-        if (isAdminUser(userData)) {
-          setActiveTab('admin');
-        }
-
-        // Clean up URL hash or search params from Google OAuth redirect
+        // Clean up URL hash or search params from Google OAuth redirect if needed
         if (window.location.hash || window.location.search.includes('code=')) {
           window.history.replaceState({}, document.title, window.location.pathname);
         }
@@ -65,6 +61,18 @@ export function App() {
       handleSession(session);
     });
 
+    // Check for direct article URL parameter e.g. ?article=slug_or_id
+    const params = new URLSearchParams(window.location.search);
+    const articleParam = params.get('article');
+    if (articleParam) {
+      fetchAllArticles().then(articles => {
+        const match = articles.find(a => a.slug === articleParam || a.id === articleParam);
+        if (match) {
+          setSelectedArticle(match);
+        }
+      }).catch(console.error);
+    }
+
     return () => {
       subscription.unsubscribe();
     };
@@ -81,6 +89,19 @@ export function App() {
 
   const handleOpenArticle = (article: Article) => {
     setSelectedArticle(article);
+    const articleSlugOrId = article.slug || article.id;
+    if (window.history.pushState) {
+      const newUrl = `${window.location.pathname}?article=${encodeURIComponent(articleSlugOrId)}`;
+      window.history.pushState({ path: newUrl }, '', newUrl);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCloseArticle = () => {
+    setSelectedArticle(null);
+    if (window.history.pushState) {
+      window.history.pushState({}, '', window.location.pathname);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -93,7 +114,7 @@ export function App() {
   };
 
   const handleTabChange = (tab: NavTab) => {
-    setSelectedArticle(null);
+    handleCloseArticle();
     setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -116,7 +137,7 @@ export function App() {
         {selectedArticle ? (
           <ArticleDetailView 
             article={selectedArticle}
-            onBack={() => setSelectedArticle(null)}
+            onBack={handleCloseArticle}
             onSelectRelated={(art) => handleOpenArticle(art)}
           />
         ) : (

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Article } from '../types';
 import { ArrowLeft, Calendar, User, Share2, Check, Quote, BookOpen, Facebook, Twitter, Linkedin, Link2 } from 'lucide-react';
 
@@ -17,11 +17,58 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
 
-  const handleShare = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(window.location.href);
+  // Compute exact shareable URL for this specific article
+  const articleSlugOrId = article.slug || article.id;
+  const shareUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}${window.location.pathname}?article=${encodeURIComponent(articleSlugOrId)}`
+    : '';
+
+  // Update Document Title and Dynamic Meta Tags for Social Preview Scraping
+  useEffect(() => {
+    const originalTitle = document.title;
+    document.title = `${article.title} — NT ისტორიის მასწავლებელი`;
+
+    const updateMetaTag = (property: string, content: string) => {
+      let element = document.querySelector(`meta[property="${property}"]`) as HTMLMetaElement;
+      if (!element) {
+        element = document.createElement('meta');
+        element.setAttribute('property', property);
+        document.head.appendChild(element);
+      }
+      element.setAttribute('content', content);
+    };
+
+    if (article.title) updateMetaTag('og:title', article.title);
+    if (article.excerpt) updateMetaTag('og:description', article.excerpt);
+    if (article.imageUrl) updateMetaTag('og:image', article.imageUrl);
+    if (shareUrl) updateMetaTag('og:url', shareUrl);
+
+    return () => {
+      document.title = originalTitle;
+    };
+  }, [article, shareUrl]);
+
+  const handleCopyLink = () => {
+    if (navigator.clipboard && shareUrl) {
+      navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
+    }
+  };
+
+  const handleNativeShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: article.title,
+          text: article.excerpt,
+          url: shareUrl,
+        });
+      } catch (err) {
+        console.log('Share error/cancelled:', err);
+      }
+    } else {
+      handleCopyLink();
     }
   };
 
@@ -137,11 +184,11 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
         )}
 
         {/* Social Share Section Below Tags */}
-        <div className="p-6 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-4">
+        <div className="p-6 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-4 shadow-sm">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <span className="text-xs font-bold uppercase tracking-wider text-[#0D1B2A] flex items-center gap-2">
               <Share2 className="w-4 h-4 text-[#C79B3A]" />
-              <span>გააზიარეთ სტატია:</span>
+              <span>გააზიარეთ ეს სტატია:</span>
             </span>
             {copied && (
               <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full animate-fade-in flex items-center gap-1">
@@ -154,7 +201,7 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
           <div className="flex flex-wrap items-center gap-3">
             {/* Facebook Share */}
             <a
-              href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(typeof window !== 'undefined' ? window.location.href : '')}`}
+              href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-4 py-2.5 bg-[#1877F2] hover:bg-[#166fe5] text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
@@ -165,7 +212,7 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
 
             {/* Twitter / X Share */}
             <a
-              href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(article.title)}&url=${encodeURIComponent(typeof window !== 'undefined' ? window.location.href : '')}`}
+              href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(article.title)}&url=${encodeURIComponent(shareUrl)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-4 py-2.5 bg-[#000000] hover:bg-gray-800 text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
@@ -176,7 +223,7 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
 
             {/* LinkedIn Share */}
             <a
-              href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(typeof window !== 'undefined' ? window.location.href : '')}`}
+              href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-4 py-2.5 bg-[#0A66C2] hover:bg-[#084e96] text-white text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
@@ -185,14 +232,25 @@ export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
               <span>LinkedIn</span>
             </a>
 
-            {/* Copy Link Button */}
+            {/* Copy Direct Article Link */}
             <button
-              onClick={handleShare}
+              onClick={handleCopyLink}
               className="flex items-center gap-2 px-4 py-2.5 bg-white text-[#13253D] border border-[#E6DDCB] hover:bg-[#E6DDCB]/50 text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
             >
               {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Link2 className="w-4 h-4 text-[#C79B3A]" />}
               <span>{copied ? 'კოპირებულია' : 'ლინკის კოპირება'}</span>
             </button>
+
+            {/* Mobile Native Share if supported */}
+            {typeof navigator !== 'undefined' && 'share' in navigator && (
+              <button
+                onClick={handleNativeShare}
+                className="flex items-center gap-2 px-4 py-2.5 bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] text-xs font-bold rounded-xl transition-all shadow-sm cursor-pointer active:scale-95"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>გაზიარება</span>
+              </button>
+            )}
           </div>
         </div>
 
