@@ -381,6 +381,55 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
             expl = `სწორი პასუხი: ${item.correct_answer}`;
           }
 
+          // Question Type determination
+          let qType: 'mcq' | 'chronology' | 'open_text' = 'mcq';
+          if (categoryKey === 'chronology' || tableName === 'chronology') {
+            qType = 'chronology';
+          } else if (
+            item.question_type === 'open' || 
+            item.question_type === 'open_text' || 
+            item.is_open === true || 
+            (opts.length <= 1 && typeof (item.answer || item.correct_answer) === 'string')
+          ) {
+            qType = 'open_text';
+          }
+
+          // Chronology items & sequence mapping
+          let chronItems: string[] = [];
+          let chronSeq: number[] = [0, 1, 2];
+          if (qType === 'chronology') {
+            if (opts.length >= 3) {
+              chronItems = opts.slice(0, 3);
+            } else {
+              chronItems = [
+                item.answer_1 || item.option_a || 'მოვლენა 1',
+                item.answer_2 || item.option_b || 'მოვლენა 2',
+                item.answer_3 || item.option_c || 'მოვლენა 3'
+              ];
+            }
+
+            // Correct sequence parsing e.g. "3 1 2" or "3, 1, 2" or [3, 1, 2]
+            const rawSeq = item.correct_sequence || item.sequence || item.correct_answer || item.answer;
+            if (Array.isArray(rawSeq)) {
+              chronSeq = rawSeq.map((n: any) => Number(n));
+            } else if (typeof rawSeq === 'string') {
+              const parsed = rawSeq.replace(/[^0-9\s,]/g, '').split(/[\s,]+/).map(Number).filter(n => n > 0);
+              if (parsed.length >= 3) chronSeq = parsed;
+            }
+          }
+
+          // Correct Answer Text for open-ended questions
+          const corrText = String(item.answer || item.correct_answer || item.correct_text || '').trim();
+
+          // Item Number
+          const itemNum = Number(
+            item.illustration_number || 
+            item.source_number || 
+            item.analogy_number || 
+            item.map_number || 
+            (idx + 1)
+          );
+
           return {
             id: String(item.id || `${categoryKey}-${idx}`),
             chapterId,
@@ -389,7 +438,12 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
             correctAnswerIndex: correctIdx,
             explanation: expl,
             sourceContext: srcContext,
-            mapImage: mapImg
+            mapImage: mapImg,
+            questionType: qType,
+            correctAnswerText: corrText,
+            chronologyItems: chronItems,
+            correctSequence: chronSeq,
+            itemNumber: itemNum
           };
         });
       }

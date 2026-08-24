@@ -35,7 +35,10 @@ import {
   Award,
   Check,
   X,
-  Play
+  Play,
+  ArrowUp,
+  ArrowDown,
+  Send
 } from 'lucide-react';
 
 interface TestsViewProps {
@@ -49,8 +52,52 @@ interface TaskGroup {
   subtitle?: string;
   image?: string;
   sourceContext?: string;
+  itemNumber?: number;
   questions: (QuizQuestion & { chapterId: string })[];
 }
+
+// Fuzzy text matching helper for open-ended questions
+const checkOpenAnswerMatch = (userInput: string, correctAnswer: string): boolean => {
+  if (!userInput || !correctAnswer) return false;
+
+  const normalize = (str: string) => str.toLowerCase()
+    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()"'„“«»]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const normUser = normalize(userInput);
+  const normCorrect = normalize(correctAnswer);
+
+  if (normUser === normCorrect) return true;
+  if (normUser.includes(normCorrect) || normCorrect.includes(normUser)) return true;
+
+  // Keyword match check
+  const keywords = normCorrect.split(' ').filter(w => w.length > 2);
+  if (keywords.length > 0) {
+    const matchedCount = keywords.filter(w => normUser.includes(w)).length;
+    if (matchedCount / keywords.length >= 0.4) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+// Chronology sequence matching helper
+const checkChronologyItemsMatch = (
+  userItemsOrder: string[], 
+  originalItems: string[], 
+  correctSeq: number[]
+): boolean => {
+  if (!userItemsOrder || !originalItems || !correctSeq) return false;
+
+  const expectedOrder = correctSeq.map(seqIdx => {
+    const idx = seqIdx > 0 && seqIdx <= originalItems.length ? seqIdx - 1 : seqIdx;
+    return originalItems[idx] || '';
+  });
+
+  return userItemsOrder.every((item, i) => item === expectedOrder[i]);
+};
 
 export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
   const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(null);
@@ -66,11 +113,19 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
   const [categoryQuestions, setCategoryQuestions] = useState<(QuizQuestion & { chapterId: string })[]>([]);
   const [taskGroups, setTaskGroups] = useState<TaskGroup[]>([]);
 
-  // INLINE TEST RUNNER STATE (No modal popup, directly inside page)
+  // INLINE TEST RUNNER STATE
   const [activeInlineTest, setActiveInlineTest] = useState<HistoryTest | null>(null);
   const [currentQIndex, setCurrentQIndex] = useState<number>(0);
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
   const [isTestFinished, setIsTestFinished] = useState<boolean>(false);
+
+  // Chronology interactive reordering state (current item sequence per question index)
+  const [chronologyOrders, setChronologyOrders] = useState<Record<number, string[]>>({});
+  const [chronologyChecked, setChronologyChecked] = useState<Record<number, boolean>>({});
+
+  // Open-ended typed text state
+  const [openTextAnswers, setOpenTextAnswers] = useState<Record<number, string>>({});
+  const [openTextChecked, setOpenTextChecked] = useState<Record<number, boolean>>({});
 
   const userEmail = user?.email || 'guest_user';
 
@@ -151,7 +206,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
     loadCategoryData();
   }, [selectedCategoryKey]);
 
-  // Update Task Groups when selectedChapterId or categoryQuestions change (for Maps, Analogies, Sources, Illustrations)
+  // Update Task Groups when selectedChapterId or categoryQuestions change
   useEffect(() => {
     if (!selectedCategoryKey || selectedCategoryKey === 'mcq' || selectedCategoryKey === 'chronology') {
       setTaskGroups([]);
@@ -167,32 +222,34 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
       return;
     }
 
-    // Group questions by image / sourceContext / task
+    // Group questions by itemNumber / mapImage / sourceContext
     const groupMap = new Map<string, (QuizQuestion & { chapterId: string })[]>();
     
     chapterQuestions.forEach((q, idx) => {
-      // Create a grouping key based on mapImage or sourceContext or chunk of questions
-      const key = q.mapImage || q.sourceContext?.substring(0, 50) || `group-${Math.floor(idx / 4)}`;
-      const existing = groupMap.get(key) || [];
+      const groupKey = String(q.itemNumber || q.mapImage || q.sourceContext?.substring(0, 40) || Math.floor(idx / 3));
+      const existing = groupMap.get(groupKey) || [];
       existing.push(q);
-      groupMap.set(key, existing);
+      groupMap.set(groupKey, existing);
     });
 
     const groups: TaskGroup[] = Array.from(groupMap.entries()).map(([key, qList], index) => {
       const firstQ = qList[0];
+      const itemNum = firstQ.itemNumber || (index + 1);
       let taskTitle = '';
-      if (selectedCategoryKey === 'map') taskTitle = `რუკა #${index + 1}`;
-      else if (selectedCategoryKey === 'analogies') taskTitle = `ანალოგია #${index + 1}`;
-      else if (selectedCategoryKey === 'source') taskTitle = `წყარო #${index + 1}`;
-      else if (selectedCategoryKey === 'illustrations') taskTitle = `ილუსტრაცია #${index + 1}`;
-      else taskTitle = `დავალება #${index + 1}`;
+
+      if (selectedCategoryKey === 'map') taskTitle = `რუკა N${itemNum}`;
+      else if (selectedCategoryKey === 'analogies') taskTitle = `ანალოგია N${itemNum}`;
+      else if (selectedCategoryKey === 'source') taskTitle = `წყარო N${itemNum}`;
+      else if (selectedCategoryKey === 'illustrations') taskTitle = `ილუსტრაცია N${itemNum}`;
+      else taskTitle = `დავალება N${itemNum}`;
 
       return {
-        id: `task-${index}-${Date.now()}`,
+        id: `task-${itemNum}-${index}-${Date.now()}`,
         title: taskTitle,
-        subtitle: `${qList.length} კითხვა დავალებაში`,
+        subtitle: `${qList.length} შეკითხვა დავალებაში`,
         image: firstQ.mapImage,
         sourceContext: firstQ.sourceContext,
+        itemNumber: itemNum,
         questions: qList
       };
     });
@@ -212,6 +269,20 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
     setCurrentQIndex(0);
     setSelectedAnswers(new Array(testObj.questions.length).fill(-1));
     setIsTestFinished(false);
+
+    // Initialize chronology order arrays for questions
+    const initChronOrders: Record<number, string[]> = {};
+    testObj.questions.forEach((q, idx) => {
+      if (q.questionType === 'chronology' && q.chronologyItems && q.chronologyItems.length > 0) {
+        initChronOrders[idx] = [...q.chronologyItems];
+      }
+    });
+    setChronologyOrders(initChronOrders);
+    setChronologyChecked({});
+
+    setOpenTextAnswers({});
+    setOpenTextChecked({});
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -245,7 +316,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
     const catMeta = TEST_CATEGORIES.find(c => c.key === selectedCategoryKey);
     const testObj: HistoryTest = {
       id: task.id,
-      title: `${catMeta?.title || 'ტესტი'} — ${task.title}`,
+      title: `${catMeta?.title || 'დავალება'} — ${task.title}`,
       category: 'ეროვნული გამოცდები',
       difficulty: 'საგამოცდო',
       timeLimitMinutes: 0,
@@ -269,7 +340,6 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
     }
   };
 
-  // Fixed Hover icon styling: group-hover:text-white ensures SVG icon is crisp and 100% visible on gold hover
   const getCategoryIcon = (key: string) => {
     const iconClass = "w-6 h-6 text-[#C79B3A] group-hover:text-white transition-colors duration-300";
     switch (key) {
@@ -306,10 +376,66 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
     updated[currentQIndex] = optIndex;
     setSelectedAnswers(updated);
 
-    // Record instant answer progress for current question
     const currentQ = activeInlineTest.questions[currentQIndex];
     if (currentQ && selectedCategoryKey) {
       const isCorrect = optIndex === currentQ.correctAnswerIndex;
+      const chId = currentQ.chapterId || selectedChapterId || 'ch-1';
+      recordUserAnswers(userEmail, selectedCategoryKey, chId, [
+        { questionId: currentQ.id, isCorrect }
+      ]).then(setProgressData).catch(console.error);
+    }
+  };
+
+  // CHRONOLOGY MOVE HANDLERS (Mouse move up / move down 3 items)
+  const handleMoveChronologyItem = (fromIdx: number, toIdx: number) => {
+    if (!activeInlineTest || isTestFinished) return;
+    const currentQ = activeInlineTest.questions[currentQIndex];
+    const currentOrder = chronologyOrders[currentQIndex] || currentQ.chronologyItems || [];
+    
+    if (toIdx < 0 || toIdx >= currentOrder.length) return;
+
+    const newOrder = [...currentOrder];
+    const temp = newOrder[fromIdx];
+    newOrder[fromIdx] = newOrder[toIdx];
+    newOrder[toIdx] = temp;
+
+    setChronologyOrders({
+      ...chronologyOrders,
+      [currentQIndex]: newOrder
+    });
+  };
+
+  const handleCheckChronology = () => {
+    if (!activeInlineTest || isTestFinished) return;
+    const currentQ = activeInlineTest.questions[currentQIndex];
+    const currentOrder = chronologyOrders[currentQIndex] || currentQ.chronologyItems || [];
+    
+    const isCorrect = checkChronologyItemsMatch(
+      currentOrder, 
+      currentQ.chronologyItems || [], 
+      currentQ.correctSequence || [0, 1, 2]
+    );
+
+    setChronologyChecked({ ...chronologyChecked, [currentQIndex]: true });
+
+    if (currentQ && selectedCategoryKey) {
+      const chId = currentQ.chapterId || selectedChapterId || 'ch-1';
+      recordUserAnswers(userEmail, selectedCategoryKey, chId, [
+        { questionId: currentQ.id, isCorrect }
+      ]).then(setProgressData).catch(console.error);
+    }
+  };
+
+  // OPEN TEXT SUBMIT HANDLER
+  const handleCheckOpenText = () => {
+    if (!activeInlineTest || isTestFinished) return;
+    const currentQ = activeInlineTest.questions[currentQIndex];
+    const typed = openTextAnswers[currentQIndex] || '';
+
+    const isCorrect = checkOpenAnswerMatch(typed, currentQ.correctAnswerText || '');
+    setOpenTextChecked({ ...openTextChecked, [currentQIndex]: true });
+
+    if (currentQ && selectedCategoryKey) {
       const chId = currentQ.chapterId || selectedChapterId || 'ch-1';
       recordUserAnswers(userEmail, selectedCategoryKey, chId, [
         { questionId: currentQ.id, isCorrect }
@@ -321,21 +447,29 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
     if (!activeInlineTest) return;
     setIsTestFinished(true);
 
-    // Group all answered questions by each question's actual chapterId
     const resultsByChapter: Record<string, { questionId: string; isCorrect: boolean }[]> = {};
 
     activeInlineTest.questions.forEach((q, idx) => {
-      if (selectedAnswers[idx] !== -1) {
-        const isCorrect = selectedAnswers[idx] === q.correctAnswerIndex;
-        const chId = q.chapterId || selectedChapterId || 'ch-1';
-        if (!resultsByChapter[chId]) {
-          resultsByChapter[chId] = [];
-        }
-        resultsByChapter[chId].push({
-          questionId: q.id,
-          isCorrect
-        });
+      let isCorrect = false;
+
+      if (q.questionType === 'chronology') {
+        const order = chronologyOrders[idx] || q.chronologyItems || [];
+        isCorrect = checkChronologyItemsMatch(order, q.chronologyItems || [], q.correctSequence || [0, 1, 2]);
+      } else if (q.questionType === 'open_text') {
+        const typed = openTextAnswers[idx] || '';
+        isCorrect = checkOpenAnswerMatch(typed, q.correctAnswerText || '');
+      } else {
+        isCorrect = selectedAnswers[idx] === q.correctAnswerIndex;
       }
+
+      const chId = q.chapterId || selectedChapterId || 'ch-1';
+      if (!resultsByChapter[chId]) {
+        resultsByChapter[chId] = [];
+      }
+      resultsByChapter[chId].push({
+        questionId: q.id,
+        isCorrect
+      });
     });
 
     const catKey = selectedCategoryKey || 'mcq';
@@ -376,7 +510,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
             </button>
 
             <span className="px-3.5 py-1 bg-[#0D1B2A] text-[#FAF8F3] text-xs font-bold rounded-full font-mono">
-              კითხვა {currentQIndex + 1} / {activeInlineTest.questions.length}
+              შეკითხვა {currentQIndex + 1} / {activeInlineTest.questions.length}
             </span>
           </div>
 
@@ -421,47 +555,199 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                 </div>
               )}
 
-              {/* Options Selection (A, B, C, D) */}
-              <div className="space-y-3 pt-4 border-t border-[#E6DDCB]">
-                {activeInlineTest.questions[currentQIndex]?.options.map((optText, optIdx) => {
-                  const isSelected = selectedAnswers[currentQIndex] === optIdx;
-                  const isCorrect = activeInlineTest.questions[currentQIndex]?.correctAnswerIndex === optIdx;
-                  const isAnswered = selectedAnswers[currentQIndex] !== -1;
+              {/* QUESTION TYPE RENDERERS */}
+              {(() => {
+                const currentQ = activeInlineTest.questions[currentQIndex];
+                if (!currentQ) return null;
 
-                  let borderClass = 'border-[#E6DDCB] bg-white hover:border-[#C79B3A] hover:bg-[#FAF8F3]';
-                  let badgeClass = 'bg-[#F5F2EA] text-[#0D1B2A]';
-
-                  if (isAnswered) {
-                    if (isCorrect) {
-                      borderClass = 'border-emerald-500 bg-emerald-50 text-emerald-900 font-bold';
-                      badgeClass = 'bg-emerald-600 text-white';
-                    } else if (isSelected) {
-                      borderClass = 'border-rose-500 bg-rose-50 text-rose-900 font-bold';
-                      badgeClass = 'bg-rose-600 text-white';
-                    }
-                  } else if (isSelected) {
-                    borderClass = 'border-[#C79B3A] bg-[#FAF8F3] ring-2 ring-[#C79B3A]/30 font-bold';
-                    badgeClass = 'bg-[#C79B3A] text-white';
-                  }
-
-                  const optLabels = ['ა', 'ბ', 'გ', 'დ'];
+                /* 1. CHRONOLOGY ORDERING QUESTION TYPE (Mouse Reorder 3 Items) */
+                if (currentQ.questionType === 'chronology') {
+                  const currentItems = chronologyOrders[currentQIndex] || currentQ.chronologyItems || [];
+                  const isChecked = chronologyChecked[currentQIndex];
+                  const isCorrect = isChecked && checkChronologyItemsMatch(
+                    currentItems, 
+                    currentQ.chronologyItems || [], 
+                    currentQ.correctSequence || [0, 1, 2]
+                  );
 
                   return (
-                    <button
-                      key={optIdx}
-                      onClick={() => handleSelectOptionInline(optIdx)}
-                      className={`w-full p-4 sm:p-5 rounded-2xl border-2 text-left transition-all flex items-center gap-4 cursor-pointer ${borderClass}`}
-                    >
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${badgeClass}`}>
-                        {optLabels[optIdx] || optIdx + 1}
+                    <div className="space-y-6 pt-4 border-t border-[#E6DDCB]">
+                      <div className="space-y-1">
+                        <span className="text-xs font-bold text-[#C79B3A] uppercase tracking-wider block">
+                          დაალაგეთ ქრონოლოგიური თანმიმდევრობა:
+                        </span>
+                        <p className="text-xs text-[#666666]">
+                          ისრებით (▲ / ▼) გადააადგილეთ 3 მოვლენა სწორი თანმიმდევრობით (1-ლიდან 3-მდე).
+                        </p>
                       </div>
-                      <span className="text-sm sm:text-base leading-relaxed flex-1">
-                        {optText}
-                      </span>
-                    </button>
+
+                      <div className="space-y-3">
+                        {currentItems.map((itemText, idx) => (
+                          <div
+                            key={idx}
+                            className={`p-4 sm:p-5 rounded-2xl border-2 transition-all flex items-center justify-between gap-4 bg-white shadow-xs ${
+                              isChecked
+                                ? isCorrect
+                                  ? 'border-emerald-500 bg-emerald-50'
+                                  : 'border-rose-400 bg-rose-50'
+                                : 'border-[#E6DDCB] hover:border-[#C79B3A]'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 flex-1">
+                              <span className="w-8 h-8 rounded-xl bg-[#0D1B2A] text-[#C79B3A] text-xs font-bold flex items-center justify-center shrink-0">
+                                #{idx + 1}
+                              </span>
+                              <span className="text-sm sm:text-base text-[#0D1B2A] font-medium leading-relaxed">
+                                {itemText}
+                              </span>
+                            </div>
+
+                            {!isChecked && (
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  onClick={() => handleMoveChronologyItem(idx, idx - 1)}
+                                  disabled={idx === 0}
+                                  className="p-2 rounded-xl bg-[#FAF8F3] hover:bg-[#C79B3A] text-[#0D1B2A] hover:text-white border border-[#E6DDCB] transition-colors disabled:opacity-30 cursor-pointer"
+                                  title="ზემოთ გადაადგილება"
+                                >
+                                  <ArrowUp className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleMoveChronologyItem(idx, idx + 1)}
+                                  disabled={idx === currentItems.length - 1}
+                                  className="p-2 rounded-xl bg-[#FAF8F3] hover:bg-[#C79B3A] text-[#0D1B2A] hover:text-white border border-[#E6DDCB] transition-colors disabled:opacity-30 cursor-pointer"
+                                  title="ქვემოთ გადაადგილება"
+                                >
+                                  <ArrowDown className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      {!isChecked ? (
+                        <button
+                          onClick={handleCheckChronology}
+                          className="px-6 py-3 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-2"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>თანმიმდევრობის შემოწმება</span>
+                        </button>
+                      ) : (
+                        <div className={`p-4 rounded-2xl border text-xs sm:text-sm font-semibold flex items-center gap-2 ${
+                          isCorrect ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-rose-50 border-rose-300 text-rose-800'
+                        }`}>
+                          {isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" /> : <XCircle className="w-5 h-5 text-rose-600 shrink-0" />}
+                          <span>
+                            {isCorrect 
+                              ? 'სწორია! თანმიმდევრობა ზუსტად არის დალაგებული.' 
+                              : `არასწორია. სწორი თანმიმდევრობა: ${(currentQ.correctSequence || [1, 2, 3]).join(' ➔ ')}`}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   );
-                })}
-              </div>
+                }
+
+                /* 2. OPEN-ENDED TYPED TEXT QUESTION TYPE */
+                if (currentQ.questionType === 'open_text') {
+                  const typed = openTextAnswers[currentQIndex] || '';
+                  const isChecked = openTextChecked[currentQIndex];
+                  const isCorrect = isChecked && checkOpenAnswerMatch(typed, currentQ.correctAnswerText || '');
+
+                  return (
+                    <div className="space-y-5 pt-4 border-t border-[#E6DDCB]">
+                      <div className="space-y-1">
+                        <label className="text-xs font-bold text-[#C79B3A] uppercase tracking-wider block">
+                          ჩაწერეთ ღია პასუხი:
+                        </label>
+                        <p className="text-xs text-[#666666]">
+                          შეიყვანეთ პასუხი ტექსტურად. ბაზის სწორ პასუხთან დაახლოებითი დამთხვევაც ჩაითვლება სწორად.
+                        </p>
+                      </div>
+
+                      <textarea
+                        value={typed}
+                        disabled={isChecked}
+                        onChange={(e) => setOpenTextAnswers({ ...openTextAnswers, [currentQIndex]: e.target.value })}
+                        placeholder="ჩაწერეთ თქვენი პასუხი აქ..."
+                        rows={3}
+                        className="w-full bg-[#FAF8F3] border-2 border-[#E6DDCB] focus:border-[#C79B3A] rounded-2xl p-4 text-sm sm:text-base text-[#0D1B2A] focus:outline-none focus:ring-2 focus:ring-[#C79B3A]/30 resize-none disabled:opacity-80"
+                      />
+
+                      {!isChecked ? (
+                        <button
+                          onClick={handleCheckOpenText}
+                          disabled={!typed.trim()}
+                          className="px-6 py-3 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md cursor-pointer disabled:opacity-40 flex items-center gap-2"
+                        >
+                          <Send className="w-4 h-4" />
+                          <span>პასუხის გაგზავნა</span>
+                        </button>
+                      ) : (
+                        <div className={`p-4 rounded-2xl border text-xs sm:text-sm font-semibold flex items-center gap-2 ${
+                          isCorrect ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-rose-50 border-rose-300 text-rose-800'
+                        }`}>
+                          {isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" /> : <XCircle className="w-5 h-5 text-rose-600 shrink-0" />}
+                          <div>
+                            <div>{isCorrect ? 'სწორია! თქვენი პასუხი ემთხვევა სწორ პასუხს.' : 'არასწორია.'}</div>
+                            {currentQ.correctAnswerText && (
+                              <div className="text-xs font-normal opacity-90 mt-0.5">
+                                ბაზის სწორი პასუხი: <strong>{currentQ.correctAnswerText}</strong>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                /* 3. MULTIPLE CHOICE QUESTION TYPE (MCQ) */
+                return (
+                  <div className="space-y-3 pt-4 border-t border-[#E6DDCB]">
+                    {currentQ.options.map((optText, optIdx) => {
+                      const isSelected = selectedAnswers[currentQIndex] === optIdx;
+                      const isCorrect = currentQ.correctAnswerIndex === optIdx;
+                      const isAnswered = selectedAnswers[currentQIndex] !== -1;
+
+                      let borderClass = 'border-[#E6DDCB] bg-white hover:border-[#C79B3A] hover:bg-[#FAF8F3]';
+                      let badgeClass = 'bg-[#F5F2EA] text-[#0D1B2A]';
+
+                      if (isAnswered) {
+                        if (isCorrect) {
+                          borderClass = 'border-emerald-500 bg-emerald-50 text-emerald-900 font-bold';
+                          badgeClass = 'bg-emerald-600 text-white';
+                        } else if (isSelected) {
+                          borderClass = 'border-rose-500 bg-rose-50 text-rose-900 font-bold';
+                          badgeClass = 'bg-rose-600 text-white';
+                        }
+                      } else if (isSelected) {
+                        borderClass = 'border-[#C79B3A] bg-[#FAF8F3] ring-2 ring-[#C79B3A]/30 font-bold';
+                        badgeClass = 'bg-[#C79B3A] text-white';
+                      }
+
+                      const optLabels = ['ა', 'ბ', 'გ', 'დ'];
+
+                      return (
+                        <button
+                          key={optIdx}
+                          onClick={() => handleSelectOptionInline(optIdx)}
+                          className={`w-full p-4 sm:p-5 rounded-2xl border-2 text-left transition-all flex items-center gap-4 cursor-pointer ${borderClass}`}
+                        >
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${badgeClass}`}>
+                            {optLabels[optIdx] || optIdx + 1}
+                          </div>
+                          <span className="text-sm sm:text-base leading-relaxed flex-1">
+                            {optText}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
 
               {/* Instant Explanation when answered */}
               {selectedAnswers[currentQIndex] !== -1 && activeInlineTest.questions[currentQIndex]?.explanation && (
@@ -482,7 +768,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                   disabled={currentQIndex === 0}
                   className="px-5 py-2.5 bg-[#FAF8F3] hover:bg-[#E6DDCB] border border-[#E6DDCB] text-[#0D1B2A] text-xs font-bold rounded-xl transition-all disabled:opacity-40 cursor-pointer"
                 >
-                  წინა კითხვა
+                  წინა შეკითხვა
                 </button>
 
                 {currentQIndex < activeInlineTest.questions.length - 1 ? (
@@ -490,7 +776,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                     onClick={() => setCurrentQIndex(prev => Math.min(activeInlineTest.questions.length - 1, prev + 1))}
                     className="px-6 py-3 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md cursor-pointer"
                   >
-                    შემდეგი კითხვა
+                    შემდეგი შეკითხვა
                   </button>
                 ) : (
                   <button
@@ -509,7 +795,15 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
               {(() => {
                 let correctCount = 0;
                 activeInlineTest.questions.forEach((q, idx) => {
-                  if (selectedAnswers[idx] === q.correctAnswerIndex) correctCount++;
+                  if (q.questionType === 'chronology') {
+                    const order = chronologyOrders[idx] || q.chronologyItems || [];
+                    if (checkChronologyItemsMatch(order, q.chronologyItems || [], q.correctSequence || [0, 1, 2])) correctCount++;
+                  } else if (q.questionType === 'open_text') {
+                    const typed = openTextAnswers[idx] || '';
+                    if (checkOpenAnswerMatch(typed, q.correctAnswerText || '')) correctCount++;
+                  } else {
+                    if (selectedAnswers[idx] === q.correctAnswerIndex) correctCount++;
+                  }
                 });
                 const totalCount = activeInlineTest.questions.length;
                 const scorePct = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
@@ -607,7 +901,6 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                         onClick={() => handleSelectCategory(cat.key)}
                         className="bg-white p-6 sm:p-7 rounded-2xl border border-[#E6DDCB] shadow-sm hover:border-[#C79B3A] hover:bg-[#FAF8F3]/40 hover:shadow-md transition-all duration-300 cursor-pointer group flex items-start gap-5 relative overflow-hidden"
                       >
-                        {/* Fixed Icon container with group-hover:bg-[#C79B3A] group-hover:text-white */}
                         <div className="w-14 h-14 rounded-xl bg-[#F5F2EA] border border-[#E6DDCB] flex items-center justify-center shrink-0 group-hover:bg-[#C79B3A] group-hover:border-[#C79B3A] transition-all duration-300 shadow-xs">
                           {getCategoryIcon(cat.key)}
                         </div>
@@ -731,7 +1024,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                 </div>
               </div>
 
-              {/* CHRONOLOGY SPECIAL CATEGORY WORKFLOW (No 2 boxes, single direct start) */}
+              {/* CHRONOLOGY SPECIAL CATEGORY WORKFLOW */}
               {selectedCategoryKey === 'chronology' ? (
                 <div className="bg-white p-8 sm:p-12 rounded-3xl border-2 border-[#C79B3A] shadow-xl text-center space-y-6 max-w-2xl mx-auto">
                   <div className="w-16 h-16 rounded-2xl bg-[#FAF8F3] border border-[#C79B3A]/40 flex items-center justify-center mx-auto text-[#C79B3A]">
@@ -743,7 +1036,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                       ქრონოლოგიის დავალებები
                     </h3>
                     <p className="text-xs sm:text-sm text-[#666666] leading-relaxed max-w-md mx-auto">
-                      ქრონოლოგიის კითხვები მოიცავს ისტორიული თარიღებისა და მოვლენების თანმიმდევრობით დალაგებას.
+                      ქრონოლოგიის კითხვებში მოსწავლემ უნდა დაალაგოს 3 მოვლენის სწორი თანმიმდევრობა.
                     </p>
                     <div className="pt-2">
                       <span className="inline-block px-4 py-1.5 bg-[#FAF8F3] border border-[#E6DDCB] text-[#13253D] text-xs font-bold rounded-full">
@@ -762,7 +1055,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                   </button>
                 </div>
               ) : selectedCategoryKey === 'mcq' ? (
-                /* MCQ CATEGORY WORKFLOW (2 BOXES: Random vs Chapter Selection) */
+                /* MCQ CATEGORY WORKFLOW (2 BOXES) */
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   
                   {/* BOX 1: RANDOM QUESTIONS ALL CHAPTERS */}
@@ -1022,7 +1315,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                               )}
 
                               {/* Task Text snippet if available (Source / Analogy) */}
-                              {task.sourceContext && !task.image && (
+                              {task.sourceContext && (
                                 <div className="p-4 bg-[#FAF8F3] rounded-2xl border-l-4 border-[#C79B3A] text-xs font-serif italic text-[#0D1B2A] line-clamp-3">
                                   „{task.sourceContext}“
                                 </div>

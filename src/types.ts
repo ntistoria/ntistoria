@@ -42,6 +42,11 @@ export interface QuizQuestion {
   explanation: string;
   sourceContext?: string;
   mapImage?: string;
+  questionType?: 'mcq' | 'chronology' | 'open_text';
+  correctAnswerText?: string;
+  chronologyItems?: string[];
+  correctSequence?: number[];
+  itemNumber?: number;
 }
 
 export interface HistoryTest {
