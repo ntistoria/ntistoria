@@ -42,12 +42,17 @@ import {
   Play,
   ArrowUp,
   ArrowDown,
-  Send
+  Send,
+  Lock,
+  UserCheck,
+  ShieldAlert,
+  LogIn
 } from 'lucide-react';
 
 interface TestsViewProps {
   onOpenTest?: (test: HistoryTest) => void;
   user?: { name: string; email: string } | null;
+  onOpenAuth?: () => void;
 }
 
 interface TaskGroup {
@@ -103,7 +108,8 @@ const checkChronologyItemsMatch = (
   return userItemsOrder.every((item, i) => item === expectedOrder[i]);
 };
 
-export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
+export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) => {
+  const isLoggedIn = !!(user && user.email);
   const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(null);
   const [programs, setPrograms] = useState<ProgramChapter[]>([]);
   const [selectedChapterId, setSelectedChapterId] = useState<string>('all');
@@ -325,7 +331,11 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
   const handleSelectCategory = (key: string) => {
     setSelectedCategoryKey(key);
-    setSelectedChapterId('all');
+    if (key === 'mcq') {
+      setSelectedChapterId('ch-1');
+    } else {
+      setSelectedChapterId(!isLoggedIn ? 'ch-1' : 'all');
+    }
     setActiveInlineTest(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -355,6 +365,10 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
   const handleStartRandomTest = async () => {
     if (!selectedCategoryKey) return;
+    if (!isLoggedIn && selectedCategoryKey !== 'mcq') {
+      if (onOpenAuth) onOpenAuth();
+      return;
+    }
     setLoading(true);
     try {
       const testObj = await buildHistoryTest(selectedCategoryKey, 'all');
@@ -368,6 +382,10 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
   const handleStartChapterTest = async (chId: string) => {
     if (!selectedCategoryKey) return;
+    if (!isLoggedIn && selectedCategoryKey !== 'mcq' && chId !== 'ch-1') {
+      if (onOpenAuth) onOpenAuth();
+      return;
+    }
     setLoading(true);
     try {
       const testObj = await buildHistoryTest(selectedCategoryKey, chId);
@@ -380,6 +398,10 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
   };
 
   const handleStartTaskGroupTest = (task: TaskGroup) => {
+    if (!isLoggedIn && selectedCategoryKey !== 'mcq' && selectedChapterId !== 'ch-1') {
+      if (onOpenAuth) onOpenAuth();
+      return;
+    }
     const catMeta = TEST_CATEGORIES.find(c => c.key === selectedCategoryKey);
     const testObj: HistoryTest = {
       id: task.id,
@@ -1189,33 +1211,111 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
               {/* CHRONOLOGY SPECIAL CATEGORY WORKFLOW */}
               {selectedCategoryKey === 'chronology' ? (
-                <div className="bg-white p-8 sm:p-12 rounded-3xl border-2 border-[#C79B3A] shadow-xl text-center space-y-6 max-w-2xl mx-auto">
-                  <div className="w-16 h-16 rounded-2xl bg-[#FAF8F3] border border-[#C79B3A]/40 flex items-center justify-center mx-auto text-[#C79B3A]">
-                    <Clock className="w-8 h-8" />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <h3 className="font-serif font-bold text-2xl sm:text-3xl text-[#0D1B2A]">
-                      ქრონოლოგიის დავალებები
-                    </h3>
-                    <p className="text-xs sm:text-sm text-[#666666] leading-relaxed max-w-md mx-auto">
-                      ქრონოლოგიის კითხვებში მოსწავლემ უნდა დაალაგოს 3 მოვლენის სწორი თანმიმდევრობა.
-                    </p>
-                    <div className="pt-2">
-                      <span className="inline-block px-4 py-1.5 bg-[#FAF8F3] border border-[#E6DDCB] text-[#13253D] text-xs font-bold rounded-full">
-                        სულ ბაზაშია {categoryTotalCounts['chronology'] || 0} კითხვა
-                      </span>
-                    </div>
+                <div className="space-y-6">
+                  {/* Chapter Selector & Banner Header */}
+                  <div className="bg-white p-6 sm:p-7 rounded-3xl border-2 border-[#E6DDCB] shadow-sm space-y-4">
+                    <label className="text-xs font-bold text-[#0D1B2A] uppercase tracking-wider block">
+                      აირჩიეთ პროგრამის თავი (11 თავი):
+                    </label>
+                    <select
+                      value={selectedChapterId}
+                      onChange={(e) => setSelectedChapterId(e.target.value)}
+                      className="w-full bg-[#FAF8F3] border border-[#C79B3A] rounded-xl px-4 py-3 text-xs font-bold text-[#0D1B2A] focus:outline-none focus:ring-2 focus:ring-[#C79B3A]"
+                    >
+                      {isLoggedIn ? (
+                        <option value="all">
+                          ყველა თავი (სულ {categoryTotalCounts['chronology'] || 0} კითხვა)
+                        </option>
+                      ) : (
+                        <option value="all">
+                          🔒 ყველა თავი (საჭიროებს ავტორიზაციას)
+                        </option>
+                      )}
+                      {programs.map((prog) => {
+                        const isLocked = !isLoggedIn && prog.chapterNumber !== 1;
+                        return (
+                          <option key={prog.id} value={prog.id}>
+                            {isLocked ? `🔒 ${prog.title} (საჭიროებს ავტორიზაციას)` : prog.title}
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    {!isLoggedIn && (
+                      <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#0D1B2A]">
+                          <Lock className="w-4 h-4 text-[#C79B3A] shrink-0" />
+                          <span>დანარჩენი თავების და პროგრესის სანახავად: გთხოვთ გაიაროთ ავტორიზაცია</span>
+                        </div>
+                        {onOpenAuth && (
+                          <button
+                            onClick={onOpenAuth}
+                            className="px-4 py-2 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold uppercase tracking-wider rounded-xl transition-all shrink-0 cursor-pointer shadow-sm"
+                          >
+                            ავტორიზაცია
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  <button
-                    onClick={handleStartRandomTest}
-                    disabled={loading}
-                    className="w-full sm:w-auto px-8 py-4 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-2xl transition-all shadow-md inline-flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                  >
-                    <Play className="w-4 h-4 fill-current" />
-                    <span>ქრონოლოგიის ტესტის დაწყება</span>
-                  </button>
+                  {isLoggedIn || selectedChapterId === 'ch-1' ? (
+                    <div className="bg-white p-8 sm:p-12 rounded-3xl border-2 border-[#C79B3A] shadow-xl text-center space-y-6 max-w-2xl mx-auto">
+                      <div className="w-16 h-16 rounded-2xl bg-[#FAF8F3] border border-[#C79B3A]/40 flex items-center justify-center mx-auto text-[#C79B3A]">
+                        <Clock className="w-8 h-8" />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <h3 className="font-serif font-bold text-2xl sm:text-3xl text-[#0D1B2A]">
+                          ქრონოლოგიის დავალებები
+                        </h3>
+                        <p className="text-xs sm:text-sm text-[#666666] leading-relaxed max-w-md mx-auto">
+                          ქრონოლოგიის კითხვებში მოსწავლემ უნდა დაალაგოს 3 მოვლენის სწორი თანმიმდევრობა.
+                        </p>
+                        <div className="pt-2">
+                          <span className="inline-block px-4 py-1.5 bg-[#FAF8F3] border border-[#E6DDCB] text-[#13253D] text-xs font-bold rounded-full">
+                            {selectedChapterId === 'ch-1' ? 'თავი 1: ძველი აღმოსავლეთი და საქართველო' : 'ყველა თავი'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleStartChapterTest(selectedChapterId)}
+                        disabled={loading}
+                        className="w-full sm:w-auto px-8 py-4 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-2xl transition-all shadow-md inline-flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                      >
+                        <Play className="w-4 h-4 fill-current" />
+                        <span>ქრონოლოგიის ტესტის დაწყება</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="bg-white p-8 sm:p-12 rounded-3xl border-2 border-[#C79B3A]/60 shadow-xl text-center space-y-6 max-w-2xl mx-auto my-6 animate-fade-in">
+                      <div className="w-20 h-20 rounded-3xl bg-[#FAF8F3] border-2 border-[#C79B3A] flex items-center justify-center mx-auto text-[#C79B3A] shadow-md">
+                        <Lock className="w-10 h-10" />
+                      </div>
+                      <div className="space-y-3">
+                        <span className="px-3.5 py-1 bg-[#FAF8F3] border border-[#C79B3A]/40 text-[#C79B3A] text-[11px] font-bold uppercase tracking-[0.2em] rounded-full inline-flex items-center gap-1.5">
+                          <ShieldAlert className="w-3.5 h-3.5" />
+                          <span>წვდომა შეზღუდულია</span>
+                        </span>
+                        <h3 className="font-serif font-bold text-2xl sm:text-3xl text-[#0D1B2A]">
+                          ავტორიზაცია აუცილებელია
+                        </h3>
+                        <p className="text-sm sm:text-base text-[#666666] leading-relaxed font-medium max-w-md mx-auto">
+                          დანარჩენი თავების და პროგრესის სანახავად: გთხოვთ გაიაროთ ავტორიზაცია
+                        </p>
+                      </div>
+                      {onOpenAuth && (
+                        <button
+                          onClick={onOpenAuth}
+                          className="px-8 py-4 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-2xl transition-all shadow-md inline-flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <UserCheck className="w-4 h-4" />
+                          <span>ავტორიზაციის გავლა</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : selectedCategoryKey === 'mcq' ? (
                 /* MCQ CATEGORY WORKFLOW (2 BOXES) */
@@ -1300,51 +1400,68 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
 
                         return (
                           <div className="space-y-4">
-                            <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-3">
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-bold text-[#0D1B2A]">
-                                  {currProg?.title}
-                                </span>
-                                <span className="text-[11px] font-mono font-bold text-[#C79B3A]">
-                                  {stats.pct}% შესრულებული
-                                </span>
-                              </div>
-
-                              <div className="space-y-1.5">
-                                <div className="w-full h-3 bg-[#E6DDCB] rounded-full overflow-hidden flex">
-                                  <div 
-                                    style={{ width: `${stats.total > 0 ? (stats.correct / stats.total) * 100 : 0}%` }}
-                                    className="bg-emerald-500 h-full transition-all duration-500"
-                                    title={`სწორი: ${stats.correct}`}
-                                  />
-                                  <div 
-                                    style={{ width: `${stats.total > 0 ? (stats.incorrect / stats.total) * 100 : 0}%` }}
-                                    className="bg-rose-500 h-full transition-all duration-500"
-                                    title={`არასწორი: ${stats.incorrect}`}
-                                  />
-                                  <div 
-                                    style={{ width: `${stats.total > 0 ? (stats.unattempted / stats.total) * 100 : 0}%` }}
-                                    className="bg-gray-200 h-full transition-all duration-500"
-                                    title={`არ გაუკეთებია: ${stats.unattempted}`}
-                                  />
+                            {isLoggedIn ? (
+                              <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-[#0D1B2A]">
+                                    {currProg?.title}
+                                  </span>
+                                  <span className="text-[11px] font-mono font-bold text-[#C79B3A]">
+                                    {stats.pct}% შესრულებული
+                                  </span>
                                 </div>
 
-                                <div className="grid grid-cols-3 text-center text-[11px] font-semibold pt-1">
-                                  <div className="flex items-center justify-center gap-1 text-emerald-700">
-                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                    <span>სწორი: {stats.correct}</span>
+                                <div className="space-y-1.5">
+                                  <div className="w-full h-3 bg-[#E6DDCB] rounded-full overflow-hidden flex">
+                                    <div 
+                                      style={{ width: `${stats.total > 0 ? (stats.correct / stats.total) * 100 : 0}%` }}
+                                      className="bg-emerald-500 h-full transition-all duration-500"
+                                      title={`სწორი: ${stats.correct}`}
+                                    />
+                                    <div 
+                                      style={{ width: `${stats.total > 0 ? (stats.incorrect / stats.total) * 100 : 0}%` }}
+                                      className="bg-rose-500 h-full transition-all duration-500"
+                                      title={`არასწორი: ${stats.incorrect}`}
+                                    />
+                                    <div 
+                                      style={{ width: `${stats.total > 0 ? (stats.unattempted / stats.total) * 100 : 0}%` }}
+                                      className="bg-gray-200 h-full transition-all duration-500"
+                                      title={`არ გაუკეთებია: ${stats.unattempted}`}
+                                    />
                                   </div>
-                                  <div className="flex items-center justify-center gap-1 text-rose-700">
-                                    <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                                    <span>არასწორი: {stats.incorrect}</span>
-                                  </div>
-                                  <div className="flex items-center justify-center gap-1 text-gray-600">
-                                    <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
-                                    <span>დარჩა: {stats.unattempted}</span>
+
+                                  <div className="grid grid-cols-3 text-center text-[11px] font-semibold pt-1">
+                                    <div className="flex items-center justify-center gap-1 text-emerald-700">
+                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                      <span>სწორი: {stats.correct}</span>
+                                    </div>
+                                    <div className="flex items-center justify-center gap-1 text-rose-700">
+                                      <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                                      <span>არასწორი: {stats.incorrect}</span>
+                                    </div>
+                                    <div className="flex items-center justify-center gap-1 text-gray-600">
+                                      <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
+                                      <span>დარჩა: {stats.unattempted}</span>
+                                    </div>
                                   </div>
                                 </div>
                               </div>
-                            </div>
+                            ) : (
+                              <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2 text-xs font-semibold text-[#0D1B2A]">
+                                  <Lock className="w-4 h-4 text-[#C79B3A] shrink-0" />
+                                  <span>პროგრესის შესანახად და სანახავად: გთხოვთ გაიაროთ ავტორიზაცია</span>
+                                </div>
+                                {onOpenAuth && (
+                                  <button
+                                    onClick={onOpenAuth}
+                                    className="px-3.5 py-1.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold rounded-xl transition-all shrink-0 cursor-pointer shadow-xs"
+                                  >
+                                    ავტორიზაცია
+                                  </button>
+                                )}
+                              </div>
+                            )}
 
                             <div className="flex flex-col sm:flex-row items-center gap-3">
                               <button
@@ -1356,15 +1473,17 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                                 <span>ამ თავის ტესტის დაწყება</span>
                               </button>
 
-                              <button
-                                onClick={handleResetCategoryProgress}
-                                disabled={isResetting}
-                                title="ამ თავის მონაცემების განულება / დარესეტება"
-                                className="px-4 py-3.5 bg-white hover:bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50"
-                              >
-                                <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
-                                <span>დარესეტება</span>
-                              </button>
+                              {isLoggedIn && (
+                                <button
+                                  onClick={handleResetCategoryProgress}
+                                  disabled={isResetting}
+                                  title="ამ თავის მონაცემების განულება / დარესეტება"
+                                  className="px-4 py-3.5 bg-white hover:bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+                                  <span>დარესეტება</span>
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
@@ -1388,18 +1507,46 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                       onChange={(e) => setSelectedChapterId(e.target.value)}
                       className="w-full bg-[#FAF8F3] border border-[#C79B3A] rounded-xl px-4 py-3 text-xs font-bold text-[#0D1B2A] focus:outline-none focus:ring-2 focus:ring-[#C79B3A]"
                     >
-                      <option value="all">
-                        ყველა თავი (სულ {categoryItemDetailsMap[selectedCategoryKey]?.count || 0} {categoryItemDetailsMap[selectedCategoryKey]?.unitLabel || 'დავალება'})
-                      </option>
-                      {programs.map((prog) => (
-                        <option key={prog.id} value={prog.id}>
-                          {prog.title} ({getChapterItemDisplay(prog.id)})
+                      {isLoggedIn ? (
+                        <option value="all">
+                          ყველა თავი (სულ {categoryItemDetailsMap[selectedCategoryKey]?.count || 0} {categoryItemDetailsMap[selectedCategoryKey]?.unitLabel || 'დავალება'})
                         </option>
-                      ))}
+                      ) : (
+                        <option value="all">
+                          🔒 ყველა თავი (საჭიროებს ავტორიზაციას)
+                        </option>
+                      )}
+                      {programs.map((prog) => {
+                        const isLocked = !isLoggedIn && prog.chapterNumber !== 1;
+                        return (
+                          <option key={prog.id} value={prog.id}>
+                            {isLocked ? `🔒 ${prog.title} (საჭიროებს ავტორიზაციას)` : `${prog.title} (${getChapterItemDisplay(prog.id)})`}
+                          </option>
+                        );
+                      })}
                     </select>
 
-                    {/* Progress Bar for selected chapter */}
+                    {/* Progress Bar or Auth Notice Header */}
                     {(() => {
+                      if (!isLoggedIn) {
+                        return (
+                          <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#0D1B2A]">
+                              <Lock className="w-4 h-4 text-[#C79B3A] shrink-0" />
+                              <span>დანარჩენი თავების და პროგრესის სანახავად: გთხოვთ გაიაროთ ავტორიზაცია</span>
+                            </div>
+                            {onOpenAuth && (
+                              <button
+                                onClick={onOpenAuth}
+                                className="px-4 py-2 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold uppercase tracking-wider rounded-xl transition-all shrink-0 cursor-pointer shadow-sm"
+                              >
+                                ავტორიზაცია
+                              </button>
+                            )}
+                          </div>
+                        );
+                      }
+
                       const currProg = programs.find(p => p.id === selectedChapterId);
                       const displayTitle = selectedChapterId === 'all'
                         ? 'ყველა თავი'
@@ -1459,71 +1606,100 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user }) => {
                     })()}
                   </div>
 
-                  {/* Task Groups / Boxes for the Selected Chapter */}
-                  {taskGroups.length > 0 ? (
-                    <div className="space-y-4">
-                      <h3 className="font-serif font-bold text-xl text-[#0D1B2A]">
-                        ამ თავის დავალებები ({taskGroups.length} დავალების ბოქსი)
-                      </h3>
+                  {/* Task Groups / Boxes for Selected Chapter (or Lock Screen for Unregistered on Ch2-11) */}
+                  {isLoggedIn || selectedChapterId === 'ch-1' ? (
+                    taskGroups.length > 0 ? (
+                      <div className="space-y-4">
+                        <h3 className="font-serif font-bold text-xl text-[#0D1B2A]">
+                          ამ თავის დავალებები ({taskGroups.length} დავალების ბოქსი)
+                        </h3>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {taskGroups.map((task) => (
-                          <div
-                            key={task.id}
-                            className="bg-white rounded-3xl border-2 border-[#E6DDCB] hover:border-[#C79B3A] p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4 group overflow-hidden"
-                          >
-                            <div className="space-y-3">
-                              {/* Task Thumbnail Image if available (Map / Illustration) */}
-                              {task.image && (
-                                <div className="rounded-2xl overflow-hidden aspect-video bg-[#0D1B2A] border border-[#E6DDCB] shadow-inner max-h-48">
-                                  <img 
-                                    src={task.image} 
-                                    alt={task.title} 
-                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                    referrerPolicy="no-referrer"
-                                  />
-                                </div>
-                              )}
-
-                              {/* Task Text snippet if available (Source / Analogy) */}
-                              {task.sourceContext && (
-                                <div className="p-4 bg-[#FAF8F3] rounded-2xl border-l-4 border-[#C79B3A] text-xs font-serif italic text-[#0D1B2A] line-clamp-3">
-                                  „{task.sourceContext}“
-                                </div>
-                              )}
-
-                              <div className="space-y-1">
-                                <div className="flex items-center justify-between">
-                                  <span className="px-2.5 py-0.5 bg-[#FAF8F3] text-[#C79B3A] text-[10px] font-bold uppercase rounded border border-[#E6DDCB]">
-                                    {task.subtitle}
-                                  </span>
-                                </div>
-
-                                <h4 className="font-serif font-bold text-xl text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors">
-                                  {task.title}
-                                </h4>
-                              </div>
-                            </div>
-
-                            <button
-                              onClick={() => handleStartTaskGroupTest(task)}
-                              className="w-full py-3.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {taskGroups.map((task) => (
+                            <div
+                              key={task.id}
+                              className="bg-white rounded-3xl border-2 border-[#E6DDCB] hover:border-[#C79B3A] p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4 group overflow-hidden"
                             >
-                              <Play className="w-4 h-4 fill-current" />
-                              <span>ამ დავალების დაწყება</span>
-                            </button>
-                          </div>
-                        ))}
+                              <div className="space-y-3">
+                                {/* Task Thumbnail Image if available (Map / Illustration) */}
+                                {task.image && (
+                                  <div className="rounded-2xl overflow-hidden aspect-video bg-[#0D1B2A] border border-[#E6DDCB] shadow-inner max-h-48">
+                                    <img 
+                                      src={task.image} 
+                                      alt={task.title} 
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                      referrerPolicy="no-referrer"
+                                    />
+                                  </div>
+                                )}
+
+                                {/* Task Text snippet if available (Source / Analogy) */}
+                                {task.sourceContext && (
+                                  <div className="p-4 bg-[#FAF8F3] rounded-2xl border-l-4 border-[#C79B3A] text-xs font-serif italic text-[#0D1B2A] line-clamp-3">
+                                    „{task.sourceContext}“
+                                  </div>
+                                )}
+
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <span className="px-2.5 py-0.5 bg-[#FAF8F3] text-[#C79B3A] text-[10px] font-bold uppercase rounded border border-[#E6DDCB]">
+                                      {task.subtitle}
+                                    </span>
+                                  </div>
+
+                                  <h4 className="font-serif font-bold text-xl text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors">
+                                    {task.title}
+                                  </h4>
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={() => handleStartTaskGroupTest(task)}
+                                className="w-full py-3.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                              >
+                                <Play className="w-4 h-4 fill-current" />
+                                <span>ამ დავალების დაწყება</span>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="bg-white p-10 rounded-3xl border border-[#E6DDCB] text-center space-y-3">
+                        <h4 className="font-serif font-bold text-lg text-[#0D1B2A]">
+                          ამ თავში დავალებები ჯერ არ არის
+                        </h4>
+                        <p className="text-xs text-[#666666]">
+                          აირჩიეთ სხვა თავი ჩამონათვალიდან.
+                        </p>
+                      </div>
+                    )
                   ) : (
-                    <div className="bg-white p-10 rounded-3xl border border-[#E6DDCB] text-center space-y-3">
-                      <h4 className="font-serif font-bold text-lg text-[#0D1B2A]">
-                        ამ თავში დავალებები ჯერ არ არის
-                      </h4>
-                      <p className="text-xs text-[#666666]">
-                        აირჩიეთ სხვა თავი ჩამონათვალიდან.
-                      </p>
+                    <div className="bg-white p-8 sm:p-12 rounded-3xl border-2 border-[#C79B3A]/60 shadow-xl text-center space-y-6 max-w-2xl mx-auto my-6 animate-fade-in">
+                      <div className="w-20 h-20 rounded-3xl bg-[#FAF8F3] border-2 border-[#C79B3A] flex items-center justify-center mx-auto text-[#C79B3A] shadow-md">
+                        <Lock className="w-10 h-10" />
+                      </div>
+                      <div className="space-y-3">
+                        <span className="px-3.5 py-1 bg-[#FAF8F3] border border-[#C79B3A]/40 text-[#C79B3A] text-[11px] font-bold uppercase tracking-[0.2em] rounded-full inline-flex items-center gap-1.5">
+                          <ShieldAlert className="w-3.5 h-3.5" />
+                          <span>წვდომა შეზღუდულია</span>
+                        </span>
+                        <h3 className="font-serif font-bold text-2xl sm:text-3xl text-[#0D1B2A]">
+                          ავტორიზაცია აუცილებელია
+                        </h3>
+                        <p className="text-sm sm:text-base text-[#666666] leading-relaxed font-medium max-w-md mx-auto">
+                          დანარჩენი თავების და პროგრესის სანახავად: გთხოვთ გაიაროთ ავტორიზაცია
+                        </p>
+                      </div>
+                      {onOpenAuth && (
+                        <button
+                          onClick={onOpenAuth}
+                          className="px-8 py-4 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-2xl transition-all shadow-md inline-flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <UserCheck className="w-4 h-4" />
+                          <span>ავტორიზაციის გავლა</span>
+                        </button>
+                      )}
                     </div>
                   )}
 

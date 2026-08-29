@@ -118,7 +118,7 @@ export const fetchAllArticles = async (): Promise<Article[]> => {
         if (isBroken && item.title) {
           const fixedSlug = generateSlug(item.title, item.id);
           if (fixedSlug && fixedSlug !== dbSlug) {
-            supabase.from('articles').update({ slug: fixedSlug }).eq('id', item.id).then(() => {
+            Promise.resolve(supabase.from('articles').update({ slug: fixedSlug }).eq('id', item.id)).then(() => {
               console.log(`Auto-fixed slug for "${item.title}": "${dbSlug}" → "${fixedSlug}"`);
             }).catch(() => {});
           }

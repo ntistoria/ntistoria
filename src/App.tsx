@@ -457,6 +457,7 @@ export function App() {
               <TestsView
                 onOpenTest={handleOpenTest}
                 user={user}
+                onOpenAuth={() => setIsAuthOpen(true)}
               />
             )}
 
