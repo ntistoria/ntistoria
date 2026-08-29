@@ -274,6 +274,29 @@ export function App() {
     }
 
     const domain = 'https://ntistoria.vercel.app';
+
+    if (selectedInstitutionCode) {
+      const cleanCode = selectedInstitutionCode.replace('#', '');
+      const isCol = activeTab === 'colleges';
+      const instTitle = isCol
+        ? `კოლეჯი #${cleanCode} — პროფესიული პროგრამები, მისამართი | NT ისტორია`
+        : `უნივერსიტეტი #${cleanCode} — აკადემიური პროგრამები, ფაკულტეტები, მისამართი | NT ისტორია`;
+
+      updateSeoMetaData({
+        title: instTitle,
+        description: `იხილეთ დაწესებულების (#${cleanCode}) სრული აკადემიური და პროფესიული პროგრამები, ფაკულტეტები, კვოტები, სწავლის საფასური, მისამართი და ინტერაქტიული რუკა.`,
+        canonicalUrl: `${domain}/${isCol ? 'colleges' : 'universities'}/${cleanCode}`,
+        articleJsonLd: {
+          "@context": "https://schema.org",
+          "@type": "EducationalOrganization",
+          "name": `უმაღლესი/პროფესიული სასწავლებელი #${cleanCode}`,
+          "identifier": cleanCode,
+          "url": `${domain}/${isCol ? 'colleges' : 'universities'}/${cleanCode}`
+        }
+      });
+      return;
+    }
+
     switch (activeTab) {
       case 'home':
         updateSeoMetaData({
@@ -285,25 +308,43 @@ export function App() {
 
       case 'universities':
         updateSeoMetaData({
-          title: 'უნივერსიტეტები და უმაღლესი სასწავლებლები — NT ისტორია',
-          description: 'საქართველოს უნივერსიტეტების სრული კატალოგი, ინტერაქტიული რუკა, ფაკულტეტები და აკადემიური პროგრამები.',
-          canonicalUrl: `${domain}/universities`
+          title: 'საქართველოს უნივერსიტეტების სრული კატალოგი (2026) — უმაღლესი სასწავლებლები, რუკა, ფაკულტეტები | NT ისტორია',
+          description: 'საქართველოს 120+ უნივერსიტეტის სრული კატალოგი: თსუ (001), ილიაუნი (010), სტუ (003), კავკასიის უნივერსიტეტი და სხვა. იპოვეთ აკადემიური პროგრამები, საგამოცდო კოეფიციენტები, მისამართები და ინტერაქტიული რუკა.',
+          canonicalUrl: `${domain}/universities`,
+          articleJsonLd: {
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            "name": "საქართველოს უნივერსიტეტების კატალოგი",
+            "description": "საქართველოს ავტორიზებული უნივერსიტეტების სრული ჩამონათვალი და აკადემიური პროგრამები"
+          }
         });
         break;
 
       case 'colleges':
         updateSeoMetaData({
-          title: 'პროფესიული კოლეჯები — NT ისტორია',
-          description: 'საქართველოს ავტორიზებული პროფესიული კოლეჯების კატალოგი, ინტერაქტიული რუკა და პროფესიული პროგრამები.',
-          canonicalUrl: `${domain}/colleges`
+          title: 'საქართველოს კოლეჯები 2026 — პროფესიული სასწავლებლების კატალოგი, რუკა | NT ისტორია',
+          description: 'საქართველოს ავტორიზებული პროფესიული კოლეჯების სრული კატალოგი, პროფესიული პროგრამები, სწავლის პირობები, მისამართები და ინტერაქტიული რუკა.',
+          canonicalUrl: `${domain}/colleges`,
+          articleJsonLd: {
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            "name": "საქართველოს პროფესიული კოლეჯების კატალოგი",
+            "description": "საქართველოს ავტორიზებული პროფესიული კოლეჯების ჩამონათვალი და პროფესიული პროგრამები"
+          }
         });
         break;
 
       case 'programs':
         updateSeoMetaData({
-          title: 'პროგრამების კატალოგი — NT ისტორია',
-          description: 'საქართველოს უნივერსიტეტებისა და კოლეჯების სრული აკადემიური და პროფესიული პროგრამების კატალოგი.',
-          canonicalUrl: `${domain}/programs`
+          title: 'უნივერსიტეტების და კოლეჯების პროგრამების კატალოგი (2026) — 1000+ სპეციალობა | NT ისტორია',
+          description: 'იპოვეთ 1000-ზე მეტი აკადემიური და პროფესიული პროგრამა: ბაკალავრიატი, მაგისტრატურა, პროფესიული განათლება. სწავლის საფასური, კვოტები, ფაკულტეტები და NAEC კოდები.',
+          canonicalUrl: `${domain}/programs`,
+          articleJsonLd: {
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            "name": "საქართველოს უნივერსიტეტებისა და კოლეჯების პროგრამების კატალოგი",
+            "description": "1000-ზე მეტი აკადემიური და პროფესიული პროგრამის ერთიანი ბაზა"
+          }
         });
         break;
 
