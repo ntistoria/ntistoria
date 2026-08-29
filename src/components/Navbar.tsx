@@ -68,15 +68,15 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
             onClick={() => handleNavClick('home')} 
           />
 
-          {/* Menu Center (Desktop) */}
-          <nav className="hidden md:flex items-center gap-10 text-[11px] uppercase tracking-[0.15em] font-semibold text-[#666666]">
+          {/* Menu Center (Desktop/Tablet) */}
+          <nav className="hidden md:flex items-center gap-3 lg:gap-7 xl:gap-9 text-[10px] lg:text-[11px] uppercase tracking-[0.12em] lg:tracking-[0.15em] font-semibold text-[#666666]">
             {navItems.map((item) => {
               const isActive = activeTab === item.id;
               return (
                 <button
                   key={item.id}
                   onClick={() => handleNavClick(item.id)}
-                  className={`relative py-1 transition-colors duration-200 cursor-pointer ${
+                  className={`relative py-1 transition-colors duration-200 cursor-pointer whitespace-nowrap ${
                     isActive 
                       ? 'text-[#13253D] border-b border-[#C79B3A] pb-1 font-bold' 
                       : 'hover:text-[#13253D]'
@@ -89,12 +89,13 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
           </nav>
 
           {/* Right Actions */}
-          <div className="hidden md:flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-3">
             {onOpenSearch && (
               <button
                 onClick={onOpenSearch}
                 className="p-2 text-[#666666] hover:text-[#13253D] hover:bg-[#F5F2EA] rounded-[2px] border border-[#E6DDCB] transition-colors cursor-pointer"
                 title="ძებნა"
+                aria-label="ძებნა"
               >
                 <Search className="w-4 h-4 text-[#C79B3A]" />
               </button>
@@ -105,7 +106,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
                 {isAdmin && (
                   <button
                     onClick={() => handleNavClick('admin')}
-                    className="flex items-center gap-1.5 text-xs font-bold text-[#0D1B2A] bg-[#C79B3A] hover:bg-[#E6C86B] px-3 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer"
+                    className="flex items-center gap-1.5 text-xs font-bold text-[#0D1B2A] bg-[#C79B3A] hover:bg-[#E6C86B] px-3 py-1.5 rounded-lg shadow-sm transition-all cursor-pointer whitespace-nowrap"
                   >
                     <ShieldCheck className="w-3.5 h-3.5" />
                     <span>ადმინ პანელი</span>
@@ -115,7 +116,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
                 {onOpenProfile && (
                   <button
                     onClick={onOpenProfile}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-[#13253D] bg-[#F5F2EA] hover:bg-[#E6DDCB]/60 px-3 py-1.5 rounded-lg border border-[#E6DDCB] cursor-pointer transition-colors"
+                    className="flex items-center gap-1.5 text-xs font-semibold text-[#13253D] bg-[#F5F2EA] hover:bg-[#E6DDCB]/60 px-3 py-1.5 rounded-lg border border-[#E6DDCB] cursor-pointer transition-colors whitespace-nowrap"
                   >
                     <User className="w-3.5 h-3.5 text-[#C79B3A]" />
                     <span>{user.name}</span>
@@ -124,7 +125,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
 
                 <button
                   onClick={onLogout}
-                  className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-[#666666] hover:text-[#13253D] transition-colors cursor-pointer"
+                  className="px-2.5 py-1.5 text-[11px] uppercase tracking-wider text-[#666666] hover:text-[#13253D] transition-colors cursor-pointer whitespace-nowrap"
                 >
                   გამოსვლა
                 </button>
@@ -132,20 +133,31 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
             ) : (
               <button
                 onClick={onOpenAuth}
-                className="px-6 py-2.5 bg-[#13253D] text-[#FAF8F3] text-[11px] uppercase tracking-widest rounded-[2px] font-bold hover:bg-[#C79B3A] hover:text-[#0D1B2A] transition-all cursor-pointer shadow-sm active:scale-[0.98]"
+                className="px-5 py-2 bg-[#13253D] text-[#FAF8F3] text-[11px] uppercase tracking-widest rounded-[2px] font-bold hover:bg-[#C79B3A] hover:text-[#0D1B2A] transition-all cursor-pointer shadow-sm active:scale-[0.98] whitespace-nowrap"
               >
                 ავტორიზაცია
               </button>
             )}
           </div>
 
+          {/* Mobile Actions (Search + Hamburger) */}
+          <div className="flex md:hidden items-center gap-1.5">
+            {onOpenSearch && (
+              <button
+                onClick={onOpenSearch}
+                className="p-2 text-[#13253D] hover:bg-[#F5F2EA] rounded-lg border border-[#E6DDCB] transition-colors cursor-pointer active:scale-95"
+                title="ძებნა"
+                aria-label="ძებნა"
+              >
+                <Search className="w-5 h-5 text-[#C79B3A]" />
+              </button>
+            )}
 
-          {/* Mobile Menu Toggle */}
-          <div className="flex md:hidden items-center gap-2">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 text-[#13253D] hover:bg-[#F5F2EA] rounded-md transition-colors cursor-pointer"
-              aria-label="Toggle menu"
+              className="p-2 text-[#13253D] hover:bg-[#F5F2EA] rounded-lg border border-[#E6DDCB] transition-colors cursor-pointer active:scale-95"
+              aria-label="მენიუს გადართვა"
+              aria-expanded={mobileMenuOpen}
             >
               {mobileMenuOpen ? <X className="w-6 h-6 text-[#C79B3A]" /> : <Menu className="w-6 h-6 text-[#13253D]" />}
             </button>

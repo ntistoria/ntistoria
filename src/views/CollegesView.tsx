@@ -100,10 +100,32 @@ export const CollegesView: React.FC<CollegesViewProps> = ({
     });
   }, [colleges, searchQuery, selectedCity, selectedStatus]);
 
+  // Pagination State (24 per page for lightweight rendering)
+  const ITEMS_PER_PAGE = 24;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedCity, selectedStatus]);
+
   const handleResetFilters = () => {
     setSearchQuery('');
     setSelectedCity('');
     setSelectedStatus('');
+    setCurrentPage(1);
+  };
+
+  const totalPages = Math.ceil(filteredColleges.length / ITEMS_PER_PAGE) || 1;
+  const paginatedColleges = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredColleges.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredColleges, currentPage]);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+      window.scrollTo({ top: 450, behavior: 'smooth' });
+    }
   };
 
   return (
@@ -263,61 +285,110 @@ export const CollegesView: React.FC<CollegesViewProps> = ({
 
       {/* College Cards Grid */}
       {!loading && !error && filteredColleges.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredColleges.map((col) => {
-            return (
-              <div
-                key={col.id}
-                onMouseEnter={() => setHoveredCode(col.code)}
-                onMouseLeave={() => setHoveredCode(undefined)}
-                onClick={() => onSelectCollege(col.code)}
-                className="bg-white rounded-3xl border-2 border-[#E6DDCB] hover:border-[#C79B3A] p-6 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between space-y-5 cursor-pointer group relative overflow-hidden"
-              >
-                {/* Logo & Status Badge */}
-                <div className="flex items-start justify-between gap-3">
-                  <div className="w-16 h-16 rounded-2xl bg-[#FAF8F3] border border-[#E6DDCB] p-2 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                    {col.logo_url ? (
-                      <img src={col.logo_url} alt={col.name} className="w-full h-full object-contain rounded-lg" />
-                    ) : (
-                      <BookOpen className="w-8 h-8 text-[#C79B3A]" />
-                    )}
-                  </div>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full border ${
-                    col.status === 'სახელმწიფო' 
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                      : 'bg-amber-50 text-amber-700 border-amber-200'
-                  }`}>
-                    {col.status || 'კოლეჯი'}
-                  </span>
-                </div>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {paginatedColleges.map((col) => {
+              return (
+                <div
+                  key={col.id}
+                  onMouseEnter={() => setHoveredCode(col.code)}
+                  onMouseLeave={() => setHoveredCode(undefined)}
+                  onClick={() => onSelectCollege(col.code)}
+                  className="bg-white rounded-3xl border-2 border-[#E6DDCB] hover:border-[#C79B3A] p-6 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col justify-between space-y-5 cursor-pointer group relative overflow-hidden"
+                >
+                  {/* Logo & Status / Code Badges */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="w-16 h-16 rounded-2xl bg-[#FAF8F3] border border-[#E6DDCB] p-2 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                      {col.logo_url ? (
+                        <img src={col.logo_url} alt={col.name} className="w-full h-full object-contain rounded-lg" />
+                      ) : (
+                        <BookOpen className="w-8 h-8 text-[#C79B3A]" />
+                      )}
+                    </div>
 
-                {/* Name & Location Info */}
-                <div className="space-y-2 flex-1">
-                  <h3 className="font-serif font-bold text-base sm:text-lg text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors leading-snug line-clamp-2">
-                    {col.name}
-                  </h3>
-                  <div className="flex items-center gap-1.5 text-xs text-[#666666] font-medium">
-                    <MapPin className="w-3.5 h-3.5 text-[#C79B3A] shrink-0" />
-                    <span>{col.city || col.address || 'საქართველო'}</span>
-                  </div>
-                </div>
-
-                {/* Programs count & Detail CTA Button */}
-                <div className="pt-4 border-t border-[#E6DDCB]/60 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#0D1B2A]">
-                    <BookOpen className="w-4 h-4 text-[#C79B3A]" />
-                    <span>{col.program_count || 0} პროგრამა</span>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <span className="text-[11px] font-mono font-bold bg-[#FAF8F3] border border-[#C79B3A]/40 text-[#C79B3A] px-2.5 py-0.5 rounded-lg shadow-xs">
+                        {col.code}
+                      </span>
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-3 py-0.5 rounded-full border ${
+                        col.status === 'სახელმწიფო' 
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                          : 'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}>
+                        {col.status || 'კოლეჯი'}
+                      </span>
+                    </div>
                   </div>
 
-                  <span className="inline-flex items-center gap-1 text-xs font-bold text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors">
-                    <span>დეტალურად</span>
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                  </span>
+                  {/* Name & Location Info */}
+                  <div className="space-y-2 flex-1">
+                    <h3 className="font-serif font-bold text-base sm:text-lg text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors leading-snug line-clamp-2">
+                      {col.name}
+                    </h3>
+                    <div className="flex items-center gap-1.5 text-xs text-[#666666] font-medium">
+                      <MapPin className="w-3.5 h-3.5 text-[#C79B3A] shrink-0" />
+                      <span>{col.city || col.address || 'საქართველო'}</span>
+                    </div>
+                  </div>
+
+                  {/* Programs count & Detail CTA Button */}
+                  <div className="pt-4 border-t border-[#E6DDCB]/60 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-[#0D1B2A]">
+                      <BookOpen className="w-4 h-4 text-[#C79B3A]" />
+                      <span>{col.program_count || 0} პროგრამა</span>
+                    </div>
+
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors">
+                      <span>დეტალურად</span>
+                      <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                    </span>
+                  </div>
                 </div>
+              );
+            })}
+          </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="bg-white p-5 rounded-3xl border-2 border-[#E6DDCB] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4 pt-6">
+              <div className="text-xs text-[#666666] font-medium text-center sm:text-left">
+                გვერდი <strong className="text-[#0D1B2A]">{currentPage}</strong> / <strong>{totalPages}</strong> (სულ <strong className="text-[#C79B3A]">{filteredColleges.length}</strong> კოლეჯი)
               </div>
-            );
-          })}
-        </div>
+
+              <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="px-3.5 py-2 bg-[#FAF8F3] hover:bg-[#0D1B2A] text-[#0D1B2A] hover:text-white border border-[#E6DDCB] rounded-xl text-xs font-bold transition-all disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  ← წინა
+                </button>
+
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => handlePageChange(p)}
+                    className={`w-9 h-9 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      currentPage === p
+                        ? 'bg-[#0D1B2A] text-[#FAF8F3] border-2 border-[#C79B3A] shadow-sm'
+                        : 'bg-[#FAF8F3] hover:bg-[#E6DDCB]/60 text-[#0D1B2A] border border-[#E6DDCB]'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="px-3.5 py-2 bg-[#FAF8F3] hover:bg-[#0D1B2A] text-[#0D1B2A] hover:text-white border border-[#E6DDCB] rounded-xl text-xs font-bold transition-all disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+                >
+                  შემდეგი →
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
     </div>

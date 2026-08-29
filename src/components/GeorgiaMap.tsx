@@ -32,7 +32,9 @@ export const GeorgiaMap: React.FC<GeorgiaMapProps> = ({
         center: GEORGIA_CENTER,
         zoom: DEFAULT_ZOOM,
         zoomControl: true,
-        scrollWheelZoom: false
+        scrollWheelZoom: false,
+        tapHold: false,
+        touchZoom: 'center'
       });
 
       // Add modern OpenStreetMap tile layer
