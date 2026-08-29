@@ -113,7 +113,7 @@ export const Footer: React.FC<FooterProps> = ({ setActiveTab }) => {
               </li>
               <li>
                 <button onClick={() => setActiveTab('contact')} className="hover:text-[#C79B3A] transition-colors cursor-pointer">
-                  კონსულტაცია & FAQ
+                  კონტაქტი & FAQ
                 </button>
               </li>
             </ul>

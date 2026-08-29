@@ -37,7 +37,6 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
     { id: 'tests', label: 'ტესტები' },
     { id: 'videos', label: 'ვიდეოთეკა' },
     { id: 'quizzes', label: 'ქვიზები' },
-    { id: 'contact', label: 'კონტაქტი' },
   ];
 
   const navItems = baseNavItems;
