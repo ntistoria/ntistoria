@@ -636,7 +636,7 @@ export const buildHistoryTest = async (
   const allQuestions = await fetchQuestionsForCategory(categoryKey);
 
   let filteredQuestions = allQuestions;
-  if (chapterId && chapterId !== 'all') {
+  if (chapterId && chapterId !== 'all' && !catMeta.isIndependent) {
     const targetNum = Number(String(chapterId).replace(/[^0-9]/g, ''));
     if (targetNum > 0) {
       filteredQuestions = allQuestions.filter(q => {
@@ -646,13 +646,15 @@ export const buildHistoryTest = async (
     }
   }
 
-  const shuffled = [...filteredQuestions].sort(() => Math.random() - 0.5);
+  const finalQuestions = (categoryKey === 'chronology' || catMeta.isIndependent)
+    ? [...filteredQuestions].sort((a, b) => (a.itemNumber || 0) - (b.itemNumber || 0))
+    : [...filteredQuestions].sort(() => Math.random() - 0.5);
 
   const programs = await fetchProgramsAndSubprograms();
-  const selectedChapter = programs.find(p => p.id === chapterId);
+  const selectedChapter = (!catMeta.isIndependent && chapterId) ? programs.find(p => p.id === chapterId) : null;
   const testTitle = selectedChapter 
     ? `${catMeta.title} — ${selectedChapter.title}`
-    : `${catMeta.title} (ყველა თავიდან)`;
+    : catMeta.title;
 
   return {
     id: `${categoryKey}-${chapterId || 'all'}-${Date.now()}`,
@@ -660,8 +662,8 @@ export const buildHistoryTest = async (
     category: 'ეროვნული გამოცდები' as HistoricalCategory,
     difficulty: 'საგამოცდო',
     timeLimitMinutes: 0,
-    questionCount: shuffled.length,
+    questionCount: finalQuestions.length,
     description: selectedChapter ? selectedChapter.description : catMeta.subtitle,
-    questions: shuffled
+    questions: finalQuestions
   };
 };
