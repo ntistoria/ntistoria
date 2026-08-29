@@ -283,7 +283,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
       <section className="max-w-[1180px] mx-auto px-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div 
-            onClick={() => setCatalogType('universities')}
+            onClick={() => setActiveTab('universities')}
             className="bg-white p-6 rounded-[2px] border border-[#E6DDCB] shadow-sm hover:border-[#C79B3A] hover:shadow-md transition-all group cursor-pointer flex items-center gap-5"
           >
             <div className="w-12 h-12 rounded-[2px] bg-[#F5F2EA] border border-[#E6DDCB] flex items-center justify-center text-[#C79B3A] group-hover:bg-[#C79B3A] group-hover:text-white transition-colors">
@@ -298,7 +298,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
           <div 
-            onClick={() => setCatalogType('colleges')}
+            onClick={() => setActiveTab('colleges')}
             className="bg-white p-6 rounded-[2px] border border-[#E6DDCB] shadow-sm hover:border-[#C79B3A] hover:shadow-md transition-all group cursor-pointer flex items-center gap-5"
           >
             <div className="w-12 h-12 rounded-[2px] bg-[#F5F2EA] border border-[#E6DDCB] flex items-center justify-center text-[#C79B3A] group-hover:bg-[#C79B3A] group-hover:text-white transition-colors">
@@ -313,7 +313,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
 
           <div 
-            onClick={() => setCatalogType('programs')}
+            onClick={() => setActiveTab('programs')}
             className="bg-white p-6 rounded-[2px] border border-[#E6DDCB] shadow-sm hover:border-[#C79B3A] hover:shadow-md transition-all group cursor-pointer flex items-center gap-5"
           >
             <div className="w-12 h-12 rounded-[2px] bg-[#F5F2EA] border border-[#E6DDCB] flex items-center justify-center text-[#C79B3A] group-hover:bg-[#C79B3A] group-hover:text-white transition-colors">
@@ -328,11 +328,6 @@ export const HomeView: React.FC<HomeViewProps> = ({
           </div>
         </div>
       </section>
-
-      <CatalogModal 
-        type={catalogType} 
-        onClose={() => setCatalogType(null)} 
-      />
 
       {/* 3. BLOG SECTION (Editorial Magazine Layout) */}
       <section className="max-w-[1180px] mx-auto space-y-10">

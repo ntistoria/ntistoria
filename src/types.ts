@@ -1,4 +1,41 @@
-export type NavTab = 'home' | 'blog' | 'tests' | 'videos' | 'quizzes' | 'contact' | 'admin';
+export type NavTab = 'home' | 'blog' | 'tests' | 'videos' | 'quizzes' | 'contact' | 'admin' | 'universities' | 'colleges' | 'programs';
+
+export interface University {
+  id: number;
+  name: string;
+  code: string;
+  address: string;
+  website: string;
+  email: string;
+  logo_url: string;
+  status: string; // 'სახელმწიფო' | 'კერძო'
+  type: string;   // 'უნივერსიტეტი' | 'კოლეჯი'
+  location: string; // "latitude, longitude"
+  lat?: number;
+  lng?: number;
+  city?: string;
+  program_count?: number;
+}
+
+export interface Specialty {
+  id: number;
+  name: string;
+  institution_code: string;
+  spec_code: string;
+  program_type: string; // 'ბაკალავრიატი' | 'ქართულ ენაში მომზადება' | 'პროფესიული' etc.
+  quota: number;
+  tuition_fee: number;
+  faculty: string;
+  language: string;
+}
+
+export interface ProgramCatalogItem extends Specialty {
+  institution_name?: string;
+  institution_logo?: string;
+  institution_type?: string;
+  institution_location?: string;
+  institution_city?: string;
+}
 
 export type HistoricalCategory = 
   | 'საქართველოს ისტორია'

@@ -10,6 +10,10 @@ import { VideosView } from './views/VideosView';
 import { ContactView } from './views/ContactView';
 import { AdminView } from './views/AdminView';
 import { ArticleDetailView } from './views/ArticleDetailView';
+import { UniversitiesView } from './views/UniversitiesView';
+import { CollegesView } from './views/CollegesView';
+import { InstitutionProfileView } from './views/InstitutionProfileView';
+import { ProgramsView } from './views/ProgramsView';
 import { TestRunnerModal } from './components/TestRunnerModal';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { SearchModal } from './components/SearchModal';
@@ -88,12 +92,51 @@ export function App() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [selectedInstitutionCode, setSelectedInstitutionCode] = useState<string | null>(null);
 
   // Route syncing helper
   const syncRouteWithState = useCallback((articlesList: Article[]) => {
     const pathname = window.location.pathname;
     const searchParams = new URLSearchParams(window.location.search);
     const queryArticle = searchParams.get('article');
+
+    // 1. Institution Profile Routes (/universities/:code or /colleges/:code)
+    if (pathname.startsWith('/universities/')) {
+      const code = decodeURIComponent(pathname.replace('/universities/', '').replace(/\/$/, ''));
+      setActiveTab('universities');
+      setSelectedInstitutionCode(code);
+      setSelectedArticle(null);
+      return;
+    }
+
+    if (pathname === '/universities') {
+      setActiveTab('universities');
+      setSelectedInstitutionCode(null);
+      setSelectedArticle(null);
+      return;
+    }
+
+    if (pathname.startsWith('/colleges/')) {
+      const code = decodeURIComponent(pathname.replace('/colleges/', '').replace(/\/$/, ''));
+      setActiveTab('colleges');
+      setSelectedInstitutionCode(code);
+      setSelectedArticle(null);
+      return;
+    }
+
+    if (pathname === '/colleges') {
+      setActiveTab('colleges');
+      setSelectedInstitutionCode(null);
+      setSelectedArticle(null);
+      return;
+    }
+
+    if (pathname === '/programs') {
+      setActiveTab('programs');
+      setSelectedInstitutionCode(null);
+      setSelectedArticle(null);
+      return;
+    }
 
     if (pathname.startsWith('/blog/')) {
       const slugOrId = decodeURIComponent(pathname.replace('/blog/', '').replace(/\/$/, ''));
@@ -111,6 +154,7 @@ export function App() {
         );
       });
       setActiveTab('blog');
+      setSelectedInstitutionCode(null);
       if (found) {
         setSelectedArticle(found);
       } else {
@@ -121,36 +165,42 @@ export function App() {
 
     if (pathname === '/blog') {
       setActiveTab('blog');
+      setSelectedInstitutionCode(null);
       setSelectedArticle(null);
       return;
     }
 
     if (pathname === '/tests') {
       setActiveTab('tests');
+      setSelectedInstitutionCode(null);
       setSelectedArticle(null);
       return;
     }
 
     if (pathname === '/videos') {
       setActiveTab('videos');
+      setSelectedInstitutionCode(null);
       setSelectedArticle(null);
       return;
     }
 
     if (pathname === '/quizzes') {
       setActiveTab('quizzes');
+      setSelectedInstitutionCode(null);
       setSelectedArticle(null);
       return;
     }
 
     if (pathname === '/contact') {
       setActiveTab('contact');
+      setSelectedInstitutionCode(null);
       setSelectedArticle(null);
       return;
     }
 
     if (pathname === '/admin') {
       setActiveTab('admin');
+      setSelectedInstitutionCode(null);
       setSelectedArticle(null);
       return;
     }
@@ -160,6 +210,7 @@ export function App() {
       const found = articlesList.find(a => a.slug === decodedQuery || a.id === decodedQuery || generateSlug(a.title, a.id) === decodedQuery);
       if (found) {
         setActiveTab('blog');
+        setSelectedInstitutionCode(null);
         setSelectedArticle(found);
         return;
       }
@@ -168,12 +219,14 @@ export function App() {
     const tabParam = searchParams.get('tab') as NavTab;
     if (tabParam) {
       setActiveTab(tabParam);
+      setSelectedInstitutionCode(null);
       setSelectedArticle(null);
       return;
     }
 
     if (pathname === '/' || pathname === '') {
       setActiveTab('home');
+      setSelectedInstitutionCode(null);
       setSelectedArticle(null);
     }
   }, []);
@@ -215,31 +268,7 @@ export function App() {
         title: artTitle,
         description: artDesc,
         canonicalUrl: artUrl,
-        imageUrl: selectedArticle.imageUrl,
-        articleJsonLd: {
-          "@context": "https://schema.org",
-          "@type": "BlogPosting",
-          "headline": selectedArticle.title,
-          "description": selectedArticle.excerpt,
-          "image": selectedArticle.imageUrl,
-          "author": {
-            "@type": "Person",
-            "name": selectedArticle.author || "ნოდარ თოთაძე"
-          },
-          "publisher": {
-            "@type": "Organization",
-            "name": "NT ისტორიის მასწავლებელი",
-            "logo": {
-              "@type": "ImageObject",
-              "url": "https://enjnwxpzafroxapksdlt.supabase.co/storage/v1/object/public/photos/logpng.png"
-            }
-          },
-          "datePublished": selectedArticle.date || "2026-08-24",
-          "mainEntityOfPage": {
-            "@type": "WebPage",
-            "@id": artUrl
-          }
-        }
+        imageUrl: selectedArticle.imageUrl
       });
       return;
     }
@@ -251,6 +280,30 @@ export function App() {
           title: 'NT ისტორიის მასწავლებელი — ეროვნული გამოცდების მოსამზადებელი',
           description: 'ისტორიის პედაგოგ ნოდარ თოთაძის მოსამზადებელი პორტალი. ეროვნული გამოცდების ტესტები, ისტორიული ბლოგი, რუკები და ვიდეო გაკვეთილები.',
           canonicalUrl: `${domain}/`
+        });
+        break;
+
+      case 'universities':
+        updateSeoMetaData({
+          title: 'უნივერსიტეტები და უმაღლესი სასწავლებლები — NT ისტორია',
+          description: 'საქართველოს უნივერსიტეტების სრული კატალოგი, ინტერაქტიული რუკა, ფაკულტეტები და აკადემიური პროგრამები.',
+          canonicalUrl: `${domain}/universities`
+        });
+        break;
+
+      case 'colleges':
+        updateSeoMetaData({
+          title: 'პროფესიული კოლეჯები — NT ისტორია',
+          description: 'საქართველოს ავტორიზებული პროფესიული კოლეჯების კატალოგი, ინტერაქტიული რუკა და პროფესიული პროგრამები.',
+          canonicalUrl: `${domain}/colleges`
+        });
+        break;
+
+      case 'programs':
+        updateSeoMetaData({
+          title: 'პროგრამების კატალოგი — NT ისტორია',
+          description: 'საქართველოს უნივერსიტეტებისა და კოლეჯების სრული აკადემიური და პროფესიული პროგრამების კატალოგი.',
+          canonicalUrl: `${domain}/programs`
         });
         break;
 
@@ -302,20 +355,21 @@ export function App() {
         });
     }
 
-    // Single Page Application GA4 Virtual Pageview Tracking
     if (typeof window !== 'undefined' && (window as any).gtag) {
       let currentPath = '/';
       if (selectedArticle) {
         currentPath = `/blog/${encodeURIComponent(selectedArticle.slug || selectedArticle.id)}`;
+      } else if (selectedInstitutionCode) {
+        currentPath = `/${activeTab}/${encodeURIComponent(selectedInstitutionCode.replace('#', ''))}`;
       } else if (activeTab && activeTab !== 'home') {
         currentPath = `/${activeTab}`;
       }
       (window as any).gtag('config', 'G-VHKM6K967T', { page_path: currentPath });
     }
-  }, [activeTab, selectedArticle]);
+  }, [activeTab, selectedArticle, selectedInstitutionCode]);
 
   useEffect(() => {
-    // Process Supabase session (without forcing activeTab='admin' on refresh)
+    // Process Supabase session
     const handleSession = async (session: any) => {
       if (session?.user) {
         const meta = session.user.user_metadata;
@@ -342,7 +396,6 @@ export function App() {
         const userData = { name: finalName, email: userEmail };
         setUser(userData);
 
-        // Clean up URL hash or search params from Google OAuth redirect if needed
         if (window.location.hash || window.location.search.includes('code=')) {
           window.history.replaceState({}, document.title, window.location.pathname);
         }
@@ -354,12 +407,10 @@ export function App() {
       }
     };
 
-    // Check initial active Supabase session
     supabase.auth.getSession().then(({ data: { session } }) => {
       handleSession(session);
     });
 
-    // Listen for real-time auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       handleSession(session);
     });
@@ -380,6 +431,7 @@ export function App() {
 
   const handleOpenArticle = (article: Article) => {
     setSelectedArticle(article);
+    setSelectedInstitutionCode(null);
     setActiveTab('blog');
     const slugOrId = encodeURIComponent(article.slug || article.id);
     const newPath = `/blog/${slugOrId}`;
@@ -407,10 +459,23 @@ export function App() {
 
   const handleTabChange = (tab: NavTab) => {
     setSelectedArticle(null);
+    setSelectedInstitutionCode(null);
     setActiveTab(tab);
     const newPath = tab === 'home' ? '/' : `/${tab}`;
     if (window.location.pathname !== newPath) {
       window.history.pushState({ tab }, '', newPath);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSelectInstitution = (code: string, type?: string) => {
+    setSelectedArticle(null);
+    setSelectedInstitutionCode(code);
+    const cleanCode = code.replace('#', '');
+    const isCol = type === 'კოლეჯი' || activeTab === 'colleges';
+    const newPath = isCol ? `/colleges/${cleanCode}` : `/universities/${cleanCode}`;
+    if (window.location.pathname !== newPath) {
+      window.history.pushState({ institutionCode: code }, '', newPath);
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -437,6 +502,16 @@ export function App() {
             onSelectRelated={(art) => handleOpenArticle(art)}
             allArticles={allArticles}
           />
+        ) : selectedInstitutionCode ? (
+          <InstitutionProfileView
+            code={selectedInstitutionCode}
+            onNavigateHome={() => handleTabChange('home')}
+            onNavigateBack={() => {
+              const backTab = activeTab === 'colleges' ? 'colleges' : 'universities';
+              setSelectedInstitutionCode(null);
+              handleTabChange(backTab);
+            }}
+          />
         ) : (
           <>
             {activeTab === 'home' && (
@@ -444,6 +519,27 @@ export function App() {
                 onOpenArticle={handleOpenArticle} 
                 onOpenTest={handleOpenTest}
                 setActiveTab={handleTabChange}
+              />
+            )}
+
+            {activeTab === 'universities' && (
+              <UniversitiesView
+                onNavigateHome={() => handleTabChange('home')}
+                onSelectUniversity={(code) => handleSelectInstitution(code, 'უნივერსიტეტი')}
+              />
+            )}
+
+            {activeTab === 'colleges' && (
+              <CollegesView
+                onNavigateHome={() => handleTabChange('home')}
+                onSelectCollege={(code) => handleSelectInstitution(code, 'კოლეჯი')}
+              />
+            )}
+
+            {activeTab === 'programs' && (
+              <ProgramsView
+                onNavigateHome={() => handleTabChange('home')}
+                onSelectInstitution={(code, type) => handleSelectInstitution(code, type)}
               />
             )}
 
