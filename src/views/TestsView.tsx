@@ -1233,6 +1233,90 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user, onOpenAu
                     </div>
                   </div>
 
+                  {/* Chronology Progress Bar or Auth Notice */}
+                  {(() => {
+                    if (!isLoggedIn) {
+                      return (
+                        <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] flex items-center justify-between gap-3 max-w-xl mx-auto">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-[#0D1B2A] text-left">
+                            <Lock className="w-4 h-4 text-[#C79B3A] shrink-0" />
+                            <span>პროგრესის სანახავად: გთხოვთ გაიაროთ ავტორიზაცია</span>
+                          </div>
+                          {onOpenAuth && (
+                            <button
+                              onClick={onOpenAuth}
+                              className="px-3.5 py-1.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold rounded-xl transition-all shrink-0 cursor-pointer shadow-xs"
+                            >
+                              ავტორიზაცია
+                            </button>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    const totalQ = categoryTotalCounts['chronology'] || categoryQuestions.length || 0;
+                    const stats = getChapterStats('chronology', 'all', totalQ);
+
+                    return (
+                      <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-3 max-w-xl mx-auto text-left">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-[#0D1B2A]">
+                            ქრონოლოგიის პროგრესი
+                          </span>
+                          <span className="text-[11px] font-mono font-bold text-[#C79B3A]">
+                            {stats.pct}% შესრულებული
+                          </span>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div className="w-full h-3 bg-[#E6DDCB] rounded-full overflow-hidden flex">
+                            <div 
+                              style={{ width: `${stats.total > 0 ? (stats.correct / stats.total) * 100 : 0}%` }}
+                              className="bg-emerald-500 h-full transition-all duration-500"
+                              title={`სწორი: ${stats.correct}`}
+                            />
+                            <div 
+                              style={{ width: `${stats.total > 0 ? (stats.incorrect / stats.total) * 100 : 0}%` }}
+                              className="bg-rose-500 h-full transition-all duration-500"
+                              title={`არასწორი: ${stats.incorrect}`}
+                            />
+                            <div 
+                              style={{ width: `${stats.total > 0 ? (stats.unattempted / stats.total) * 100 : 0}%` }}
+                              className="bg-gray-200 h-full transition-all duration-500"
+                              title={`არ გაუკეთებია: ${stats.unattempted}`}
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-3 text-center text-[11px] font-semibold pt-1">
+                            <div className="flex items-center justify-center gap-1 text-emerald-700">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>სწორი: {stats.correct}</span>
+                            </div>
+                            <div className="flex items-center justify-center gap-1 text-rose-700">
+                              <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                              <span>არასწორი: {stats.incorrect}</span>
+                            </div>
+                            <div className="flex items-center justify-center gap-1 text-gray-600">
+                              <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
+                              <span>დარჩა: {stats.unattempted}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 flex justify-end">
+                          <button
+                            onClick={handleResetCategoryProgress}
+                            disabled={isResetting}
+                            className="px-3 py-1.5 bg-white hover:bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl transition-colors flex items-center gap-1 shrink-0 cursor-pointer disabled:opacity-50"
+                          >
+                            <RotateCcw className="w-3 h-3 text-rose-600" />
+                            <span>დარესეტება</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   <button
                     onClick={handleStartRandomTest}
                     disabled={loading}
