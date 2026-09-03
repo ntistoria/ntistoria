@@ -200,8 +200,6 @@ export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => 
           </select>
         </div>
 
-      </div>
-
       {/* Articles Management Table / List */}
       <div className="bg-white rounded-2xl border border-[#E6DDCB] shadow-sm overflow-hidden">
         
