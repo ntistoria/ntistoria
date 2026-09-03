@@ -79,264 +79,6 @@ export async function uploadQuizImage(file: File, bucket: 'quiz-covers' | 'quiz-
   return data.path;
 }
 
-// =========================================================
-// MOCK FALLBACK DATA (For local demo if tables aren't populated yet)
-// =========================================================
-const FALLBACK_QUIZZES: QuizItem[] = [
-  {
-    id: 'quiz-didgori-101',
-    title: 'დიდგორის ბრძოლა და დავით აღმაშენებელი',
-    description: 'შეამოწმეთ ცოდნა 1121 წლის „ძლევაჲ საკვირველის“, დავით აღმაშენებლის რეფორმებისა და საქართველოს გაერთიანების შესახებ.',
-    cover_image_path: 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&q=80&w=800',
-    status: 'published',
-    is_active: true,
-    created_at: new Date().toISOString(),
-    question_count: 5
-  },
-  {
-    id: 'quiz-kolkheti-102',
-    title: 'ძველი კოლხეთი და ეგრისი',
-    description: 'არ Argonauts-ის მითიდან ეგრისის დიდ ომამდე: არქეოლოგია, ოქრომრავალი კოლხეთი და ანტიკური ხანა.',
-    cover_image_path: 'https://images.unsplash.com/photo-1599707367072-cd6ada2bc375?auto=format&fit=crop&q=80&w=800',
-    status: 'published',
-    is_active: true,
-    created_at: new Date().toISOString(),
-    question_count: 5
-  },
-  {
-    id: 'quiz-golden-age-103',
-    title: 'საქართველოს ოქროს ხანა (თამარ მეფე)',
-    description: 'თამარ მეფის ეპოქა, შამქორისა და ბასიანის ბრძოლები, კულტურული აღორძინება და შოთა რუსთაველი.',
-    cover_image_path: 'https://images.unsplash.com/photo-1544620347-c4fd4a3d5957?auto=format&fit=crop&q=80&w=800',
-    status: 'published',
-    is_active: true,
-    created_at: new Date().toISOString(),
-    question_count: 5
-  }
-];
-
-const FALLBACK_QUESTIONS: Record<string, QuizQuestionItem[]> = {
-  'quiz-didgori-101': [
-    {
-      id: 'q-d1',
-      quiz_id: 'quiz-didgori-101',
-      question_text: 'რომელ წელს მოხდა დიდგორის ისტორიული ბრძოლა?',
-      question_order: 1,
-      answers: [
-        { id: 'a-d1-1', answer_text: '1121 წლის 12 აგვისტოს', is_correct: true, answer_order: 1 },
-        { id: 'a-d1-2', answer_text: '1122 წლის 15 მაისს', is_correct: false, answer_order: 2 },
-        { id: 'a-d1-3', answer_text: '1105 წლის 3 სექტემბერს', is_correct: false, answer_order: 3 },
-        { id: 'a-d1-4', answer_text: '1118 წლის 10 ოქტომბერს', is_correct: false, answer_order: 4 }
-      ]
-    },
-    {
-      id: 'q-d2',
-      quiz_id: 'quiz-didgori-101',
-      question_text: 'ვინ მეთაურობდა თურქ-სელჩუკთა კოალიციურ ლაშქარს დიდგორის ბრძოლაში?',
-      question_order: 2,
-      answers: [
-        { id: 'a-d2-1', answer_text: 'ილ-ღაზი', is_correct: true, answer_order: 1 },
-        { id: 'a-d2-2', answer_text: 'ალფ-არსლანი', is_correct: false, answer_order: 2 },
-        { id: 'a-d2-3', answer_text: 'მელიქ-შაჰი', is_correct: false, answer_order: 3 },
-        { id: 'a-d2-4', answer_text: 'ყზლ-არსლანი', is_correct: false, answer_order: 4 }
-      ]
-    },
-    {
-      id: 'q-d3',
-      quiz_id: 'quiz-didgori-101',
-      question_text: 'რომელი მნიშვნელოვანი რეფორმა ჩაატარა დავით IV-მ 1105 წელს ეკლესიისა და სახელმწიფოს ურთიერთობის მოსაწესრიგებლად?',
-      question_order: 3,
-      answers: [
-        { id: 'a-d3-1', answer_text: 'რუის-ურბნისის საეკლესიო კრება', is_correct: true, answer_order: 1 },
-        { id: 'a-d3-2', answer_text: 'მჭევრთა და ჭყონდიდელთა გაერთიანება', is_correct: false, answer_order: 2 },
-        { id: 'a-d3-3', answer_text: 'ყივჩაყთა ჩამოსახლება', is_correct: false, answer_order: 3 },
-        { id: 'a-d3-4', answer_text: 'მონასტრების დეკრეტი', is_correct: false, answer_order: 4 }
-      ]
-    },
-    {
-      id: 'q-d4',
-      quiz_id: 'quiz-didgori-101',
-      question_text: 'რომელი ქალაქი გაათავისუფლა დავით IV-მ დიდგორის ბრძოლის შემდგომ, 1122 წელს?',
-      question_order: 4,
-      answers: [
-        { id: 'a-d4-1', answer_text: 'თბილისი', is_correct: true, answer_order: 1 },
-        { id: 'a-d4-2', answer_text: 'ქუთაისი', is_correct: false, answer_order: 2 },
-        { id: 'a-d4-3', answer_text: 'ანისი', is_correct: false, answer_order: 3 },
-        { id: 'a-d4-4', answer_text: 'სამშვილდე', is_correct: false, answer_order: 4 }
-      ]
-    },
-    {
-      id: 'q-d5',
-      quiz_id: 'quiz-didgori-101',
-      question_text: 'რომელ უცხოურ სამხედრო ძალას მიმართა დავით აღმაშენებელმა მუდმივი ჯარის შესაქმნელად (1118-1120 წწ.)?',
-      question_order: 5,
-      answers: [
-        { id: 'a-d5-1', answer_text: 'ყივჩაყებს', is_correct: true, answer_order: 1 },
-        { id: 'a-d5-2', answer_text: 'ჯვაროსნებს', is_correct: false, answer_order: 2 },
-        { id: 'a-d5-3', answer_text: 'ბიზანტიელებს', is_correct: false, answer_order: 3 },
-        { id: 'a-d5-4', answer_text: 'ხაზარებს', is_correct: false, answer_order: 4 }
-      ]
-    }
-  ],
-  'quiz-kolkheti-102': [
-    {
-      id: 'q-k1',
-      quiz_id: 'quiz-kolkheti-102',
-      question_text: 'ბერძნული მითოლოგიის თანახმად, ვინ მართავდა კოლხეთს არგონავტების ლაშქრობის დროს?',
-      question_order: 1,
-      answers: [
-        { id: 'a-k1-1', answer_text: 'მეფე აიეტი', is_correct: true, answer_order: 1 },
-        { id: 'a-k1-2', answer_text: 'მეფე ფარნავაზი', is_correct: false, answer_order: 2 },
-        { id: 'a-k1-3', answer_text: 'მეფე ხორენი', is_correct: false, answer_order: 3 },
-        { id: 'a-k1-4', answer_text: 'მეფე კუჯი', is_correct: false, answer_order: 4 }
-      ]
-    },
-    {
-      id: 'q-k2',
-      quiz_id: 'quiz-kolkheti-102',
-      question_text: 'რომელი ვერცხლის მონეტა იჭრებოდა ძვ. წ. VI-III საუკუნეებში დასავლეთ საქართველოში?',
-      question_order: 2,
-      answers: [
-        { id: 'a-k2-1', answer_text: 'კოლხური თეთრი', is_correct: true, answer_order: 1 },
-        { id: 'a-k2-2', answer_text: 'დრახმა', is_correct: false, answer_order: 2 },
-        { id: 'a-k2-3', answer_text: 'სტატერი', is_correct: false, answer_order: 3 },
-        { id: 'a-k2-4', answer_text: 'დინარი', is_correct: false, answer_order: 4 }
-      ]
-    },
-    {
-      id: 'q-k3',
-      quiz_id: 'quiz-kolkheti-102',
-      question_text: 'რომელი ორი იმპერია ებრძოდა ერთმანეთს ეგრისის (დიდი ომის) ტერიტორიაზე VI საუკუნეში?',
-      question_order: 3,
-      answers: [
-        { id: 'a-k3-1', answer_text: 'ბიზანტია და სასანიანთა ირანი', is_correct: true, answer_order: 1 },
-        { id: 'a-k3-2', answer_text: 'რომი და კართაგენი', is_correct: false, answer_order: 2 },
-        { id: 'a-k3-3', answer_text: 'არაბთა ხალიფატი და ხაზარები', is_correct: false, answer_order: 3 },
-        { id: 'a-k3-4', answer_text: 'სელჩუკები და ჯვაროსნები', is_correct: false, answer_order: 4 }
-      ]
-    },
-    {
-      id: 'q-k4',
-      quiz_id: 'quiz-kolkheti-102',
-      question_text: 'რომელი ციხე-ქალაქი იყო ეგრისის სამეფოს დედაქალაქი?',
-      question_order: 4,
-      answers: [
-        { id: 'a-k4-1', answer_text: 'არქეოპოლისი (ნოქალაქევი)', is_correct: true, answer_order: 1 },
-        { id: 'a-k4-2', answer_text: 'ფაზისი (ფოთი)', is_correct: false, answer_order: 2 },
-        { id: 'a-k4-3', answer_text: 'პოტიუსი', is_correct: false, answer_order: 3 },
-        { id: 'a-k4-4', answer_text: 'ცხუმი (სოხუმი)', is_correct: false, answer_order: 4 }
-      ]
-    },
-    {
-      id: 'q-k5',
-      quiz_id: 'quiz-kolkheti-102',
-      question_text: 'რომელი ბერძნული კოლონია დაარსდა შავი ზღვის სანაპიროზე ძვ. წ. VI საუკუნეში?',
-      question_order: 5,
-      answers: [
-        { id: 'a-k5-1', answer_text: 'ფაზისი, დიოსკურია და გიენოსი', is_correct: true, answer_order: 1 },
-        { id: 'a-k5-2', answer_text: 'ათენი და სპარტა', is_correct: false, answer_order: 2 },
-        { id: 'a-k5-3', answer_text: 'ბიზანტიონი და ნიკეა', is_correct: false, answer_order: 3 },
-        { id: 'a-k5-4', answer_text: 'ტრაპეზუნტი და სინოპი', is_correct: false, answer_order: 4 }
-      ]
-    }
-  ],
-  'quiz-golden-age-103': [
-    {
-      id: 'q-g1',
-      quiz_id: 'quiz-golden-age-103',
-      question_text: 'რომელ წელს მოხდა შამქორის ცნობილი ბრძოლა თამარ მეფის ზეობისას?',
-      question_order: 1,
-      answers: [
-        { id: 'a-g1-1', answer_text: '1195 წელს', is_correct: true, answer_order: 1 },
-        { id: 'a-g1-2', answer_text: '1202 წელს', is_correct: false, answer_order: 2 },
-        { id: 'a-g1-3', answer_text: '1184 წელს', is_correct: false, answer_order: 3 },
-        { id: 'a-g1-4', answer_text: '1213 წელს', is_correct: false, answer_order: 4 }
-      ]
-    },
-    {
-      id: 'q-g2',
-      quiz_id: 'quiz-golden-age-103',
-      question_text: 'ვინ მეთაურობდა ქართველთა ჯარს ბასიანის ბრძოლაში (1202 წ.)?',
-      question_order: 2,
-      answers: [
-        { id: 'a-g2-1', answer_text: 'დავით სოსლანი', is_correct: true, answer_order: 1 },
-        { id: 'a-g2-2', answer_text: 'გიორგი III', is_correct: false, answer_order: 2 },
-        { id: 'a-g2-3', answer_text: 'იოანე მხარგვიძელი', is_correct: false, answer_order: 3 },
-        { id: 'a-g2-4', answer_text: 'შალვა ახალციხელი', is_correct: false, answer_order: 4 }
-      ]
-    },
-    {
-      id: 'q-g3',
-      quiz_id: 'quiz-golden-age-103',
-      question_text: 'რომელი იმპერიის დაარსებაში მიიღო მონაწილეობა საქართველომ 1204 წელს?',
-      question_order: 3,
-      answers: [
-        { id: 'a-g3-1', answer_text: 'ტრაპიზონის იმპერიის', is_correct: true, answer_order: 1 },
-        { id: 'a-g3-2', answer_text: 'ლათინთა იმპერიის', is_correct: false, answer_order: 2 },
-        { id: 'a-g3-3', answer_text: 'სასანიანთა იმპერიის', is_correct: false, answer_order: 3 },
-        { id: 'a-g3-4', answer_text: 'ოსმალეთის იმპერიის', is_correct: false, answer_order: 4 }
-      ]
-    },
-    {
-      id: 'q-g4',
-      quiz_id: 'quiz-golden-age-103',
-      question_text: 'რომელი პოემა მიუძღვნა შოთა რუსთაველმა თამარ მეფეს?',
-      question_order: 4,
-      answers: [
-        { id: 'a-g4-1', answer_text: '„ვეფხისტყაოსანი“', is_correct: true, answer_order: 1 },
-        { id: 'a-g4-2', answer_text: '„აბდულმესიანი“', is_correct: false, answer_order: 2 },
-        { id: 'a-g4-3', answer_text: '„თამარიანი“', is_correct: false, answer_order: 3 },
-        { id: 'a-g4-4', answer_text: '„ქართლის ცხოვრება“', is_correct: false, answer_order: 4 }
-      ]
-    },
-    {
-      id: 'q-g5',
-      quiz_id: 'quiz-golden-age-103',
-      question_text: 'რა ეწოდებოდა თამარ მეფის დროინდელ სახელმწიფო დარბაზს (სათათბირო ორგანოს)?',
-      question_order: 5,
-      answers: [
-        { id: 'a-g5-1', answer_text: 'ყარაულჯის/ისანი დარბაზი (ისნის კარავის იდეა)', is_correct: true, answer_order: 1 },
-        { id: 'a-g5-2', answer_text: 'სენატი', is_correct: false, answer_order: 2 },
-        { id: 'a-g5-3', answer_text: 'დივანი', is_correct: false, answer_order: 3 },
-        { id: 'a-g5-4', answer_text: 'დუმა', is_correct: false, answer_order: 4 }
-      ]
-    }
-  ]
-};
-
-const FALLBACK_LEADERBOARD: Record<string, QuizLeaderboardItem[]> = {
-  'quiz-didgori-101': [
-    { id: 'lb-1', quiz_id: 'quiz-didgori-101', guest_name: 'გიორგი ბერიძე', correct_answers: 5, total_questions: 5, percentage: 100, created_at: '2026-09-01T12:00:00Z' },
-    { id: 'lb-2', quiz_id: 'quiz-didgori-101', guest_name: 'ნინო კაპანაძე', correct_answers: 4, total_questions: 5, percentage: 80, created_at: '2026-09-02T14:30:00Z' },
-    { id: 'lb-3', quiz_id: 'quiz-didgori-101', guest_name: 'დავით ჯაფარიძე', correct_answers: 4, total_questions: 5, percentage: 80, created_at: '2026-09-03T09:15:00Z' },
-    { id: 'lb-4', quiz_id: 'quiz-didgori-101', guest_name: 'ანა მგელაძე', correct_answers: 3, total_questions: 5, percentage: 60, created_at: '2026-09-03T18:40:00Z' }
-  ]
-};
-
-// Local storage helpers for custom attempts made in offline/fallback mode
-const LOCAL_ATTEMPTS_KEY = 'ntistoria_quiz_attempts_local';
-
-function getLocalAttempts(quizId: string): QuizLeaderboardItem[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_ATTEMPTS_KEY);
-    if (!raw) return [];
-    const list: QuizLeaderboardItem[] = JSON.parse(raw);
-    return list.filter(a => a.quiz_id === quizId);
-  } catch (e) {
-    return [];
-  }
-}
-
-function saveLocalAttempt(attempt: QuizLeaderboardItem) {
-  try {
-    const raw = localStorage.getItem(LOCAL_ATTEMPTS_KEY);
-    const list: QuizLeaderboardItem[] = raw ? JSON.parse(raw) : [];
-    list.push(attempt);
-    localStorage.setItem(LOCAL_ATTEMPTS_KEY, JSON.stringify(list));
-  } catch (e) {}
-}
-
-// =========================================================
 // PUBLIC API METHODS
 // =========================================================
 
@@ -351,8 +93,8 @@ export async function fetchPublishedQuizzes(): Promise<QuizItem[]> {
       .order('created_at', { ascending: false });
 
     if (error || !quizzes || quizzes.length === 0) {
-      console.info('Using published fallback quizzes...');
-      return FALLBACK_QUIZZES;
+      if (error) console.error('Error loading quizzes:', error);
+      return [];
     }
 
     // Get question counts for each quiz
@@ -372,7 +114,7 @@ export async function fetchPublishedQuizzes(): Promise<QuizItem[]> {
     return result;
   } catch (err) {
     console.error('Error fetching published quizzes:', err);
-    return FALLBACK_QUIZZES;
+    return [];
   }
 }
 
@@ -387,11 +129,6 @@ export async function fetchQuizQuestionsForPlay(quizId: string): Promise<{ quiz:
       .single();
 
     if (quizError || !quizData) {
-      const fallback = FALLBACK_QUIZZES.find(q => q.id === quizId);
-      if (fallback) {
-        const questions = FALLBACK_QUESTIONS[quizId] || [];
-        return { quiz: fallback, questions };
-      }
       return null;
     }
 
@@ -403,8 +140,7 @@ export async function fetchQuizQuestionsForPlay(quizId: string): Promise<{ quiz:
       .order('question_order', { ascending: true });
 
     if (qError || !questionsData || questionsData.length === 0) {
-      const questions = FALLBACK_QUESTIONS[quizId] || [];
-      return { quiz: quizData, questions };
+      return { quiz: quizData, questions: [] };
     }
 
     // 3. Fetch Answers for each question (Omitting is_correct for play security)
@@ -428,11 +164,6 @@ export async function fetchQuizQuestionsForPlay(quizId: string): Promise<{ quiz:
     };
   } catch (err) {
     console.error('Error fetching quiz for play:', err);
-    const fallback = FALLBACK_QUIZZES.find(q => q.id === quizId);
-    if (fallback) {
-      const questions = FALLBACK_QUESTIONS[quizId] || [];
-      return { quiz: fallback, questions };
-    }
     return null;
   }
 }
@@ -474,43 +205,26 @@ export async function submitQuizAttempt(
     console.warn('RPC submit exception, doing fallback grading:', e);
   }
 
-  // Fallback grading logic
+  // Fallback grading: fetch answers with is_correct from Supabase
   let total = 0;
   let correct = 0;
 
-  // Check fallback questions memory or query Supabase
-  const fallbackQList = FALLBACK_QUESTIONS[quizId];
-  if (fallbackQList && fallbackQList.length > 0) {
-    total = fallbackQList.length;
-    for (const uAns of userAnswers) {
-      const q = fallbackQList.find(item => item.id === uAns.question_id);
-      if (q) {
-        const selectedOpt = q.answers.find(a => a.id === uAns.answer_id);
-        if (selectedOpt && selectedOpt.is_correct) {
-          correct++;
-        }
-      }
-    }
-  } else {
-    // Fetch answers with is_correct from Supabase to grade
-    const qIds = userAnswers.map(u => u.question_id);
-    const { data: qData } = await supabase
-      .from('quiz_questions')
-      .select('id')
-      .eq('quiz_id', quizId);
+  const { data: qData } = await supabase
+    .from('quiz_questions')
+    .select('id')
+    .eq('quiz_id', quizId);
 
-    total = qData?.length || userAnswers.length || 1;
+  total = qData?.length || userAnswers.length || 1;
 
-    for (const uAns of userAnswers) {
-      const { data: aData } = await supabase
-        .from('quiz_answers')
-        .select('is_correct')
-        .eq('id', uAns.answer_id)
-        .single();
+  for (const uAns of userAnswers) {
+    const { data: aData } = await supabase
+      .from('quiz_answers')
+      .select('is_correct')
+      .eq('id', uAns.answer_id)
+      .single();
 
-      if (aData?.is_correct) {
-        correct++;
-      }
+    if (aData?.is_correct) {
+      correct++;
     }
   }
 
@@ -592,18 +306,14 @@ export async function fetchQuizLeaderboard(quizId: string): Promise<QuizLeaderbo
     console.error('Error fetching leaderboard from DB:', err);
   }
 
-  // Combine fallback + local attempts
-  const fb = FALLBACK_LEADERBOARD[quizId] || [];
+  // Fallback: only local attempts (no fake leaderboard data)
   const local = getLocalAttempts(quizId);
-  const combined = [...local, ...fb];
+  if (local.length === 0) return [];
 
-  // Deduplicate
   const map = new Map<string, QuizLeaderboardItem>();
-  for (const item of combined) {
+  for (const item of local) {
     const key = item.user_id ? `u_${item.user_id}` : `g_${(item.guest_name || '').toLowerCase().trim()}`;
-    if (!map.has(key)) {
-      map.set(key, item);
-    }
+    if (!map.has(key)) map.set(key, item);
   }
 
   return Array.from(map.values()).sort((a, b) => {
