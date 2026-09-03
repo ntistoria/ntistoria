@@ -310,7 +310,7 @@ export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => 
           </div>
         )}
       </div>
-      </div>
+      )}
 
       {/* Editor Modal */}
       <BlogEditorModal
