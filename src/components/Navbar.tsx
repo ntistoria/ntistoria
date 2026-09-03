@@ -30,9 +30,6 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
 
   const baseNavItems: { id: NavTab; label: string }[] = [
     { id: 'home', label: 'მთავარი' },
-    { id: 'universities', label: 'უნივერსიტეტები' },
-    { id: 'colleges', label: 'კოლეჯები' },
-    { id: 'programs', label: 'პროგრამები' },
     { id: 'blog', label: 'ბლოგი' },
     { id: 'tests', label: 'ტესტები' },
     { id: 'videos', label: 'ვიდეოთეკა' },
