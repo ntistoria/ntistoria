@@ -26,11 +26,17 @@ function generateSlug(title, fallbackId) {
 export default async function handler(req, res) {
   const urlObj = new URL(req.url, `https://${req.headers.host || 'ntistoria.vercel.app'}`);
   let slug = req.query?.slug || urlObj.searchParams.get('slug');
+  let quizId = req.query?.quizId || urlObj.searchParams.get('quizId');
+  let type = req.query?.type || urlObj.searchParams.get('type');
 
-  if (!slug) {
+  if (!slug && !quizId) {
     const pathnameParts = urlObj.pathname.split('/').filter(Boolean);
     if (pathnameParts[0] === 'blog' && pathnameParts[1]) {
       slug = pathnameParts[1];
+      type = 'blog';
+    } else if (pathnameParts[0] === 'quizzes' && pathnameParts[1]) {
+      quizId = pathnameParts[1];
+      type = 'quiz';
     }
   }
 
@@ -38,14 +44,52 @@ export default async function handler(req, res) {
     title: 'NT ისტორიის მასწავლებელი — ეროვნული გამოცდების მოსამზადებელი',
     description: 'ისტორიის პედაგოგ ნოდარ თოთაძის მოსამზადებელი პორტალი. ეროვნული გამოცდების ტესტები, ისტორიული ბლოგი, რუკები და ვიდეო გაკვეთილები.',
     imageUrl: 'https://enjnwxpzafroxapksdlt.supabase.co/storage/v1/object/public/photos/logooo.png',
-    url: `https://ntistoria.vercel.app${slug ? `/blog/${encodeURIComponent(slug)}` : '/'}`,
-    type: slug ? 'article' : 'website'
+    url: 'https://ntistoria.vercel.app/',
+    type: 'website'
   };
 
   let meta = { ...defaultMeta };
   let articleData = null;
 
-  if (slug) {
+  if (quizId || type === 'quiz') {
+    const targetQuizId = quizId || slug;
+    if (targetQuizId) {
+      try {
+        const decodedQuizId = decodeURIComponent(targetQuizId);
+        const supabaseUrl = `https://enjnwxpzafroxapksdlt.supabase.co/rest/v1/quizzes?id=eq.${encodeURIComponent(decodedQuizId)}&select=*`;
+        const response = await fetch(supabaseUrl, {
+          headers: {
+            'apikey': 'sb_publishable_dpO82-UPWGqkk2Z5eJ2SAA_-119eWfN',
+            'Accept': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const quizzes = await response.json();
+          const quiz = quizzes && quizzes[0];
+          if (quiz) {
+            meta.title = `${quiz.title} — ქვიზი | NT ისტორიის მასწავლებელი`;
+            meta.description = quiz.description
+              ? (quiz.description.length > 155 ? `${quiz.description.slice(0, 155)}...` : quiz.description)
+              : `გაიარე ინტერაქტიული ქვიზი „${quiz.title}“ საქართველოსა და მსოფლიო ისტორიაში NT ისტორიის პლატფორმაზე.`;
+
+            if (quiz.cover_image_path) {
+              if (quiz.cover_image_path.startsWith('http://') || quiz.cover_image_path.startsWith('https://')) {
+                meta.imageUrl = quiz.cover_image_path;
+              } else {
+                meta.imageUrl = `https://enjnwxpzafroxapksdlt.supabase.co/storage/v1/object/public/quiz-covers/${quiz.cover_image_path}`;
+              }
+            }
+
+            meta.url = `https://ntistoria.vercel.app/quizzes/${encodeURIComponent(quiz.id)}`;
+            meta.type = 'website';
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching quiz metadata for OG:', err);
+      }
+    }
+  } else if (slug) {
     try {
       const decodedSlug = decodeURIComponent(slug);
       const supabaseUrl = `https://enjnwxpzafroxapksdlt.supabase.co/rest/v1/articles?select=*`;
@@ -81,6 +125,7 @@ export default async function handler(req, res) {
               : `წაიკითხეთ სტატია "${article.title}" - NT ისტორიის მასწავლებელი ნოდარ თოთაძე.`;
             meta.imageUrl = article.image_url || article.imageUrl || defaultMeta.imageUrl;
             meta.url = `https://ntistoria.vercel.app/blog/${encodeURIComponent(finalSlug)}`;
+            meta.type = 'article';
           }
         }
       }

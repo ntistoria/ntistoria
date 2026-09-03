@@ -17,6 +17,35 @@ interface QuizzesViewProps {
   onActiveQuizChange?: (quiz: QuizItem | null) => void;
 }
 
+// Helper function to reliably copy text to clipboard across all browsers and devices
+const copyToClipboard = async (text: string): Promise<boolean> => {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (e) {
+    console.warn('navigator.clipboard failed, attempting fallback', e);
+  }
+
+  try {
+    const textArea = document.createElement('textarea');
+    textArea.value = text;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    const successful = document.execCommand('copy');
+    textArea.remove();
+    return successful;
+  } catch (err) {
+    console.error('Fallback copy failed', err);
+    return false;
+  }
+};
+
 export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQuizId, onActiveQuizChange }) => {
   // Master View States: 'list' | 'play' | 'result'
   const [viewState, setViewState] = useState<'list' | 'play' | 'result'>('list');
@@ -162,10 +191,30 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, init
     }
   }, [initialQuizId, quizzes, loadingList]);
 
-  // Copy or Share unique link for any quiz
-  const handleCopyQuizLink = async (quizId: string) => {
+  // Direct clipboard copy of unique quiz link
+  const handleCopyQuizLink = async (quizId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const shareUrl = `${window.location.origin}/quizzes/${encodeURIComponent(quizId)}`;
+    
+    const success = await copyToClipboard(shareUrl);
+    if (success) {
+      setCopiedQuizId(quizId);
+      setTimeout(() => setCopiedQuizId(null), 2500);
+    } else {
+      alert(`ქვიზის ბმული: ${shareUrl}`);
+    }
+  };
+
+  // Web Share or Facebook share dialog for quiz
+  const handleNativeShareQuiz = async (quizId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     const shareUrl = `${window.location.origin}/quizzes/${encodeURIComponent(quizId)}`;
     const targetQuiz = quizzes.find(q => q.id === quizId) || (activeQuiz?.id === quizId ? activeQuiz : null);
+
+    // Copy to clipboard first as fallback
+    await copyToClipboard(shareUrl);
+    setCopiedQuizId(quizId);
+    setTimeout(() => setCopiedQuizId(null), 2500);
 
     if (navigator.share) {
       try {
@@ -174,18 +223,12 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, init
           text: targetQuiz?.title ? `გაიარე ქვიზი „${targetQuiz.title}“ NT ისტორიის პლატფორმაზე:` : 'გაიარე ქვიზი NT ისტორიის პლატფორმაზე:',
           url: shareUrl
         });
-        return;
       } catch (err) {
-        // User cancelled or share failed, fallback to clipboard
+        // User cancelled native share sheet
       }
-    }
-
-    try {
-      await navigator.clipboard.writeText(shareUrl);
-      setCopiedQuizId(quizId);
-      setTimeout(() => setCopiedQuizId(null), 2500);
-    } catch (err) {
-      alert(`ქვიზის ბმული: ${shareUrl}`);
+    } else {
+      const fbUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`;
+      window.open(fbUrl, '_blank', 'width=600,height=500');
     }
   };
 
@@ -262,6 +305,12 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, init
     const quizUrl = `${window.location.origin}/quizzes/${encodeURIComponent(activeQuiz.id)}`;
     const shareText = `მე NT ისტორიის პლატფორმაზე ქვიზში „${activeQuiz.title}“ ${attemptResult.correct_answers}/${attemptResult.total_questions} (${attemptResult.percentage}%) შედეგი მივიღე! სცადე შენც.`;
 
+    const success = await copyToClipboard(`${shareText}\n${quizUrl}`);
+    if (success) {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 3000);
+    }
+
     if (navigator.share) {
       try {
         await navigator.share({
@@ -269,19 +318,9 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, init
           text: shareText,
           url: quizUrl
         });
-        return;
       } catch (err) {
-        console.warn('Share API cancelled or not supported, falling back:', err);
+        console.warn('Share API cancelled or not supported:', err);
       }
-    }
-
-    // Fallback: Copy link to clipboard
-    try {
-      await navigator.clipboard.writeText(`${shareText}\n${quizUrl}`);
-      setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 3000);
-    } catch (e) {
-      alert(`${shareText}\n${quizUrl}`);
     }
   };
 
@@ -290,7 +329,7 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, init
     if (!activeQuiz) return;
     const quizUrl = `${window.location.origin}/quizzes/${encodeURIComponent(activeQuiz.id)}`;
     const shareUrl = encodeURIComponent(quizUrl);
-    window.open(`https://www.facebook.com/sharer/sharer.php?u=${shareUrl}`, '_blank');
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${shareUrl}`, '_blank', 'width=600,height=500');
   };
 
   const currentQuestion = questions[currentIndex];
@@ -405,23 +444,28 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, init
                       </button>
 
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCopyQuizLink(quiz.id);
-                        }}
+                        onClick={(e) => handleCopyQuizLink(quiz.id, e)}
                         className="px-3.5 py-3 bg-[#FAF8F3] hover:bg-[#F3EEDF] border border-[#E6DDCB] text-[#0D1B2A] text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
-                        title="ქვიზის უნიკალური ლინკის გაზიარება / კოპირება"
+                        title="ქვიზის ბმულის კოპირება"
                       >
                         {copiedQuizId === quiz.id ? (
                           <>
                             <Check className="w-4 h-4 text-emerald-600" />
-                            <span className="text-[11px] font-bold text-emerald-700">დაკოპირდა</span>
+                            <span className="text-[11px] font-bold text-emerald-700">დაკოპირდა!</span>
                           </>
                         ) : (
                           <>
-                            <Share2 className="w-4 h-4 text-[#C79B3A]" />
+                            <LinkIcon className="w-4 h-4 text-[#C79B3A]" />
                           </>
                         )}
+                      </button>
+
+                      <button
+                        onClick={(e) => handleNativeShareQuiz(quiz.id, e)}
+                        className="px-3.5 py-3 bg-[#FAF8F3] hover:bg-[#F3EEDF] border border-[#E6DDCB] text-[#0D1B2A] text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                        title="ქვიზის გაზიარება"
+                      >
+                        <Share2 className="w-4 h-4 text-[#C79B3A]" />
                       </button>
 
                       <button

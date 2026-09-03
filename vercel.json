@@ -10,7 +10,18 @@
           "value": ".*(facebookexternalhit|LinkedInBot|Twitterbot|TelegramBot|WhatsApp|Slackbot|Discordbot|SkypeUriPreview|googlebot|bingbot|facebookcatalog|vkShare).*|.*bot.*|.*crawler.*|.*spider.*"
         }
       ],
-      "destination": "/api/og?slug=:slug"
+      "destination": "/api/og?type=blog&slug=:slug"
+    },
+    {
+      "source": "/quizzes/:quizId",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(facebookexternalhit|LinkedInBot|Twitterbot|TelegramBot|WhatsApp|Slackbot|Discordbot|SkypeUriPreview|googlebot|bingbot|facebookcatalog|vkShare).*|.*bot.*|.*crawler.*|.*spider.*"
+        }
+      ],
+      "destination": "/api/og?type=quiz&quizId=:quizId"
     },
     {
       "source": "/(.*)",
