@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Plus, Edit2, Trash2, Search, Filter, Image, HelpCircle, CheckCircle2,
-  FileText, ArrowUp, ArrowDown, Eye, X, Upload, Save, AlertTriangle, Check, Radio
+  FileText, ArrowUp, ArrowDown, Eye, X, Upload, Save, AlertTriangle, Check, Radio, Share2
 } from 'lucide-react';
 import { QuizItem, QuizQuestionItem, QuizAnswerItem } from '../types';
 import {
@@ -440,6 +440,18 @@ export const AdminQuizManager: React.FC = () => {
                   </button>
 
                   <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => {
+                        const shareUrl = `${window.location.origin}/quizzes/${encodeURIComponent(quiz.id)}`;
+                        navigator.clipboard.writeText(shareUrl);
+                        alert(`ქვიზის უნიკალური ბმული დაკოპირდა:\n${shareUrl}`);
+                      }}
+                      className="p-2 text-[#0D1B2A] hover:bg-[#FAF8F3] rounded-lg transition-colors cursor-pointer"
+                      title="ქვიზის უნიკალური ბმულის კოპირება"
+                    >
+                      <Share2 className="w-4 h-4 text-[#C79B3A]" />
+                    </button>
+
                     <button
                       onClick={() => handleOpenQuizModal(quiz)}
                       className="p-2 text-[#0D1B2A] hover:bg-[#FAF8F3] rounded-lg transition-colors cursor-pointer"

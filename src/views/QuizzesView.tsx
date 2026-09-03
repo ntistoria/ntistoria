@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   HelpCircle, ArrowRight, ArrowLeft, Trophy, CheckCircle2, RotateCcw,
-  Share2, Copy, Check, Sparkles, Award, User, Clock, AlertCircle, X, ExternalLink
+  Share2, Copy, Check, Sparkles, Award, User, Clock, AlertCircle, X, ExternalLink, Link as LinkIcon
 } from 'lucide-react';
 import { QuizItem, QuizQuestionItem, QuizAnswerItem, QuizAttempt } from '../types';
 import {
@@ -14,9 +14,10 @@ interface QuizzesViewProps {
   user?: { name: string; email: string } | null;
   onOpenAuth?: () => void;
   initialQuizId?: string | null;
+  onActiveQuizChange?: (quiz: QuizItem | null) => void;
 }
 
-export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQuizId }) => {
+export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQuizId, onActiveQuizChange }) => {
   // Master View States: 'list' | 'play' | 'result'
   const [viewState, setViewState] = useState<'list' | 'play' | 'result'>('list');
 
@@ -51,6 +52,7 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, init
 
   // Share feedback state
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedQuizId, setCopiedQuizId] = useState<string | null>(null);
 
   // Load published quizzes
   const loadQuizzes = async () => {
@@ -69,39 +71,121 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, init
     loadQuizzes();
   }, []);
 
-  // Handle direct link with initialQuizId
-  useEffect(() => {
-    if (initialQuizId && quizzes.length > 0) {
-      const target = quizzes.find(q => q.id === initialQuizId);
-      if (target) {
-        handleStartQuiz(target);
-      }
+  // Return to quizzes list & update route
+  const handleBackToList = (updateHistory = true) => {
+    setViewState('list');
+    setActiveQuiz(null);
+    onActiveQuizChange?.(null);
+    if (updateHistory && window.location.pathname !== '/quizzes') {
+      window.history.pushState({}, '', '/quizzes');
     }
-  }, [initialQuizId, quizzes]);
+  };
 
-  // Start playing a quiz
-  const handleStartQuiz = async (quiz: QuizItem) => {
+  // Start playing a quiz & update URL
+  const handleStartQuiz = async (quiz: QuizItem, pushUrl = true) => {
     setLoadingQuiz(true);
     setActiveQuiz(quiz);
+    onActiveQuizChange?.(quiz);
     setCurrentIndex(0);
     setSelectedAnswers({});
     setAttemptResult(null);
     setViewState('play');
 
+    if (pushUrl) {
+      const newPath = `/quizzes/${encodeURIComponent(quiz.id)}`;
+      if (window.location.pathname !== newPath) {
+        window.history.pushState({ quizId: quiz.id }, '', newPath);
+      }
+    }
+
     try {
       const quizData = await fetchQuizQuestionsForPlay(quiz.id);
       if (quizData && quizData.questions.length > 0) {
         setQuestions(quizData.questions);
+        if (quizData.quiz) {
+          setActiveQuiz(quizData.quiz);
+          onActiveQuizChange?.(quizData.quiz);
+        }
       } else {
         alert('ამ ქვიზში კითხვები ჯერ არ არის დამატებული');
-        setViewState('list');
+        handleBackToList(pushUrl);
       }
     } catch (err) {
       console.error('Error starting quiz:', err);
       alert('ქვიზის ჩატვირთვა ვერ მოხერხდა');
-      setViewState('list');
+      handleBackToList(pushUrl);
     } finally {
       setLoadingQuiz(false);
+    }
+  };
+
+  // Sync with initialQuizId (e.g. direct link navigation or popstate)
+  useEffect(() => {
+    if (initialQuizId) {
+      if (activeQuiz?.id === initialQuizId && viewState !== 'list') {
+        return;
+      }
+      const target = quizzes.find(q => q.id === initialQuizId);
+      if (target) {
+        handleStartQuiz(target, false);
+      } else if (!loadingList) {
+        // Fetch quiz directly by ID if not yet in loaded quizzes
+        setLoadingQuiz(true);
+        setViewState('play');
+        fetchQuizQuestionsForPlay(initialQuizId).then(quizData => {
+          setLoadingQuiz(false);
+          if (quizData && quizData.quiz) {
+            setActiveQuiz(quizData.quiz);
+            onActiveQuizChange?.(quizData.quiz);
+            if (quizData.questions.length > 0) {
+              setQuestions(quizData.questions);
+            } else {
+              alert('ამ ქვიზში კითხვები ჯერ არ არის დამატებული');
+              handleBackToList(false);
+            }
+          } else {
+            alert('ქვიზი ვერ მოიძებნა');
+            handleBackToList(true);
+          }
+        }).catch(err => {
+          console.error('Error fetching quiz by ID:', err);
+          setLoadingQuiz(false);
+          handleBackToList(true);
+        });
+      }
+    } else {
+      if (viewState !== 'list') {
+        setViewState('list');
+        setActiveQuiz(null);
+        onActiveQuizChange?.(null);
+      }
+    }
+  }, [initialQuizId, quizzes, loadingList]);
+
+  // Copy or Share unique link for any quiz
+  const handleCopyQuizLink = async (quizId: string) => {
+    const shareUrl = `${window.location.origin}/quizzes/${encodeURIComponent(quizId)}`;
+    const targetQuiz = quizzes.find(q => q.id === quizId) || (activeQuiz?.id === quizId ? activeQuiz : null);
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: targetQuiz?.title || 'ქვიზი ისტორიაში — NT ისტორია',
+          text: targetQuiz?.title ? `გაიარე ქვიზი „${targetQuiz.title}“ NT ისტორიის პლატფორმაზე:` : 'გაიარე ქვიზი NT ისტორიის პლატფორმაზე:',
+          url: shareUrl
+        });
+        return;
+      } catch (err) {
+        // User cancelled or share failed, fallback to clipboard
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopiedQuizId(quizId);
+      setTimeout(() => setCopiedQuizId(null), 2500);
+    } catch (err) {
+      alert(`ქვიზის ბმული: ${shareUrl}`);
     }
   };
 
@@ -172,18 +256,18 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, init
     submitQuiz(guestName.trim());
   };
 
-  // Share Results Function (Requirement 5)
+  // Share Results Function (Requirement 5 & unique link)
   const handleShareResult = async () => {
     if (!attemptResult || !activeQuiz) return;
+    const quizUrl = `${window.location.origin}/quizzes/${encodeURIComponent(activeQuiz.id)}`;
     const shareText = `მე NT ისტორიის პლატფორმაზე ქვიზში „${activeQuiz.title}“ ${attemptResult.correct_answers}/${attemptResult.total_questions} (${attemptResult.percentage}%) შედეგი მივიღე! სცადე შენც.`;
-    const shareUrl = window.location.href;
 
     if (navigator.share) {
       try {
         await navigator.share({
           title: activeQuiz.title,
           text: shareText,
-          url: shareUrl
+          url: quizUrl
         });
         return;
       } catch (err) {
@@ -193,17 +277,19 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, init
 
     // Fallback: Copy link to clipboard
     try {
-      await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
+      await navigator.clipboard.writeText(`${shareText}\n${quizUrl}`);
       setCopiedLink(true);
       setTimeout(() => setCopiedLink(false), 3000);
     } catch (e) {
-      alert(shareText);
+      alert(`${shareText}\n${quizUrl}`);
     }
   };
 
-  // Share on Facebook fallback
+  // Share on Facebook fallback with unique quiz URL
   const handleFacebookShare = () => {
-    const shareUrl = encodeURIComponent(window.location.href);
+    if (!activeQuiz) return;
+    const quizUrl = `${window.location.origin}/quizzes/${encodeURIComponent(activeQuiz.id)}`;
+    const shareUrl = encodeURIComponent(quizUrl);
     window.open(`https://www.facebook.com/sharer/sharer.php?u=${shareUrl}`, '_blank');
   };
 
@@ -319,6 +405,26 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, init
                       </button>
 
                       <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCopyQuizLink(quiz.id);
+                        }}
+                        className="px-3.5 py-3 bg-[#FAF8F3] hover:bg-[#F3EEDF] border border-[#E6DDCB] text-[#0D1B2A] text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                        title="ქვიზის უნიკალური ლინკის გაზიარება / კოპირება"
+                      >
+                        {copiedQuizId === quiz.id ? (
+                          <>
+                            <Check className="w-4 h-4 text-emerald-600" />
+                            <span className="text-[11px] font-bold text-emerald-700">დაკოპირდა</span>
+                          </>
+                        ) : (
+                          <>
+                            <Share2 className="w-4 h-4 text-[#C79B3A]" />
+                          </>
+                        )}
+                      </button>
+
+                      <button
                         onClick={() => setLeaderboardQuiz({ id: quiz.id, title: quiz.title })}
                         className="px-3.5 py-3 bg-[#FAF8F3] hover:bg-[#F3EEDF] border border-[#E6DDCB] text-[#0D1B2A] text-xs font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
                         title="ლიდერბორდი"
@@ -342,18 +448,37 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, init
         <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in duration-300">
           
           {/* Top Bar Navigation & Exit */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <button
-              onClick={() => setViewState('list')}
+              onClick={() => handleBackToList(true)}
               className="px-4 py-2 bg-white hover:bg-[#FAF8F3] text-[#0D1B2A] border border-[#E6DDCB] text-xs font-bold rounded-xl transition-colors flex items-center gap-2 cursor-pointer shadow-sm"
             >
               <ArrowLeft className="w-4 h-4 text-[#C79B3A]" />
               <span>ქვიზებიდან გამოსვლა</span>
             </button>
 
-            <span className="text-xs font-bold text-[#666666] font-mono">
-              {activeQuiz.title}
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleCopyQuizLink(activeQuiz.id)}
+                className="px-3 py-2 bg-white hover:bg-[#FAF8F3] text-[#0D1B2A] border border-[#E6DDCB] text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm"
+                title="ქვიზის ლინკის გაზიარება"
+              >
+                {copiedQuizId === activeQuiz.id ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-[11px] text-emerald-700 font-bold">დაკოპირდა</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-3.5 h-3.5 text-[#C79B3A]" />
+                    <span className="text-[11px]">ლინკი</span>
+                  </>
+                )}
+              </button>
+              <span className="text-xs font-bold text-[#666666] font-mono hidden sm:inline">
+                {activeQuiz.title}
+              </span>
+            </div>
           </div>
 
           {loadingQuiz ? (
@@ -624,7 +749,7 @@ export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, init
                   </button>
 
                   <button
-                    onClick={() => setViewState('list')}
+                    onClick={() => handleBackToList(true)}
                     className="w-full sm:w-auto px-5 py-3.5 text-xs font-bold text-[#666666] hover:text-[#0D1B2A] cursor-pointer"
                   >
                     მთავარ გვერდზე დაბრუნება

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { NavTab, Article, HistoryTest, VideoLesson } from './types';
+import { NavTab, Article, HistoryTest, VideoLesson, QuizItem } from './types';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { HomeView } from './views/HomeView';
@@ -22,6 +22,7 @@ import { StudentProfileModal } from './components/StudentProfileModal';
 import { supabase } from './lib/supabase';
 import { isAdminUser, fetchAllArticles, getInitialArticles, generateSlug } from './lib/blogService';
 import { fetchUserProfile, syncUserProfile } from './lib/userService';
+import { getQuizImageUrl } from './lib/quizService';
 
 // Dynamic SEO Meta Manager Helper for SPA
 function updateSeoMetaData(options: {
@@ -94,6 +95,7 @@ export function App() {
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
   const [selectedInstitutionCode, setSelectedInstitutionCode] = useState<string | null>(null);
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
+  const [selectedQuiz, setSelectedQuiz] = useState<QuizItem | null>(null);
 
   // Route syncing helper
   const syncRouteWithState = useCallback((articlesList: Article[]) => {
@@ -101,19 +103,28 @@ export function App() {
     const searchParams = new URLSearchParams(window.location.search);
     const queryArticle = searchParams.get('article');
 
+    // Helper to clear non-active route states
+    const clearOtherStates = () => {
+      setSelectedArticle(null);
+      setSelectedInstitutionCode(null);
+      setSelectedQuizId(null);
+      setSelectedQuiz(null);
+    };
+
     // 1. Institution Profile Routes (/universities/:code or /colleges/:code)
     if (pathname.startsWith('/universities/')) {
       const code = decodeURIComponent(pathname.replace('/universities/', '').replace(/\/$/, ''));
       setActiveTab('universities');
       setSelectedInstitutionCode(code);
       setSelectedArticle(null);
+      setSelectedQuizId(null);
+      setSelectedQuiz(null);
       return;
     }
 
     if (pathname === '/universities') {
       setActiveTab('universities');
-      setSelectedInstitutionCode(null);
-      setSelectedArticle(null);
+      clearOtherStates();
       return;
     }
 
@@ -122,20 +133,20 @@ export function App() {
       setActiveTab('colleges');
       setSelectedInstitutionCode(code);
       setSelectedArticle(null);
+      setSelectedQuizId(null);
+      setSelectedQuiz(null);
       return;
     }
 
     if (pathname === '/colleges') {
       setActiveTab('colleges');
-      setSelectedInstitutionCode(null);
-      setSelectedArticle(null);
+      clearOtherStates();
       return;
     }
 
     if (pathname === '/programs') {
       setActiveTab('programs');
-      setSelectedInstitutionCode(null);
-      setSelectedArticle(null);
+      clearOtherStates();
       return;
     }
 
@@ -156,6 +167,8 @@ export function App() {
       });
       setActiveTab('blog');
       setSelectedInstitutionCode(null);
+      setSelectedQuizId(null);
+      setSelectedQuiz(null);
       if (found) {
         setSelectedArticle(found);
       } else {
@@ -166,22 +179,19 @@ export function App() {
 
     if (pathname === '/blog') {
       setActiveTab('blog');
-      setSelectedInstitutionCode(null);
-      setSelectedArticle(null);
+      clearOtherStates();
       return;
     }
 
     if (pathname === '/tests') {
       setActiveTab('tests');
-      setSelectedInstitutionCode(null);
-      setSelectedArticle(null);
+      clearOtherStates();
       return;
     }
 
     if (pathname === '/videos') {
       setActiveTab('videos');
-      setSelectedInstitutionCode(null);
-      setSelectedArticle(null);
+      clearOtherStates();
       return;
     }
 
@@ -193,20 +203,19 @@ export function App() {
       setSelectedInstitutionCode(null);
       setSelectedArticle(null);
       setSelectedQuizId(quizId);
+      if (!quizId) setSelectedQuiz(null);
       return;
     }
 
     if (pathname === '/contact') {
       setActiveTab('contact');
-      setSelectedInstitutionCode(null);
-      setSelectedArticle(null);
+      clearOtherStates();
       return;
     }
 
     if (pathname === '/admin') {
       setActiveTab('admin');
-      setSelectedInstitutionCode(null);
-      setSelectedArticle(null);
+      clearOtherStates();
       return;
     }
 
@@ -216,6 +225,8 @@ export function App() {
       if (found) {
         setActiveTab('blog');
         setSelectedInstitutionCode(null);
+        setSelectedQuizId(null);
+        setSelectedQuiz(null);
         setSelectedArticle(found);
         return;
       }
@@ -224,15 +235,13 @@ export function App() {
     const tabParam = searchParams.get('tab') as NavTab;
     if (tabParam) {
       setActiveTab(tabParam);
-      setSelectedInstitutionCode(null);
-      setSelectedArticle(null);
+      clearOtherStates();
       return;
     }
 
     if (pathname === '/' || pathname === '') {
       setActiveTab('home');
-      setSelectedInstitutionCode(null);
-      setSelectedArticle(null);
+      clearOtherStates();
     }
   }, []);
 
@@ -274,6 +283,30 @@ export function App() {
         description: artDesc,
         canonicalUrl: artUrl,
         imageUrl: selectedArticle.imageUrl
+      });
+      return;
+    }
+
+    if (selectedQuiz) {
+      const qTitle = `${selectedQuiz.title} — ქვიზი | NT ისტორიის მასწავლებელი`;
+      const qDesc = selectedQuiz.description
+        ? (selectedQuiz.description.length > 155 ? `${selectedQuiz.description.slice(0, 155)}...` : selectedQuiz.description)
+        : `გაიარე ინტერაქტიული ქვიზი "${selectedQuiz.title}" საქართველოსა და მსოფლიო ისტორიაში NT ისტორიის პლატფორმაზე.`;
+      const qUrl = `https://ntistoria.vercel.app/quizzes/${encodeURIComponent(selectedQuiz.id)}`;
+      const qImage = selectedQuiz.cover_image_path ? getQuizImageUrl(selectedQuiz.cover_image_path, 'quiz-covers') : undefined;
+
+      updateSeoMetaData({
+        title: qTitle,
+        description: qDesc,
+        canonicalUrl: qUrl,
+        imageUrl: qImage,
+        articleJsonLd: {
+          "@context": "https://schema.org",
+          "@type": "Quiz",
+          "name": selectedQuiz.title,
+          "description": selectedQuiz.description || selectedQuiz.title,
+          "url": qUrl
+        }
       });
       return;
     }
@@ -506,6 +539,8 @@ export function App() {
   const handleTabChange = (tab: NavTab) => {
     setSelectedArticle(null);
     setSelectedInstitutionCode(null);
+    setSelectedQuizId(null);
+    setSelectedQuiz(null);
     setActiveTab(tab);
     const newPath = tab === 'home' ? '/' : `/${tab}`;
     if (window.location.pathname !== newPath) {
@@ -516,6 +551,9 @@ export function App() {
 
   const handleSelectInstitution = (code: string, type?: string) => {
     setSelectedArticle(null);
+    setSelectedInstitutionCode(null);
+    setSelectedQuizId(null);
+    setSelectedQuiz(null);
     setSelectedInstitutionCode(code);
     const cleanCode = code.replace('#', '');
     const isCol = type === 'კოლეჯი' || activeTab === 'colleges';
@@ -608,6 +646,7 @@ export function App() {
                 user={user}
                 onOpenAuth={() => setIsAuthOpen(true)}
                 initialQuizId={selectedQuizId}
+                onActiveQuizChange={(quiz) => setSelectedQuiz(quiz)}
               />
             )}
 
