@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Search, Filter, FileText, CheckCircle2, ShieldCheck, RefreshCw, AlertTriangle, Eye } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Filter, FileText, CheckCircle2, ShieldCheck, RefreshCw, AlertTriangle, Eye, HelpCircle } from 'lucide-react';
 import { Article, HistoricalCategory } from '../types';
 import { fetchAllArticles, saveArticle, deleteArticle } from '../lib/blogService';
 import { BlogEditorModal } from '../components/BlogEditorModal';
+import { AdminQuizManager } from '../components/AdminQuizManager';
 
 interface AdminViewProps {
   user: { name: string; email: string } | null;
@@ -10,6 +11,7 @@ interface AdminViewProps {
 }
 
 export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => {
+  const [adminTab, setAdminTab] = useState<'blogs' | 'quizzes'>('blogs');
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -105,24 +107,56 @@ export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => 
           </div>
 
           <h1 className="font-serif font-bold text-2xl sm:text-3xl text-[#FAF8F3]">
-            ბლოგებისა და კონტენტის მართვა
+            ადმინისტრატორის პანელი
           </h1>
           <p className="text-xs sm:text-sm text-[#FAF8F3]/80 max-w-xl font-normal">
-            დაამატეთ ახალი ისტორიული სტატიები, დაარედაქტირეთ არსებული ბლოგები და შეინახეთ დრაფტებში.
+            მართეთ ისტორიული სტატიები, ბლოგები და ინტერაქტიული ქვიზები.
           </p>
         </div>
 
-        {/* Primary Action Button */}
+        {/* Primary Action Button for Blog if on blogs tab */}
+        {adminTab === 'blogs' && (
+          <button
+            onClick={handleCreateNew}
+            className="z-10 px-6 py-3.5 bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-xl transition-all shadow-luxury flex items-center gap-2 cursor-pointer shrink-0 hover:scale-105"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>ახალი ბლოგის დაწერა</span>
+          </button>
+        )}
+      </div>
+
+      {/* ADMIN TABS NAVIGATION */}
+      <div className="flex items-center gap-2 p-1.5 bg-white rounded-2xl border border-[#E6DDCB] shadow-sm w-fit">
         <button
-          onClick={handleCreateNew}
-          className="z-10 px-6 py-3.5 bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-xl transition-all shadow-luxury flex items-center gap-2 cursor-pointer shrink-0 hover:scale-105"
+          onClick={() => setAdminTab('blogs')}
+          className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            adminTab === 'blogs'
+              ? 'bg-[#0D1B2A] text-[#FAF8F3] shadow-md'
+              : 'text-[#666666] hover:bg-[#FAF8F3] hover:text-[#0D1B2A]'
+          }`}
         >
-          <Plus className="w-4 h-4 stroke-[3]" />
-          <span>ახალი ბლოგის დაწერა</span>
+          <FileText className="w-4 h-4 text-[#C79B3A]" />
+          <span>ბლოგის სტატიები</span>
+        </button>
+
+        <button
+          onClick={() => setAdminTab('quizzes')}
+          className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            adminTab === 'quizzes'
+              ? 'bg-[#0D1B2A] text-[#FAF8F3] shadow-md'
+              : 'text-[#666666] hover:bg-[#FAF8F3] hover:text-[#0D1B2A]'
+          }`}
+        >
+          <HelpCircle className="w-4 h-4 text-[#C79B3A]" />
+          <span>ქვიზების მართვა</span>
         </button>
       </div>
 
-      <div className="space-y-8">
+      {adminTab === 'quizzes' ? (
+        <AdminQuizManager />
+      ) : (
+        <div className="space-y-8">
 
       {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-[#E6DDCB] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">

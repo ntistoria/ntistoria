@@ -93,6 +93,7 @@ export function App() {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
   const [selectedInstitutionCode, setSelectedInstitutionCode] = useState<string | null>(null);
+  const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
 
   // Route syncing helper
   const syncRouteWithState = useCallback((articlesList: Article[]) => {
@@ -184,10 +185,14 @@ export function App() {
       return;
     }
 
-    if (pathname === '/quizzes') {
+    if (pathname.startsWith('/quizzes')) {
+      const quizId = pathname.startsWith('/quizzes/')
+        ? decodeURIComponent(pathname.replace('/quizzes/', '').replace(/\/$/, ''))
+        : null;
       setActiveTab('quizzes');
       setSelectedInstitutionCode(null);
       setSelectedArticle(null);
+      setSelectedQuizId(quizId);
       return;
     }
 
@@ -599,7 +604,11 @@ export function App() {
             )}
 
             {activeTab === 'quizzes' && (
-              <QuizzesView />
+              <QuizzesView
+                user={user}
+                onOpenAuth={() => setIsAuthOpen(true)}
+                initialQuizId={selectedQuizId}
+              />
             )}
 
             {activeTab === 'videos' && (

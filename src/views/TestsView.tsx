@@ -1240,7 +1240,7 @@ export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user, onOpenAu
                         <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] flex items-center justify-between gap-3 max-w-xl mx-auto">
                           <div className="flex items-center gap-2 text-xs font-semibold text-[#0D1B2A] text-left">
                             <Lock className="w-4 h-4 text-[#C79B3A] shrink-0" />
-                            <span>პროგრესის სანახავად: გთხოვთ გაიაროთ ავტორიზაცია</span>
+                            <span>პროგრესის შესანახად და სანახავად გაიარეთ ავტორიზაცია</span>
                           </div>
                           {onOpenAuth && (
                             <button

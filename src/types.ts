@@ -136,3 +136,65 @@ export interface TestResult {
   date: string;
   userAnswers: { questionIndex: number; selectedIndex: number; isCorrect: boolean }[];
 }
+
+// Quiz System Interfaces
+export interface QuizAnswerItem {
+  id: string;
+  question_id?: string;
+  answer_text: string;
+  is_correct?: boolean;
+  answer_order: number;
+}
+
+export interface QuizQuestionItem {
+  id: string;
+  quiz_id?: string;
+  question_text: string;
+  image_path?: string | null;
+  question_order: number;
+  answers: QuizAnswerItem[];
+}
+
+export interface QuizItem {
+  id: string;
+  title: string;
+  description?: string | null;
+  cover_image_path?: string | null;
+  status: 'draft' | 'published';
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+  question_count?: number;
+}
+
+export interface QuizAttempt {
+  id: string;
+  quiz_id: string;
+  user_id?: string | null;
+  guest_name?: string | null;
+  correct_answers: number;
+  total_questions: number;
+  percentage: number;
+  created_at: string;
+}
+
+export interface QuizLeaderboardItem {
+  id: string;
+  quiz_id: string;
+  user_id?: string | null;
+  guest_name?: string | null;
+  correct_answers: number;
+  total_questions: number;
+  percentage: number;
+  created_at: string;
+}
+
+export interface QuizResultFeedback {
+  tier: 'herodotus' | 'high' | 'medium' | 'low';
+  title: string;
+  comment: string;
+  minPercentage: number;
+  maxPercentage: number;
+  badge: string;
+}
+
