@@ -1,7 +1,7 @@
-import React from 'react';
+import { type FC } from 'react';
 import { PlayCircle, Clock } from 'lucide-react';
 
-export const VideosView: React.FC = () => {
+export const VideosView: FC = () => {
   return (
     <div className="max-w-[1180px] mx-auto min-h-[60vh] flex items-center justify-center py-20 px-4">
       <div className="text-center space-y-6 max-w-lg w-full animate-fade-in">

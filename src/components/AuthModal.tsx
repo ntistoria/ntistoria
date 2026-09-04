@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type FC } from 'react';
 import { X, Mail, Lock, User, LogIn, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { isAdminUser } from '../lib/blogService';
@@ -10,7 +10,7 @@ interface AuthModalProps {
   onSuccessLogin?: (user: { name: string; email: string }) => void;
 }
 
-export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onSuccessLogin }) => {
+export const AuthModal: FC<AuthModalProps> = ({ isOpen, onClose, onSuccessLogin }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');

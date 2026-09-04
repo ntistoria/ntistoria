@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { NavTab, Article, HistoryTest, VideoLesson } from '../types';
 import { HERO_IMAGE, ABOUT_IMAGE, HISTORICAL_EPOCHS } from '../data/historyData';
 import { fetchAllArticles } from '../lib/blogService';
@@ -13,7 +13,7 @@ interface HomeViewProps {
   onOpenVideo?: (video: VideoLesson) => void;
 }
 
-export const HomeView: React.FC<HomeViewProps> = ({
+export const HomeView: FC<HomeViewProps> = ({
   setActiveTab,
   onOpenArticle
 }) => {

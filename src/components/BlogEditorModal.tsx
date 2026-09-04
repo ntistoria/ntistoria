@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type FC } from 'react';
 import { X, Upload, Image as ImageIcon, Bold, Italic, Underline, Heading2, Heading3, List, ListOrdered, Quote, Eye, Edit3, Loader2, CheckCircle2, AlertCircle, FileText, Trash2 } from 'lucide-react';
 import { Article, HistoricalCategory } from '../types';
 import { uploadBlogImage, formatArticleContent, deleteStorageImages, generateSlug } from '../lib/blogService';
@@ -64,7 +64,7 @@ const sanitizePastedHtml = (rawHtml: string): string => {
   return doc.body.innerHTML;
 };
 
-export const BlogEditorModal: React.FC<BlogEditorModalProps> = ({
+export const BlogEditorModal: FC<BlogEditorModalProps> = ({
   isOpen,
   onClose,
   onSave,

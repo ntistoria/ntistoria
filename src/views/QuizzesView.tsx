@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import {
   HelpCircle, ArrowRight, ArrowLeft, Trophy, CheckCircle2, RotateCcw,
   Share2, Copy, Check, Sparkles, Award, User, Clock, AlertCircle, X, ExternalLink, Link as LinkIcon
@@ -46,7 +46,7 @@ const copyToClipboard = async (text: string): Promise<boolean> => {
   }
 };
 
-export const QuizzesView: React.FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQuizId, onActiveQuizChange }) => {
+export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQuizId, onActiveQuizChange }) => {
   // Master View States: 'list' | 'play' | 'result'
   const [viewState, setViewState] = useState<'list' | 'play' | 'result'>('list');
 

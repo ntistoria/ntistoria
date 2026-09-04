@@ -1,4 +1,4 @@
-import React from 'react';
+import { type FC } from 'react';
 import { NavTab } from '../types';
 import { Home, BookOpen, Clock, ArrowRight, HelpCircle } from 'lucide-react';
 
@@ -6,7 +6,7 @@ interface NotFoundViewProps {
   setActiveTab: (tab: NavTab) => void;
 }
 
-export const NotFoundView: React.FC<NotFoundViewProps> = ({ setActiveTab }) => {
+export const NotFoundView: FC<NotFoundViewProps> = ({ setActiveTab }) => {
   return (
     <div className="max-w-[1180px] mx-auto min-h-[70vh] flex items-center justify-center py-20 px-4 animate-in fade-in duration-300">
       <div className="text-center space-y-8 max-w-xl w-full bg-white border-2 border-[#E6DDCB] p-8 sm:p-12 rounded-3xl shadow-xl">

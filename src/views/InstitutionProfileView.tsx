@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { University, Specialty } from '../types';
 import { fetchInstitutionByCode, fetchSpecialtiesByInstitutionCode } from '../lib/catalogService';
 import { ChevronRight, ArrowLeft, MapPin, Globe, Mail, GraduationCap, BookOpen, Users, Coins, Languages, Award, Loader2, Building2 } from 'lucide-react';
@@ -9,7 +9,7 @@ interface InstitutionProfileViewProps {
   onNavigateBack: () => void;
 }
 
-export const InstitutionProfileView: React.FC<InstitutionProfileViewProps> = ({
+export const InstitutionProfileView: FC<InstitutionProfileViewProps> = ({
   code,
   onNavigateHome,
   onNavigateBack

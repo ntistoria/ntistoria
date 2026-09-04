@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { Article } from '../types';
 import { fetchAllArticles, getInitialArticles } from '../lib/blogService';
 import { Search, Clock, Calendar, User, ArrowRight, BookOpen } from 'lucide-react';
@@ -7,7 +7,7 @@ interface BlogViewProps {
   onOpenArticle: (article: Article) => void;
 }
 
-export const BlogView: React.FC<BlogViewProps> = ({ onOpenArticle }) => {
+export const BlogView: FC<BlogViewProps> = ({ onOpenArticle }) => {
   const [articles, setArticles] = useState<Article[]>(() => getInitialArticles());
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('ყველა');

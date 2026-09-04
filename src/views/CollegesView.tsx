@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type FC } from 'react';
 import { University } from '../types';
 import { fetchInstitutions } from '../lib/catalogService';
 import { GeorgiaMap } from '../components/GeorgiaMap';
@@ -12,7 +12,7 @@ interface CollegesViewProps {
   initialStatus?: string;
 }
 
-export const CollegesView: React.FC<CollegesViewProps> = ({
+export const CollegesView: FC<CollegesViewProps> = ({
   onNavigateHome,
   onSelectCollege,
   initialQuery = '',

@@ -5,7 +5,7 @@
   <!-- Homepage -->
   <url>
     <loc>https://ntistoria.vercel.app/</loc>
-    <lastmod>2026-08-30</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
     <image:image>
@@ -17,7 +17,7 @@
   <!-- Universities Catalog -->
   <url>
     <loc>https://ntistoria.vercel.app/universities</loc>
-    <lastmod>2026-08-30</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.95</priority>
   </url>
@@ -25,7 +25,7 @@
   <!-- Colleges Catalog -->
   <url>
     <loc>https://ntistoria.vercel.app/colleges</loc>
-    <lastmod>2026-08-30</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.95</priority>
   </url>
@@ -33,7 +33,7 @@
   <!-- Programs Catalog (1000+ Programs) -->
   <url>
     <loc>https://ntistoria.vercel.app/programs</loc>
-    <lastmod>2026-08-30</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.95</priority>
   </url>
@@ -41,35 +41,35 @@
   <!-- Featured Top Universities -->
   <url>
     <loc>https://ntistoria.vercel.app/universities/001</loc>
-    <lastmod>2026-08-30</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.90</priority>
   </url>
 
   <url>
     <loc>https://ntistoria.vercel.app/universities/002</loc>
-    <lastmod>2026-08-30</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.90</priority>
   </url>
 
   <url>
     <loc>https://ntistoria.vercel.app/universities/003</loc>
-    <lastmod>2026-08-30</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.90</priority>
   </url>
 
   <url>
     <loc>https://ntistoria.vercel.app/universities/010</loc>
-    <lastmod>2026-08-30</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.90</priority>
   </url>
 
   <url>
     <loc>https://ntistoria.vercel.app/universities/120</loc>
-    <lastmod>2026-08-30</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.90</priority>
   </url>
@@ -77,7 +77,7 @@
   <!-- Tests Section -->
   <url>
     <loc>https://ntistoria.vercel.app/tests</loc>
-    <lastmod>2026-08-30</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.90</priority>
   </url>
@@ -85,7 +85,7 @@
   <!-- Blog Section -->
   <url>
     <loc>https://ntistoria.vercel.app/blog</loc>
-    <lastmod>2026-08-30</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.90</priority>
   </url>
@@ -93,7 +93,7 @@
   <!-- Videos Section -->
   <url>
     <loc>https://ntistoria.vercel.app/videos</loc>
-    <lastmod>2026-08-30</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
@@ -101,7 +101,7 @@
   <!-- Quizzes Section -->
   <url>
     <loc>https://ntistoria.vercel.app/quizzes</loc>
-    <lastmod>2026-08-30</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.85</priority>
   </url>
@@ -109,7 +109,7 @@
   <!-- Contact Section -->
   <url>
     <loc>https://ntistoria.vercel.app/contact</loc>
-    <lastmod>2026-08-30</lastmod>
+    <lastmod>2026-09-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.80</priority>
   </url>

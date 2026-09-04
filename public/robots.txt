@@ -1,6 +1,7 @@
 # Allow all web crawlers and search engine bots
 User-agent: *
 Allow: /
+Disallow: /admin
 
 # Google Search Console Sitemap location
 Sitemap: https://ntistoria.vercel.app/sitemap.xml

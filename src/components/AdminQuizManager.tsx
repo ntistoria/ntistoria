@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import {
   Plus, Edit2, Trash2, Search, Filter, Image, HelpCircle, CheckCircle2,
   FileText, ArrowUp, ArrowDown, Eye, X, Upload, Save, AlertTriangle, Check, Radio, Share2
@@ -10,7 +10,7 @@ import {
   uploadQuizImage, getQuizImageUrl
 } from '../lib/quizService';
 
-export const AdminQuizManager: React.FC = () => {
+export const AdminQuizManager: FC = () => {
   const [quizzes, setQuizzes] = useState<QuizItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');

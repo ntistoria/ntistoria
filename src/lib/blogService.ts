@@ -14,11 +14,9 @@ export const ADMIN_EMAILS = [
 export const isAdminUser = (user: { email: string } | null): boolean => {
   if (!user || !user.email) return false;
   const emailLower = user.email.toLowerCase().trim();
-  const isMatch = ADMIN_EMAILS.some(e => e.toLowerCase() === emailLower);
-  const isLocalOverride = localStorage.getItem('ntistoria_admin_override') === 'true';
-  const isAdminPattern = emailLower.includes('admin') || emailLower.startsWith('ntistoria');
-  return isMatch || isLocalOverride || isAdminPattern;
+  return ADMIN_EMAILS.some(e => e.toLowerCase() === emailLower);
 };
+
 
 // Georgian Transliteration helper for clean URLs
 export function transliterateGeorgian(str: string): string {

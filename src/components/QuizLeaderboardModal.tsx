@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, type FC } from 'react';
 import { Trophy, X, Medal, Calendar, User, Award, RefreshCw } from 'lucide-react';
 import { QuizLeaderboardItem } from '../types';
 import { fetchQuizLeaderboard } from '../lib/quizService';
@@ -10,7 +10,7 @@ interface QuizLeaderboardModalProps {
   quizTitle: string;
 }
 
-export const QuizLeaderboardModal: React.FC<QuizLeaderboardModalProps> = ({
+export const QuizLeaderboardModal: FC<QuizLeaderboardModalProps> = ({
   isOpen,
   onClose,
   quizId,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { HistoryTest, QuizQuestion } from '../types';
 
 import { 
@@ -108,7 +108,7 @@ const checkChronologyItemsMatch = (
   return userItemsOrder.every((item, i) => item === expectedOrder[i]);
 };
 
-export const TestsView: React.FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) => {
+export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) => {
   const isLoggedIn = !!(user && user.email);
   const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(null);
   const [programs, setPrograms] = useState<ProgramChapter[]>([]);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { Plus, Edit2, Trash2, Search, Filter, FileText, ShieldCheck, RefreshCw, AlertTriangle, Eye, HelpCircle } from 'lucide-react';
 import { Article } from '../types';
 import { fetchAllArticles, saveArticle, deleteArticle } from '../lib/blogService';
@@ -10,7 +10,7 @@ interface AdminViewProps {
   onOpenArticle: (article: Article) => void;
 }
 
-export const AdminView: React.FC<AdminViewProps> = ({ user, onOpenArticle }) => {
+export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
   const [adminTab, setAdminTab] = useState<'blogs' | 'quizzes'>('blogs');
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);

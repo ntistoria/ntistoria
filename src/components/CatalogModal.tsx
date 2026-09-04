@@ -1,4 +1,4 @@
-import React from 'react';
+import { type FC } from 'react';
 import { X, GraduationCap, BookOpen, Award, CheckCircle2, ExternalLink } from 'lucide-react';
 
 interface CatalogModalProps {
@@ -6,7 +6,7 @@ interface CatalogModalProps {
   onClose: () => void;
 }
 
-export const CatalogModal: React.FC<CatalogModalProps> = ({ type, onClose }) => {
+export const CatalogModal: FC<CatalogModalProps> = ({ type, onClose }) => {
   if (!type) return null;
 
   const getContent = () => {

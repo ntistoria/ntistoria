@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type FC } from 'react';
 import { VideoLesson } from '../types';
 import { X, Play, FileText, CheckCircle2, User, Eye, Calendar, Clock, Download, BookOpen, Share2, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -8,7 +8,7 @@ interface VideoPlayerModalProps {
   onClose: () => void;
 }
 
-export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({ video, onClose }) => {
+export const VideoPlayerModal: FC<VideoPlayerModalProps> = ({ video, onClose }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [activeTab, setActiveTab] = useState<'topics' | 'notes' | 'materials'>('topics');

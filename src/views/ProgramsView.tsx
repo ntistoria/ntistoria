@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, type FC } from 'react';
 import { ProgramCatalogItem } from '../types';
 import { fetchAllProgramsWithInstitutions } from '../lib/catalogService';
 import { Search, ChevronRight, Award, RotateCcw, BookOpen, MapPin, Users, Coins, Languages, GraduationCap, Building2, ArrowRight, Loader2 } from 'lucide-react';
@@ -11,7 +11,7 @@ interface ProgramsViewProps {
   initialProgType?: string;
 }
 
-export const ProgramsView: React.FC<ProgramsViewProps> = ({
+export const ProgramsView: FC<ProgramsViewProps> = ({
   onNavigateHome,
   onSelectInstitution,
   initialQuery = '',

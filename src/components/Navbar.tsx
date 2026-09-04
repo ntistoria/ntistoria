@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { NavTab } from '../types';
 import { Logo } from './Logo';
 import { Menu, X, BookOpen, Search, ArrowRight, User, ShieldCheck } from 'lucide-react';
@@ -14,7 +14,7 @@ interface NavbarProps {
   onLogout?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenSearch, onOpenAuth, onOpenProfile, user, onLogout }) => {
+export const Navbar: FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenSearch, onOpenAuth, onOpenProfile, user, onLogout }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -25,6 +25,27 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenS
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  // Close mobile menu on ESC key
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && mobileMenuOpen) {
+        setMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [mobileMenuOpen]);
+
+  // Lock body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [mobileMenuOpen]);
 
   const isAdmin = isAdminUser(user);
 

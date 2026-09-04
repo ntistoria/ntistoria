@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef, type FC } from 'react';
 import L from 'leaflet';
 import { University } from '../types';
 
@@ -9,7 +9,7 @@ interface GeorgiaMapProps {
   height?: string;
 }
 
-export const GeorgiaMap: React.FC<GeorgiaMapProps> = ({
+export const GeorgiaMap: FC<GeorgiaMapProps> = ({
   institutions,
   onSelectInstitution,
   selectedCode,

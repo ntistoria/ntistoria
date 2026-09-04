@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import { useState, type FC } from 'react';
 import { FAQS } from '../data/historyData';
 import { Mail, Phone, MapPin, Clock, Send, CheckCircle2, HelpCircle, ChevronDown, ChevronUp, Facebook, Instagram, Youtube, MessageCircle, Share2 } from 'lucide-react';
 
-export const ContactView: React.FC = () => {
+export const ContactView: FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     email: '',

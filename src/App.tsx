@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { NavTab, Article, HistoryTest, VideoLesson, QuizItem } from './types';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
@@ -10,6 +10,7 @@ import { VideosView } from './views/VideosView';
 import { ContactView } from './views/ContactView';
 import { AdminView } from './views/AdminView';
 import { ArticleDetailView } from './views/ArticleDetailView';
+import { NotFoundView } from './views/NotFoundView';
 import { UniversitiesView } from './views/UniversitiesView';
 import { CollegesView } from './views/CollegesView';
 import { InstitutionProfileView } from './views/InstitutionProfileView';
@@ -85,7 +86,9 @@ function updateSeoMetaData(options: {
 
 export function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('home');
+  const [isNotFound, setIsNotFound] = useState(false);
   const [allArticles, setAllArticles] = useState<Article[]>(() => getInitialArticles());
+  const allArticlesRef = useRef<Article[]>(allArticles);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [selectedTest, setSelectedTest] = useState<HistoryTest | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<VideoLesson | null>(null);
@@ -102,6 +105,9 @@ export function App() {
     const pathname = window.location.pathname;
     const searchParams = new URLSearchParams(window.location.search);
     const queryArticle = searchParams.get('article');
+
+    // Reset 404 state on each route sync
+    setIsNotFound(false);
 
     // Helper to clear non-active route states
     const clearOtherStates = () => {
@@ -242,8 +248,18 @@ export function App() {
     if (pathname === '/' || pathname === '') {
       setActiveTab('home');
       clearOtherStates();
+      return;
     }
+
+    // No matching route found — show 404
+    clearOtherStates();
+    setIsNotFound(true);
   }, []);
+
+  // Keep ref in sync with latest articles
+  useEffect(() => {
+    allArticlesRef.current = allArticles;
+  }, [allArticles]);
 
   // Fetch articles and sync route on mount
   useEffect(() => {
@@ -252,13 +268,14 @@ export function App() {
       const fetched = await fetchAllArticles();
       if (isMounted) {
         setAllArticles(fetched);
+        allArticlesRef.current = fetched;
         syncRouteWithState(fetched);
       }
     };
     init();
 
     const handlePopState = () => {
-      syncRouteWithState(allArticles);
+      syncRouteWithState(allArticlesRef.current);
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -445,7 +462,7 @@ export function App() {
       }
       (window as any).gtag('config', 'G-VHKM6K967T', { page_path: currentPath });
     }
-  }, [activeTab, selectedArticle, selectedInstitutionCode]);
+  }, [activeTab, selectedArticle, selectedInstitutionCode, selectedQuiz]);
 
   useEffect(() => {
     // Process Supabase session
@@ -479,10 +496,7 @@ export function App() {
           window.history.replaceState({}, document.title, window.location.pathname);
         }
       } else {
-        const isOverride = localStorage.getItem('ntistoria_admin_override') === 'true';
-        if (!isOverride) {
-          setUser(null);
-        }
+        setUser(null);
       }
     };
 
@@ -541,6 +555,7 @@ export function App() {
     setSelectedInstitutionCode(null);
     setSelectedQuizId(null);
     setSelectedQuiz(null);
+    setIsNotFound(false);
     setActiveTab(tab);
     const newPath = tab === 'home' ? '/' : `/${tab}`;
     if (window.location.pathname !== newPath) {
@@ -598,71 +613,77 @@ export function App() {
           />
         ) : (
           <>
-            {activeTab === 'home' && (
-              <HomeView 
-                onOpenArticle={handleOpenArticle} 
-                onOpenTest={handleOpenTest}
-                setActiveTab={handleTabChange}
-              />
-            )}
+            {isNotFound ? (
+              <NotFoundView setActiveTab={handleTabChange} />
+            ) : (
+              <>
+                {activeTab === 'home' && (
+                  <HomeView 
+                    onOpenArticle={handleOpenArticle} 
+                    onOpenTest={handleOpenTest}
+                    setActiveTab={handleTabChange}
+                  />
+                )}
 
-            {activeTab === 'universities' && (
-              <UniversitiesView
-                onNavigateHome={() => handleTabChange('home')}
-                onSelectUniversity={(code) => handleSelectInstitution(code, 'უნივერსიტეტი')}
-              />
-            )}
+                {activeTab === 'universities' && (
+                  <UniversitiesView
+                    onNavigateHome={() => handleTabChange('home')}
+                    onSelectUniversity={(code) => handleSelectInstitution(code, 'უნივერსიტეტი')}
+                  />
+                )}
 
-            {activeTab === 'colleges' && (
-              <CollegesView
-                onNavigateHome={() => handleTabChange('home')}
-                onSelectCollege={(code) => handleSelectInstitution(code, 'კოლეჯი')}
-              />
-            )}
+                {activeTab === 'colleges' && (
+                  <CollegesView
+                    onNavigateHome={() => handleTabChange('home')}
+                    onSelectCollege={(code) => handleSelectInstitution(code, 'კოლეჯი')}
+                  />
+                )}
 
-            {activeTab === 'programs' && (
-              <ProgramsView
-                onNavigateHome={() => handleTabChange('home')}
-                onSelectInstitution={(code, type) => handleSelectInstitution(code, type)}
-              />
-            )}
+                {activeTab === 'programs' && (
+                  <ProgramsView
+                    onNavigateHome={() => handleTabChange('home')}
+                    onSelectInstitution={(code, type) => handleSelectInstitution(code, type)}
+                  />
+                )}
 
-            {activeTab === 'blog' && (
-              <BlogView
-                onOpenArticle={handleOpenArticle}
-              />
-            )}
+                {activeTab === 'blog' && (
+                  <BlogView
+                    onOpenArticle={handleOpenArticle}
+                  />
+                )}
 
-            {activeTab === 'tests' && (
-              <TestsView
-                onOpenTest={handleOpenTest}
-                user={user}
-                onOpenAuth={() => setIsAuthOpen(true)}
-              />
-            )}
+                {activeTab === 'tests' && (
+                  <TestsView
+                    onOpenTest={handleOpenTest}
+                    user={user}
+                    onOpenAuth={() => setIsAuthOpen(true)}
+                  />
+                )}
 
-            {activeTab === 'quizzes' && (
-              <QuizzesView
-                user={user}
-                onOpenAuth={() => setIsAuthOpen(true)}
-                initialQuizId={selectedQuizId}
-                onActiveQuizChange={(quiz) => setSelectedQuiz(quiz)}
-              />
-            )}
+                {activeTab === 'quizzes' && (
+                  <QuizzesView
+                    user={user}
+                    onOpenAuth={() => setIsAuthOpen(true)}
+                    initialQuizId={selectedQuizId}
+                    onActiveQuizChange={(quiz) => setSelectedQuiz(quiz)}
+                  />
+                )}
 
-            {activeTab === 'videos' && (
-              <VideosView />
-            )}
+                {activeTab === 'videos' && (
+                  <VideosView />
+                )}
 
-            {activeTab === 'contact' && (
-              <ContactView />
-            )}
+                {activeTab === 'contact' && (
+                  <ContactView />
+                )}
 
-            {activeTab === 'admin' && (
-              <AdminView
-                user={user}
-                onOpenArticle={handleOpenArticle}
-              />
+                {activeTab === 'admin' && (
+                  <AdminView
+                    user={user}
+                    onOpenArticle={handleOpenArticle}
+                  />
+                )}
+              </>
             )}
           </>
         )}

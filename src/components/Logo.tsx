@@ -1,4 +1,4 @@
-import React from 'react';
+import { type FC } from 'react';
 
 const LOGO_URL = 'https://enjnwxpzafroxapksdlt.supabase.co/storage/v1/object/public/photos/logooo.png';
 
@@ -10,7 +10,7 @@ interface LogoProps {
   onClick?: () => void;
 }
 
-export const Logo: React.FC<LogoProps> = ({ variant = 'full', className = '', imgClassName = '', src, onClick }) => {
+export const Logo: FC<LogoProps> = ({ variant = 'full', className = '', imgClassName = '', src, onClick }) => {
   const heightClass = variant === 'icon' ? 'h-9' : variant === 'compact' ? 'h-11' : 'h-14';
 
   return (

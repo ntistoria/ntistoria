@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_dpO82-UPWGqkk2Z5eJ2SAA_-119eWfN';
+
 function transliterateGeorgian(str) {
   if (!str) return '';
   const geoMap = {
@@ -59,7 +61,7 @@ export default async function handler(req, res) {
         const supabaseUrl = `https://enjnwxpzafroxapksdlt.supabase.co/rest/v1/quizzes?id=eq.${encodeURIComponent(decodedQuizId)}&select=*`;
         const response = await fetch(supabaseUrl, {
           headers: {
-            'apikey': 'sb_publishable_dpO82-UPWGqkk2Z5eJ2SAA_-119eWfN',
+            'apikey': SUPABASE_ANON_KEY,
             'Accept': 'application/json'
           }
         });

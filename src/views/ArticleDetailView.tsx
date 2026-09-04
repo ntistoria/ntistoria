@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { Article } from '../types';
 import { formatArticleContent, generateSlug } from '../lib/blogService';
 import { ArrowLeft, Calendar, User, Quote, BookOpen, Share2, Copy, Check } from 'lucide-react';
@@ -10,7 +10,7 @@ interface ArticleDetailViewProps {
   allArticles?: Article[];
 }
 
-export const ArticleDetailView: React.FC<ArticleDetailViewProps> = ({
+export const ArticleDetailView: FC<ArticleDetailViewProps> = ({
   article,
   onBack,
   onSelectRelated,

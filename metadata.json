@@ -1,6 +1,0 @@
-{
-  "name": "NT ისტორიის მასწავლებელი",
-  "description": "მაღალი აკადემიური სტანდარტის ისტორიის პლატფორმა: ეროვნული გამოცდებისთვის მომზადება, ვიდეო გაკვეთილები, ინტერაქტიული ტესტები და ისტორიული წყაროები.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

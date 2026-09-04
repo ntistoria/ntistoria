@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type FC } from 'react';
 import { Article, HistoryTest, VideoLesson, NavTab } from '../types';
 import { ARTICLES, TESTS, VIDEOS, HISTORICAL_EPOCHS } from '../data/historyData';
 import { Search, X, BookOpen, FileText, Play, ArrowRight } from 'lucide-react';
@@ -12,7 +12,7 @@ interface SearchModalProps {
   onOpenVideo: (video: VideoLesson) => void;
 }
 
-export const SearchModal: React.FC<SearchModalProps> = ({
+export const SearchModal: FC<SearchModalProps> = ({
   isOpen,
   onClose,
   onOpenArticle,

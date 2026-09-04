@@ -1,4 +1,4 @@
-import React from 'react';
+import { type FC } from 'react';
 import { NavTab } from '../types';
 import { Logo } from './Logo';
 import { Mail, Phone, MapPin, Facebook, Instagram, Youtube } from 'lucide-react';
@@ -7,7 +7,7 @@ interface FooterProps {
   setActiveTab: (tab: NavTab) => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ setActiveTab }) => {
+export const Footer: FC<FooterProps> = ({ setActiveTab }) => {
   const currentYear = new Date().getFullYear();
 
   return (

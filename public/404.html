@@ -10,93 +10,150 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Noto+Serif+Georgian:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com"></script>
     <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
       body {
         font-family: 'Inter', 'Noto Serif Georgian', serif;
         background-color: #0D1B2A;
         color: #FAF8F3;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        -webkit-font-smoothing: antialiased;
       }
-      .font-serif-georgian {
-        font-family: 'Noto Serif Georgian', 'Cinzel', serif;
+      ::selection { background-color: #C79B3A; color: #0D1B2A; }
+      .font-serif-georgian { font-family: 'Noto Serif Georgian', 'Cinzel', serif; }
+
+      /* Header */
+      .header { width: 100%; border-bottom: 1px solid rgba(250,248,243,0.1); padding: 1.25rem 1.5rem; }
+      .header-inner { max-width: 1180px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+      .header a { text-decoration: none; color: inherit; }
+      .header-logo { display: inline-flex; align-items: center; gap: 0.75rem; }
+      .header-logo img { height: 3rem; width: auto; object-fit: contain; transition: transform 0.3s; }
+      .header-logo:hover img { transform: scale(1.05); }
+      .header-home { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.15em; font-weight: 600; color: #C79B3A; transition: color 0.2s; }
+      .header-home:hover { color: #fff; }
+
+      /* Main */
+      .main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 4rem 1rem; }
+      .main-inner { max-width: 40rem; width: 100%; text-align: center; }
+      .main-inner > * + * { margin-top: 2rem; }
+
+      /* 404 Badge */
+      .badge-wrap { position: relative; display: inline-block; }
+      .badge-big { font-size: clamp(5rem, 15vw, 9rem); font-weight: 700; font-family: monospace; letter-spacing: -0.05em; color: rgba(199,155,58,0.2); user-select: none; line-height: 1; }
+      .badge-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+      .badge-label span {
+        padding: 0.375rem 1rem;
+        background: rgba(250,248,243,0.1);
+        border: 1px solid rgba(199,155,58,0.4);
+        color: #C79B3A;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.25em;
+        border-radius: 9999px;
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
       }
+
+      /* Headline */
+      .headline { margin-top: 1.5rem; }
+      .headline h1 { font-weight: 700; font-size: clamp(1.5rem, 5vw, 3rem); line-height: 1.2; color: #FAF8F3; }
+      .headline h1 .accent { color: #C79B3A; font-style: italic; font-weight: 400; }
+      .headline p { margin-top: 1rem; font-size: clamp(0.8rem, 2vw, 1rem); color: rgba(250,248,243,0.75); max-width: 28rem; margin-left: auto; margin-right: auto; line-height: 1.6; }
+
+      /* Buttons */
+      .actions { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; padding-top: 0.5rem; }
+      @media (min-width: 640px) { .actions { flex-direction: row; } }
+      .btn {
+        width: 100%; max-width: 20rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+        padding: 1rem 2rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.15em; font-weight: 700;
+        border-radius: 0.75rem; text-decoration: none; transition: all 0.2s; cursor: pointer; border: none;
+      }
+      @media (min-width: 640px) { .btn { width: auto; } }
+      .btn-primary { background: #C79B3A; color: #0D1B2A; box-shadow: 0 4px 12px rgba(199,155,58,0.2); }
+      .btn-primary:hover { background: #E6C86B; }
+      .btn-primary:active { transform: scale(0.98); }
+      .btn-secondary { background: rgba(255,255,255,0.1); color: #FAF8F3; border: 1px solid rgba(255,255,255,0.2); }
+      .btn-secondary:hover { background: rgba(255,255,255,0.2); }
+      .btn svg { width: 1rem; height: 1rem; }
+
+      /* Quick links */
+      .quick-links { padding-top: 2rem; border-top: 1px solid rgba(250,248,243,0.1); max-width: 28rem; margin: 0 auto; }
+      .quick-links p { font-size: 0.75rem; color: rgba(250,248,243,0.5); text-transform: uppercase; letter-spacing: 0.15em; font-weight: 600; margin-bottom: 0.75rem; }
+      .quick-links-row { display: flex; align-items: center; justify-content: center; gap: 1.5rem; font-size: 0.75rem; flex-wrap: wrap; }
+      .quick-links-row a { color: #C79B3A; text-decoration: none; }
+      .quick-links-row a:hover { text-decoration: underline; }
+      .quick-links-row .dot { color: rgba(250,248,243,0.3); }
+
+      /* Footer */
+      .footer { padding: 1.5rem; border-top: 1px solid rgba(250,248,243,0.1); text-align: center; font-size: 0.75rem; color: rgba(250,248,243,0.4); font-family: monospace; text-transform: uppercase; }
     </style>
   </head>
-  <body class="min-h-screen flex flex-col justify-between selection:bg-[#C79B3A] selection:text-[#0D1B2A]">
+  <body>
     
     <!-- Top Branding Header -->
-    <header class="w-full border-b border-[#FAF8F3]/10 py-5 px-6">
-      <div class="max-w-[1180px] mx-auto flex items-center justify-between">
-        <a href="/" class="inline-flex items-center gap-3 group">
+    <header class="header">
+      <div class="header-inner">
+        <a href="/" class="header-logo">
           <img 
             src="https://enjnwxpzafroxapksdlt.supabase.co/storage/v1/object/public/photos/logooo.png" 
             alt="NT ისტორიის მასწავლებელი" 
-            class="h-12 w-auto object-contain group-hover:scale-105 transition-transform" 
           />
         </a>
-        <a href="/" class="text-xs uppercase tracking-widest font-semibold text-[#C79B3A] hover:text-white transition-colors">
+        <a href="/" class="header-home">
           მთავარი გვერდი ➔
         </a>
       </div>
     </header>
 
     <!-- Main 404 Hero Section -->
-    <main class="flex-1 flex items-center justify-center py-16 px-4">
-      <div class="max-w-2xl w-full text-center space-y-8 animate-fade-in">
+    <main class="main">
+      <div class="main-inner">
         
         <!-- Large 404 Watermark Badge -->
-        <div class="relative inline-block">
-          <span class="text-8xl sm:text-9xl font-bold font-mono tracking-tighter text-[#C79B3A]/20 select-none">
-            404
-          </span>
-          <div class="absolute inset-0 flex items-center justify-center">
-            <span class="px-4 py-1.5 bg-[#FAF8F3]/10 border border-[#C79B3A]/40 text-[#C79B3A] text-xs font-bold uppercase tracking-[0.25em] rounded-full backdrop-blur-md">
-              შეცდომა 404
-            </span>
+        <div class="badge-wrap">
+          <span class="badge-big">404</span>
+          <div class="badge-label">
+            <span>შეცდომა 404</span>
           </div>
         </div>
 
         <!-- Headline & Description -->
-        <div class="space-y-4">
-          <h1 class="font-serif-georgian font-bold text-3xl sm:text-5xl text-[#FAF8F3] leading-tight">
-            ისტორიის ეს ფურცელი <br /> <span class="text-[#C79B3A] italic font-normal">ჯერ არ დაწერილა</span>
+        <div class="headline">
+          <h1 class="font-serif-georgian">
+            ისტორიის ეს ფურცელი <br /> <span class="accent">ჯერ არ დაწერილა</span>
           </h1>
-          <p class="text-sm sm:text-base text-[#FAF8F3]/75 max-w-md mx-auto leading-relaxed">
+          <p>
             სამწუხაროდ, თქვენ მიერ მოთხოვნილი მისამართი არ არსებობს, წაშლილია ან გადაადგილდა.
           </p>
         </div>
 
         <!-- Action Buttons -->
-        <div class="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
-          <a
-            href="/"
-            class="w-full sm:w-auto px-8 py-4 bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-xl transition-all shadow-lg shadow-[#C79B3A]/20 inline-flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div class="actions">
+          <a href="/" class="btn btn-primary">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
             </svg>
             <span>მთავარ გვერდზე დაბრუნება</span>
           </a>
 
-          <a
-            href="/?tab=tests"
-            class="w-full sm:w-auto px-8 py-4 bg-white/10 hover:bg-white/20 border border-white/20 text-[#FAF8F3] text-xs uppercase tracking-widest font-bold rounded-xl transition-all inline-flex items-center justify-center gap-2"
-          >
+          <a href="/tests" class="btn btn-secondary">
             <span>ტესტების გახსნა</span>
           </a>
         </div>
 
         <!-- Helpful Links -->
-        <div class="pt-8 border-t border-[#FAF8F3]/10 max-w-md mx-auto">
-          <p class="text-xs text-[#FAF8F3]/50 uppercase tracking-widest font-semibold mb-3">
-            სწრაფი გადასვლები:
-          </p>
-          <div class="flex items-center justify-center gap-6 text-xs text-[#C79B3A]">
-            <a href="/?tab=blog" class="hover:underline">ისტორიული ბლოგი</a>
-            <span>•</span>
-            <a href="/?tab=tests" class="hover:underline">ეროვნულის ტესტები</a>
-            <span>•</span>
-            <a href="/?tab=contact" class="hover:underline">კონტაქტი</a>
+        <div class="quick-links">
+          <p>სწრაფი გადასვლები:</p>
+          <div class="quick-links-row">
+            <a href="/blog">ისტორიული ბლოგი</a>
+            <span class="dot">•</span>
+            <a href="/tests">ეროვნულის ტესტები</a>
+            <span class="dot">•</span>
+            <a href="/contact">კონტაქტი</a>
           </div>
         </div>
 
@@ -104,7 +161,7 @@
     </main>
 
     <!-- Footer Copyright -->
-    <footer class="py-6 border-t border-[#FAF8F3]/10 text-center text-xs text-[#FAF8F3]/40 font-mono uppercase">
+    <footer class="footer">
       © NT HISTORY ACADEMY • ყველა უფლება დაცულია
     </footer>
 

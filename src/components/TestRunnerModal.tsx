@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type FC } from 'react';
 import { HistoryTest, TestResult } from '../types';
 import { X, CheckCircle2, XCircle, Clock, AlertCircle, Award, RotateCcw, ChevronRight, HelpCircle, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -12,7 +12,7 @@ interface TestRunnerModalProps {
   userEmail?: string;
 }
 
-export const TestRunnerModal: React.FC<TestRunnerModalProps> = ({
+export const TestRunnerModal: FC<TestRunnerModalProps> = ({
   test,
   onClose,
   onSaveResult,
