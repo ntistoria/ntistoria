@@ -1,12 +1,13 @@
 import { useState, useEffect, type FC } from 'react';
-import { X, Award, CheckCircle2, XCircle, RotateCcw, ShieldCheck, BookOpen, MapPin, Layers, FileText, Clock, Image as ImageIcon, BookMarked, HelpCircle, ClipboardCheck } from 'lucide-react';
+import { X, Award, CheckCircle2, RotateCcw, ShieldCheck, BookOpen, MapPin, Layers, FileText, Clock, Image as ImageIcon, BookMarked, ClipboardCheck, MessageSquare, ExternalLink } from 'lucide-react';
 import { getStudentProgress, resetStudentProgress, StudentProfileProgress, ChapterProgressStats } from '../lib/progressService';
 import { TEST_CATEGORIES, fetchProgramsAndSubprograms, ProgramChapter } from '../lib/testService';
 import { isAdminUser } from '../lib/blogService';
 import { fetchUserProfile, syncUserProfile } from '../lib/userService';
-import { getLatestAttempt } from '../lib/diagnosticService';
+import { getAttemptsByUser } from '../lib/diagnosticService';
 import { DiagnosticAttempt } from '../types';
 import { supabase } from '../lib/supabase';
+import { DiagnosticStudentReviewModal } from './DiagnosticStudentReviewModal';
 
 interface StudentProfileModalProps {
   isOpen: boolean;
@@ -24,7 +25,8 @@ export const StudentProfileModal: FC<StudentProfileModalProps> = ({
   const [activeTab, setActiveTab] = useState<'chapters' | 'categories'>('chapters');
   const [isResetting, setIsResetting] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
-  const [diagnosticAttempt, setDiagnosticAttempt] = useState<DiagnosticAttempt | null>(null);
+  const [diagnosticAttempts, setDiagnosticAttempts] = useState<DiagnosticAttempt[]>([]);
+  const [reviewAttemptId, setReviewAttemptId] = useState<string | null>(null);
 
   const [profileName, setProfileName] = useState('');
   const [isEditingName, setIsEditingName] = useState(false);
@@ -49,11 +51,11 @@ export const StudentProfileModal: FC<StudentProfileModalProps> = ({
           setProfileName(user?.name || userEmail.split('@')[0]);
         }
 
-        // Load diagnostic attempt
+        // Load all diagnostic attempts for student
         const { data: { session } } = await supabase.auth.getSession();
         const userId = session?.user?.id || '';
-        const att = await getLatestAttempt(userId, userEmail);
-        setDiagnosticAttempt(att);
+        const atts = await getAttemptsByUser(userId, userEmail);
+        setDiagnosticAttempts(atts);
       };
       load();
     }
@@ -127,317 +129,353 @@ export const StudentProfileModal: FC<StudentProfileModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="relative bg-white border border-[#E6DDCB] shadow-2xl rounded-3xl w-full max-w-3xl overflow-hidden max-h-[90vh] flex flex-col">
-        
-        {/* Header */}
-        <div className="px-6 py-5 bg-[#0D1B2A] text-white border-b border-[#C79B3A]/30 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-[#C79B3A] text-[#0D1B2A] font-bold flex items-center justify-center text-lg shadow-sm">
-              {user.name.charAt(0).toUpperCase()}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                {isEditingName ? (
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="text"
-                      value={profileName}
-                      onChange={(e) => setProfileName(e.target.value)}
-                      className="bg-white/10 text-white border border-[#C79B3A] px-2 py-0.5 rounded text-sm focus:outline-none"
-                    />
-                    <button
-                      onClick={handleSaveName}
-                      disabled={isSavingName}
-                      className="px-2 py-0.5 bg-[#C79B3A] text-[#0D1B2A] text-xs font-bold rounded hover:bg-[#E6C86B]"
-                    >
-                      {isSavingName ? '...' : 'შენახვა'}
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <h2 className="font-serif font-bold text-lg text-[#FAF8F3]">
-                      {profileName || user.name}
-                    </h2>
-                    <button
-                      onClick={() => setIsEditingName(true)}
-                      className="text-[10px] text-[#C79B3A] underline hover:text-white cursor-pointer ml-1"
-                    >
-                      შეცვლა
-                    </button>
-                  </>
-                )}
-                {isAdmin && (
-                  <span className="px-2 py-0.5 bg-[#C79B3A] text-[#0D1B2A] text-[9px] font-bold uppercase rounded-md flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3" />
-                    <span>ადმინი</span>
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-[#FAF8F3]/70 font-mono">
-                {user.email}
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Navigation Sub-Tabs */}
-        <div className="px-6 pt-3 bg-[#FAF8F3] border-b border-[#E6DDCB] flex items-center gap-4">
-          <button
-            onClick={() => setActiveTab('chapters')}
-            className={`pb-2.5 text-xs font-bold transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
-              activeTab === 'chapters'
-                ? 'border-[#C79B3A] text-[#0D1B2A]'
-                : 'border-transparent text-[#666666] hover:text-[#0D1B2A]'
-            }`}
-          >
-            <BookMarked className="w-4 h-4 text-[#C79B3A]" />
-            <span>პროგრამის თავების პროგრესი ({programs.length} თავი)</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('categories')}
-            className={`pb-2.5 text-xs font-bold transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
-              activeTab === 'categories'
-                ? 'border-[#C79B3A] text-[#0D1B2A]'
-                : 'border-transparent text-[#666666] hover:text-[#0D1B2A]'
-            }`}
-          >
-            <Award className="w-4 h-4 text-[#C79B3A]" />
-            <span>დავალების ტიპების პროგრესი</span>
-          </button>
-        </div>
-
-        {/* Content Body */}
-        <div className="overflow-y-auto p-6 space-y-6 flex-1 bg-[#FAF8F3]/30">
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div className="relative bg-white border border-[#E6DDCB] shadow-2xl rounded-3xl w-full max-w-3xl overflow-hidden max-h-[90vh] flex flex-col">
           
-          {/* Success Banner */}
-          {resetSuccess && (
-            <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>მონაცემები წარმატებით განულდა/დარესეტდა! ტესტების გაკეთება შეგიძლიათ ხელახლა.</span>
-            </div>
-          )}
-
-          {/* Overall Stats Cards Grid */}
-          <div className="grid grid-cols-3 gap-3 sm:gap-4">
-            <div className="bg-white p-4 rounded-2xl border border-[#E6DDCB] shadow-sm text-center space-y-1">
-              <span className="text-[11px] text-[#666666] font-semibold uppercase tracking-wider block">სულ პასუხი</span>
-              <span className="font-serif font-bold text-2xl text-[#0D1B2A]">{totalAttempted}</span>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-[#E6DDCB] shadow-sm text-center space-y-1">
-              <span className="text-[11px] text-[#666666] font-semibold uppercase tracking-wider block">სწორი</span>
-              <span className="font-serif font-bold text-2xl text-emerald-600">{totalCorrect}</span>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-[#E6DDCB] shadow-sm text-center space-y-1">
-              <span className="text-[11px] text-[#666666] font-semibold uppercase tracking-wider block">სიზუსტე</span>
-              <span className="font-serif font-bold text-2xl text-[#C79B3A]">{overallAccuracy}%</span>
-            </div>
-          </div>
-
-          {/* TAB 1: 11 PROGRAM CHAPTERS PROGRESS */}
-          {activeTab === 'chapters' && (
-            <div className="bg-white rounded-2xl border border-[#E6DDCB] p-5 space-y-4 shadow-sm">
-              <div className="flex items-center justify-between border-b border-[#E6DDCB] pb-3">
-                <h3 className="font-serif font-bold text-base text-[#0D1B2A] flex items-center gap-2">
-                  <BookMarked className="w-4 h-4 text-[#C79B3A]" />
-                  <span>პროგრამის თავები (11 თავი)</span>
-                </h3>
-                <span className="text-xs font-mono text-[#666666]">სტატისტიკა თავების მიხედვით</span>
+          {/* Header */}
+          <div className="px-6 py-5 bg-[#0D1B2A] text-white border-b border-[#C79B3A]/30 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-11 h-11 rounded-2xl bg-[#C79B3A] text-[#0D1B2A] font-bold flex items-center justify-center text-lg shadow-sm">
+                {user.name.charAt(0).toUpperCase()}
               </div>
-
-              <div className="space-y-4">
-                {programs.map((prog) => {
-                  let chCorrect = 0;
-                  let chIncorrect = 0;
-
-                  if (progress) {
-                    Object.entries(progress.statsByChapter).forEach(([key, stat]: [string, ChapterProgressStats]) => {
-                      if (key.endsWith(`_${prog.id}`)) {
-                        chCorrect += stat.correctQuestionIds.length;
-                        chIncorrect += stat.incorrectQuestionIds.length;
-                      }
-                    });
-                  }
-
-                  const chAttempted = chCorrect + chIncorrect;
-                  const chPct = chAttempted > 0 ? Math.round((chCorrect / chAttempted) * 100) : 0;
-
-                  return (
-                    <div key={prog.id} className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-2.5">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                        <span className="text-xs font-serif font-bold text-[#0D1B2A]">{prog.title}</span>
-                        <div className="flex items-center gap-3 text-[11px] font-semibold">
-                          <span className="text-emerald-700 font-bold">სწორი: {chCorrect}</span>
-                          <span className="text-rose-700">არასწორი: {chIncorrect}</span>
-                          <span className="text-[#C79B3A] font-bold font-mono">{chPct}%</span>
-                        </div>
-                      </div>
-
-                      {/* Visual Segmented Progress Bar */}
-                      <div className="w-full h-2.5 bg-[#E6DDCB] rounded-full overflow-hidden flex">
-                        <div 
-                          style={{ width: `${chAttempted > 0 ? (chCorrect / chAttempted) * 100 : 0}%` }}
-                          className="bg-emerald-500 h-full transition-all duration-500"
-                        />
-                        <div 
-                          style={{ width: `${chAttempted > 0 ? (chIncorrect / chAttempted) * 100 : 0}%` }}
-                          className="bg-rose-500 h-full transition-all duration-500"
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: TASK TYPES PROGRESS (CATEGORIES) */}
-          {activeTab === 'categories' && (
-            <div className="bg-white rounded-2xl border border-[#E6DDCB] p-5 space-y-4 shadow-sm">
-              <div className="flex items-center justify-between border-b border-[#E6DDCB] pb-3">
-                <h3 className="font-serif font-bold text-base text-[#0D1B2A] flex items-center gap-2">
-                  <Award className="w-4 h-4 text-[#C79B3A]" />
-                  <span>დავალების ტიპები</span>
-                </h3>
-                <span className="text-xs font-mono text-[#666666]">სტატისტიკა ტიპის მიხედვით</span>
-              </div>
-
-              <div className="space-y-4">
-                {TEST_CATEGORIES.map((cat) => {
-                  let catCorrect = 0;
-                  let catIncorrect = 0;
-
-                  if (progress) {
-                    Object.entries(progress.statsByChapter).forEach(([key, stat]: [string, ChapterProgressStats]) => {
-                      if (key.startsWith(`${cat.key}_`)) {
-                        catCorrect += stat.correctQuestionIds.length;
-                        catIncorrect += stat.incorrectQuestionIds.length;
-                      }
-                    });
-                  }
-
-                  const catAttempted = catCorrect + catIncorrect;
-                  const catPct = catAttempted > 0 ? Math.round((catCorrect / catAttempted) * 100) : 0;
-
-                  return (
-                    <div key={cat.key} className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-2.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-lg bg-white border border-[#E6DDCB] flex items-center justify-center shrink-0">
-                            {getCategoryIcon(cat.key)}
-                          </div>
-                          <div>
-                            <span className="text-xs font-bold text-[#0D1B2A] block">{cat.title}</span>
-                            <span className="text-[10px] text-[#666666]">{cat.subtitle}</span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3 text-[11px] font-semibold">
-                          <span className="text-emerald-700 font-bold">სწორი: {catCorrect}</span>
-                          <span className="text-rose-700">არასწორი: {catIncorrect}</span>
-                          <span className="text-[#C79B3A] font-bold font-mono">{catPct}%</span>
-                        </div>
-                      </div>
-
-                      {/* Visual Segmented Progress Bar */}
-                      <div className="w-full h-2.5 bg-[#E6DDCB] rounded-full overflow-hidden flex">
-                        <div 
-                          style={{ width: `${catAttempted > 0 ? (catCorrect / catAttempted) * 100 : 0}%` }}
-                          className="bg-emerald-500 h-full transition-all duration-500"
-                        />
-                        <div 
-                          style={{ width: `${catAttempted > 0 ? (catIncorrect / catAttempted) * 100 : 0}%` }}
-                          className="bg-rose-500 h-full transition-all duration-500"
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Diagnostic Test Status Section */}
-          <div className="bg-white rounded-2xl border border-[#E6DDCB] p-5 shadow-sm space-y-3">
-            <div className="flex items-center gap-2 border-b border-[#E6DDCB] pb-3">
-              <ClipboardCheck className="w-4 h-4 text-[#C79B3A]" />
-              <h3 className="font-serif font-bold text-sm text-[#0D1B2A]">სადიაგნოსტიკო ტესტები</h3>
-            </div>
-            <div className="p-4 bg-[#FAF8F3] rounded-xl border border-[#E6DDCB] flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-bold text-[#0D1B2A]">სადიაგნოსტიკო ტესტი N1</p>
-                <p className="text-[10px] text-[#666666] mt-0.5">ისტორია · 40 ქულა · 25 წუთი</p>
-              </div>
-              {!diagnosticAttempt ? (
-                <span className="px-2.5 py-1 bg-[#FAF8F3] border border-[#E6DDCB] text-[#666666] text-[10px] font-bold rounded-full">
-                  არ ჩაბარებულა
-                </span>
-              ) : diagnosticAttempt.status === 'graded' ? (
-                <div className="text-right">
-                  <span className="text-emerald-700 font-mono font-bold text-base">
-                    {diagnosticAttempt.total_score}/{diagnosticAttempt.max_score}
-                  </span>
-                  <p className="text-[10px] text-emerald-600 font-semibold">შეფასდა ✓</p>
+                <div className="flex items-center gap-2">
+                  {isEditingName ? (
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={profileName}
+                        onChange={(e) => setProfileName(e.target.value)}
+                        className="bg-white/10 text-white border border-[#C79B3A] px-2 py-0.5 rounded text-sm focus:outline-none"
+                      />
+                      <button
+                        onClick={handleSaveName}
+                        disabled={isSavingName}
+                        className="px-2 py-0.5 bg-[#C79B3A] text-[#0D1B2A] text-xs font-bold rounded hover:bg-[#E6C86B]"
+                      >
+                        {isSavingName ? '...' : 'შენახვა'}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <h2 className="font-serif font-bold text-lg text-[#FAF8F3]">
+                        {profileName || user.name}
+                      </h2>
+                      <button
+                        onClick={() => setIsEditingName(true)}
+                        className="text-[10px] text-[#C79B3A] underline hover:text-white cursor-pointer ml-1"
+                      >
+                        შეცვლა
+                      </button>
+                    </>
+                  )}
+                  {isAdmin && (
+                    <span className="px-2 py-0.5 bg-[#C79B3A] text-[#0D1B2A] text-[9px] font-bold uppercase rounded-md flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3" />
+                      <span>ადმინი</span>
+                    </span>
+                  )}
                 </div>
-              ) : diagnosticAttempt.status === 'submitted' ? (
-                <span className="px-2.5 py-1 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-full">
-                  ⏳ შეფასება ელოდება
-                </span>
-              ) : (
-                <span className="px-2.5 py-1 bg-blue-100 text-blue-800 text-[10px] font-bold rounded-full">
-                  მიმდინარე
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Reset / Clear Data Action Box */}
-          <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-5 space-y-3">
-            <div className="flex items-start gap-3">
-              <RotateCcw className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <h4 className="font-serif font-bold text-sm text-rose-900">
-                  მონაცემების განულება / დარესეტება
-                </h4>
-                <p className="text-xs text-rose-800 leading-relaxed">
-                  ნებისმიერ დროს შეგიძლიათ წაშალოთ თქვენი ნაპასუხები ტესტების ისტორია და ტესტები გააკეთოთ სუფთა ფურცლიდან.
+                <p className="text-xs text-[#FAF8F3]/70 font-mono">
+                  {user.email}
                 </p>
               </div>
             </div>
 
             <button
-              onClick={handleResetAll}
-              disabled={isResetting}
-              className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs uppercase tracking-wider font-bold rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+              onClick={onClose}
+              className="p-2 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-colors cursor-pointer"
             >
-              <RotateCcw className="w-4 h-4" />
-              <span>{isResetting ? 'განულება...' : 'ყველა მონაცემის განულება (Reset Progress)'}</span>
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Navigation Sub-Tabs */}
+          <div className="px-6 pt-3 bg-[#FAF8F3] border-b border-[#E6DDCB] flex items-center gap-4">
+            <button
+              onClick={() => setActiveTab('chapters')}
+              className={`pb-2.5 text-xs font-bold transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
+                activeTab === 'chapters'
+                  ? 'border-[#C79B3A] text-[#0D1B2A]'
+                  : 'border-transparent text-[#666666] hover:text-[#0D1B2A]'
+              }`}
+            >
+              <BookMarked className="w-4 h-4 text-[#C79B3A]" />
+              <span>პროგრამის თავების პროგრესი ({programs.length} თავი)</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('categories')}
+              className={`pb-2.5 text-xs font-bold transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
+                activeTab === 'categories'
+                  ? 'border-[#C79B3A] text-[#0D1B2A]'
+                  : 'border-transparent text-[#666666] hover:text-[#0D1B2A]'
+              }`}
+            >
+              <Award className="w-4 h-4 text-[#C79B3A]" />
+              <span>დავალების ტიპების პროგრესი</span>
+            </button>
+          </div>
+
+          {/* Content Body */}
+          <div className="overflow-y-auto p-6 space-y-6 flex-1 bg-[#FAF8F3]/30">
+            
+            {/* Success Banner */}
+            {resetSuccess && (
+              <div className="p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>მონაცემები წარმატებით განულდა/დარესეტდა! ტესტების გაკეთება შეგიძლიათ ხელახლა.</span>
+              </div>
+            )}
+
+            {/* Overall Stats Cards Grid */}
+            <div className="grid grid-cols-3 gap-3 sm:gap-4">
+              <div className="bg-white p-4 rounded-2xl border border-[#E6DDCB] shadow-sm text-center space-y-1">
+                <span className="text-[11px] text-[#666666] font-semibold uppercase tracking-wider block">სულ პასუხი</span>
+                <span className="font-serif font-bold text-2xl text-[#0D1B2A]">{totalAttempted}</span>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-[#E6DDCB] shadow-sm text-center space-y-1">
+                <span className="text-[11px] text-[#666666] font-semibold uppercase tracking-wider block">სწორი</span>
+                <span className="font-serif font-bold text-2xl text-emerald-600">{totalCorrect}</span>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-[#E6DDCB] shadow-sm text-center space-y-1">
+                <span className="text-[11px] text-[#666666] font-semibold uppercase tracking-wider block">სიზუსტე</span>
+                <span className="font-serif font-bold text-2xl text-[#C79B3A]">{overallAccuracy}%</span>
+              </div>
+            </div>
+
+            {/* TAB 1: 11 PROGRAM CHAPTERS PROGRESS */}
+            {activeTab === 'chapters' && (
+              <div className="bg-white rounded-2xl border border-[#E6DDCB] p-5 space-y-4 shadow-sm">
+                <div className="flex items-center justify-between border-b border-[#E6DDCB] pb-3">
+                  <h3 className="font-serif font-bold text-base text-[#0D1B2A] flex items-center gap-2">
+                    <BookMarked className="w-4 h-4 text-[#C79B3A]" />
+                    <span>პროგრამის თავები (11 თავი)</span>
+                  </h3>
+                  <span className="text-xs font-mono text-[#666666]">სტატისტიკა თავების მიხედვით</span>
+                </div>
+
+                <div className="space-y-4">
+                  {programs.map((prog) => {
+                    let chCorrect = 0;
+                    let chIncorrect = 0;
+
+                    if (progress) {
+                      Object.entries(progress.statsByChapter).forEach(([key, stat]: [string, ChapterProgressStats]) => {
+                        if (key.endsWith(`_${prog.id}`)) {
+                          chCorrect += stat.correctQuestionIds.length;
+                          chIncorrect += stat.incorrectQuestionIds.length;
+                        }
+                      });
+                    }
+
+                    const chAttempted = chCorrect + chIncorrect;
+                    const chPct = chAttempted > 0 ? Math.round((chCorrect / chAttempted) * 100) : 0;
+
+                    return (
+                      <div key={prog.id} className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-2.5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                          <span className="text-xs font-serif font-bold text-[#0D1B2A]">{prog.title}</span>
+                          <div className="flex items-center gap-3 text-[11px] font-semibold">
+                            <span className="text-emerald-700 font-bold">სწორი: {chCorrect}</span>
+                            <span className="text-rose-700">არასწორი: {chIncorrect}</span>
+                            <span className="text-[#C79B3A] font-bold font-mono">{chPct}%</span>
+                          </div>
+                        </div>
+
+                        {/* Visual Segmented Progress Bar */}
+                        <div className="w-full h-2.5 bg-[#E6DDCB] rounded-full overflow-hidden flex">
+                          <div 
+                            style={{ width: `${chAttempted > 0 ? (chCorrect / chAttempted) * 100 : 0}%` }}
+                            className="bg-emerald-500 h-full transition-all duration-500"
+                          />
+                          <div 
+                            style={{ width: `${chAttempted > 0 ? (chIncorrect / chAttempted) * 100 : 0}%` }}
+                            className="bg-rose-500 h-full transition-all duration-500"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: TASK TYPES PROGRESS (CATEGORIES) */}
+            {activeTab === 'categories' && (
+              <div className="bg-white rounded-2xl border border-[#E6DDCB] p-5 space-y-4 shadow-sm">
+                <div className="flex items-center justify-between border-b border-[#E6DDCB] pb-3">
+                  <h3 className="font-serif font-bold text-base text-[#0D1B2A] flex items-center gap-2">
+                    <Award className="w-4 h-4 text-[#C79B3A]" />
+                    <span>დავალების ტიპები</span>
+                  </h3>
+                  <span className="text-xs font-mono text-[#666666]">სტატისტიკა ტიპის მიხედვით</span>
+                </div>
+
+                <div className="space-y-4">
+                  {TEST_CATEGORIES.map((cat) => {
+                    let catCorrect = 0;
+                    let catIncorrect = 0;
+
+                    if (progress) {
+                      Object.entries(progress.statsByChapter).forEach(([key, stat]: [string, ChapterProgressStats]) => {
+                        if (key.startsWith(`${cat.key}_`)) {
+                          catCorrect += stat.correctQuestionIds.length;
+                          catIncorrect += stat.incorrectQuestionIds.length;
+                        }
+                      });
+                    }
+
+                    const catAttempted = catCorrect + catIncorrect;
+                    const catPct = catAttempted > 0 ? Math.round((catCorrect / catAttempted) * 100) : 0;
+
+                    return (
+                      <div key={cat.key} className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-white border border-[#E6DDCB] flex items-center justify-center shrink-0">
+                              {getCategoryIcon(cat.key)}
+                            </div>
+                            <div>
+                              <span className="text-xs font-bold text-[#0D1B2A] block">{cat.title}</span>
+                              <span className="text-[10px] text-[#666666]">{cat.subtitle}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 text-[11px] font-semibold">
+                            <span className="text-emerald-700 font-bold">სწორი: {catCorrect}</span>
+                            <span className="text-rose-700">არასწორი: {catIncorrect}</span>
+                            <span className="text-[#C79B3A] font-bold font-mono">{catPct}%</span>
+                          </div>
+                        </div>
+
+                        {/* Visual Segmented Progress Bar */}
+                        <div className="w-full h-2.5 bg-[#E6DDCB] rounded-full overflow-hidden flex">
+                          <div 
+                            style={{ width: `${catAttempted > 0 ? (catCorrect / catAttempted) * 100 : 0}%` }}
+                            className="bg-emerald-500 h-full transition-all duration-500"
+                          />
+                          <div 
+                            style={{ width: `${catAttempted > 0 ? (catIncorrect / catAttempted) * 100 : 0}%` }}
+                            className="bg-rose-500 h-full transition-all duration-500"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Diagnostic Test Status Section (Lists all attempts for retakes) */}
+            <div className="bg-white rounded-2xl border border-[#E6DDCB] p-5 shadow-sm space-y-3">
+              <div className="flex items-center justify-between border-b border-[#E6DDCB] pb-3">
+                <div className="flex items-center gap-2">
+                  <ClipboardCheck className="w-4 h-4 text-[#C79B3A]" />
+                  <h3 className="font-serif font-bold text-sm text-[#0D1B2A]">სადიაგნოსტიკო ტესტების შედეგები</h3>
+                </div>
+                <span className="text-[11px] text-[#666666] font-mono font-bold">
+                  {diagnosticAttempts.length} მცდელობა
+                </span>
+              </div>
+
+              {diagnosticAttempts.length === 0 ? (
+                <div className="p-4 bg-[#FAF8F3] rounded-xl border border-[#E6DDCB] text-center text-xs text-[#666666]">
+                  სადიაგნოსტიკო ტესტი ჯერ არ ჩაგიბარებიათ
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {diagnosticAttempts.map((att, idx) => (
+                    <div
+                      key={att.id}
+                      className="p-4 bg-[#FAF8F3] rounded-xl border border-[#E6DDCB] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-[#0D1B2A]">
+                            სადიაგნოსტიკო ტესტი N1 (მცდელობა #{diagnosticAttempts.length - idx})
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-[#666666] mt-0.5 font-mono">
+                          გაგზავნილია: {att.submitted_at ? new Date(att.submitted_at).toLocaleString('ka-GE') : att.created_at ? new Date(att.created_at).toLocaleString('ka-GE') : '—'}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3 self-end sm:self-auto">
+                        {att.status === 'graded' ? (
+                          <div className="flex items-center gap-3">
+                            <span className="text-emerald-700 font-mono font-bold text-base">
+                              {att.total_score}/{att.max_score}
+                            </span>
+                            <button
+                              onClick={() => setReviewAttemptId(att.id)}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                              <span>უკუკავშირი</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="px-2.5 py-1 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-full">
+                            ⏳ შეფასება ელოდება
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Reset / Clear Data Action Box */}
+            <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-5 space-y-3">
+              <div className="flex items-start gap-3">
+                <RotateCcw className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h4 className="font-serif font-bold text-sm text-rose-900">
+                    მონაცემების განულება / დარესეტება
+                  </h4>
+                  <p className="text-xs text-rose-800 leading-relaxed">
+                    ნებისმიერ დროს შეგიძლიათ წაშალოთ თქვენი ნაპასუხები ტესტების ისტორია და ტესტები გააკეთოთ სუფთა ფურცლიდან.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={handleResetAll}
+                disabled={isResetting}
+                className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs uppercase tracking-wider font-bold rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>{isResetting ? 'განულება...' : 'ყველა მონაცემის განულება (Reset Progress)'}</span>
+              </button>
+            </div>
+
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 bg-[#FAF8F3] border-t border-[#E6DDCB] flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-5 py-2 bg-[#0D1B2A] text-white text-xs uppercase tracking-wider font-bold rounded-xl hover:bg-[#C79B3A] transition-colors cursor-pointer"
+            >
+              დახურვა
             </button>
           </div>
 
         </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 bg-[#FAF8F3] border-t border-[#E6DDCB] flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-5 py-2 bg-[#0D1B2A] text-white text-xs uppercase tracking-wider font-bold rounded-xl hover:bg-[#C79B3A] transition-colors cursor-pointer"
-          >
-            დახურვა
-          </button>
-        </div>
-
       </div>
-    </div>
+
+      {/* Student Feedback Detail Modal */}
+      {reviewAttemptId && (
+        <DiagnosticStudentReviewModal
+          attemptId={reviewAttemptId}
+          onClose={() => setReviewAttemptId(null)}
+        />
+      )}
+    </>
   );
 };

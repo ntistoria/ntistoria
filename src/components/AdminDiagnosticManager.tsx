@@ -1,13 +1,13 @@
 import { useState, useEffect, type FC } from 'react';
 import {
   ClipboardCheck, ChevronLeft, CheckCircle2, Clock, Loader2,
-  AlertTriangle, Save, User, Calendar, Star
+  AlertTriangle, Save, User, Calendar, Star, Trash2
 } from 'lucide-react';
 import {
   DiagnosticAttemptWithAnswers, DiagnosticQuestion, DiagnosticAnswer
 } from '../types';
 import {
-  getAllAttemptsAdmin, getAttemptWithAnswers, getDiagnosticQuestions, finalizeGrading
+  getAllAttemptsAdmin, getAttemptWithAnswers, getDiagnosticQuestions, finalizeGrading, deleteAttemptAdmin
 } from '../lib/diagnosticService';
 
 // ── Status badge ────────────────────────────────────────────────
@@ -35,9 +35,10 @@ interface GradingViewProps {
   questions: DiagnosticQuestion[];
   onBack: () => void;
   onSaved: () => void;
+  onDelete: (id: string) => void;
 }
 
-const GradingView: FC<GradingViewProps> = ({ attempt, questions, onBack, onSaved }) => {
+const GradingView: FC<GradingViewProps> = ({ attempt, questions, onBack, onSaved, onDelete }) => {
   type GradeRow = { answerId: string; points: number; comment: string; maxPoints: number };
   const [grades, setGrades] = useState<Record<string, GradeRow>>({});
   const [saving, setSaving] = useState(false);
@@ -88,23 +89,32 @@ const GradingView: FC<GradingViewProps> = ({ attempt, questions, onBack, onSaved
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <button
           onClick={onBack}
           className="p-2 hover:bg-[#FAF8F3] rounded-xl border border-[#E6DDCB] text-[#0D1B2A] cursor-pointer"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
-        <div>
-          <h3 className="font-serif font-bold text-xl text-[#0D1B2A]">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-serif font-bold text-xl text-[#0D1B2A] truncate">
             {attempt.student_name || attempt.user_email}
           </h3>
           <p className="text-xs text-[#666666]">
-            სადიაგნოსტიკო ტესტი N1 · გაგზავნილია: {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleDateString('ka-GE') : '—'}
+            სადიაგნოსტიკო ტესტი N1 · გაგზავნილია: {attempt.submitted_at ? new Date(attempt.submitted_at).toLocaleString('ka-GE') : '—'}
           </p>
         </div>
-        <div className="ml-auto">
+
+        <div className="flex items-center gap-2">
           <StatusBadge status={attempt.status} />
+          <button
+            onClick={() => onDelete(attempt.id)}
+            className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5"
+            title="მცდელობის წაშლა ბაზიდან"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span className="hidden sm:inline">წაშლა</span>
+          </button>
         </div>
       </div>
 
@@ -198,7 +208,7 @@ const GradingView: FC<GradingViewProps> = ({ attempt, questions, onBack, onSaved
                     <div className="flex-1">
                       <input
                         type="text"
-                        placeholder="კომენტარი (სურ.)..."
+                        placeholder="უკუკავშირი / კომენტარი მოსწავლეს..."
                         value={g?.comment || ''}
                         onChange={(e) =>
                           setGrades((prev) => ({ ...prev, [q.id]: { ...prev[q.id], comment: e.target.value } }))
@@ -224,7 +234,7 @@ const GradingView: FC<GradingViewProps> = ({ attempt, questions, onBack, onSaved
           {saving ? (
             <><Loader2 className="w-5 h-5 animate-spin" /><span>ინახება...</span></>
           ) : (
-            <><Save className="w-5 h-5" /><span>შეფასების დასრულება ({totalAwarded}/{totalMax} ქულა)</span></>
+            <><Save className="w-5 h-5" /><span>შეფასების დასრულება და უკუკავშირის გაგზავნა ({totalAwarded}/{totalMax} ქულა)</span></>
           )}
         </button>
       </div>
@@ -264,6 +274,21 @@ export const AdminDiagnosticManager: FC = () => {
     loadData();
   };
 
+  const handleDeleteAttempt = async (attemptId: string) => {
+    if (!confirm('ნამდვილად გსურთ ამ მცდელობის წაშლა ბაზიდან? წაიშლება მოსწავლის მიერ გაგზავნილი ყველა პასუხი.')) {
+      return;
+    }
+    const ok = await deleteAttemptAdmin(attemptId);
+    if (ok) {
+      if (selectedAttempt?.id === attemptId) {
+        setSelectedAttempt(null);
+      }
+      loadData();
+    } else {
+      alert('მცდელობის წაშლა ვერ მოხერხდა.');
+    }
+  };
+
   const filtered = filter === 'all' ? attempts : attempts.filter((a) => a.status === filter);
 
   if (selectedAttempt && questions.length > 0) {
@@ -273,6 +298,7 @@ export const AdminDiagnosticManager: FC = () => {
         questions={questions}
         onBack={() => setSelectedAttempt(null)}
         onSaved={handleGradingSaved}
+        onDelete={handleDeleteAttempt}
       />
     );
   }
@@ -287,7 +313,7 @@ export const AdminDiagnosticManager: FC = () => {
           </div>
           <div>
             <h3 className="font-serif font-bold text-lg text-[#0D1B2A]">სადიაგნოსტიკო ტესტი N1</h3>
-            <p className="text-xs text-[#666666]">სულ {attempts.length} გაგზავნილი ტესტი</p>
+            <p className="text-xs text-[#666666]">სულ {attempts.length} გაგზავნილი მცდელობა</p>
           </div>
         </div>
         <button
@@ -322,7 +348,7 @@ export const AdminDiagnosticManager: FC = () => {
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 text-sm text-[#666666]">
-          Attempt-ები არ არის
+          მცდელობები არ არის
         </div>
       ) : (
         <div className="space-y-2">
@@ -330,7 +356,7 @@ export const AdminDiagnosticManager: FC = () => {
             <div
               key={att.id}
               onClick={() => handleSelectAttempt(att)}
-              className="p-4 bg-white rounded-xl border border-[#E6DDCB] hover:border-[#C79B3A] hover:shadow-sm transition-all cursor-pointer flex items-center gap-4"
+              className="p-4 bg-white rounded-xl border border-[#E6DDCB] hover:border-[#C79B3A] hover:shadow-sm transition-all cursor-pointer flex items-center gap-4 group"
             >
               <div className="w-10 h-10 rounded-xl bg-[#FAF8F3] border border-[#E6DDCB] flex items-center justify-center shrink-0">
                 <User className="w-5 h-5 text-[#C79B3A]" />
@@ -340,9 +366,9 @@ export const AdminDiagnosticManager: FC = () => {
                   {att.student_name || att.user_email}
                 </p>
                 <div className="flex items-center gap-3 text-[11px] text-[#666666] mt-0.5">
-                  <span className="flex items-center gap-1">
+                  <span className="flex items-center gap-1 font-mono">
                     <Calendar className="w-3 h-3" />
-                    {att.created_at ? new Date(att.created_at).toLocaleDateString('ka-GE') : '—'}
+                    {att.submitted_at ? new Date(att.submitted_at).toLocaleString('ka-GE') : att.created_at ? new Date(att.created_at).toLocaleString('ka-GE') : '—'}
                   </span>
                   {att.status === 'graded' && att.total_score !== null && (
                     <span className="flex items-center gap-1 text-emerald-700 font-bold">
@@ -352,7 +378,20 @@ export const AdminDiagnosticManager: FC = () => {
                   )}
                 </div>
               </div>
-              <StatusBadge status={att.status} />
+
+              <div className="flex items-center gap-3">
+                <StatusBadge status={att.status} />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteAttempt(att.id);
+                  }}
+                  className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                  title="მცდელობის წაშლა ბაზიდან"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -360,4 +399,3 @@ export const AdminDiagnosticManager: FC = () => {
     </div>
   );
 };
-

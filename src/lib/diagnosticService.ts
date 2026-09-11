@@ -33,6 +33,36 @@ export const deleteAttempt = async (attemptId: string): Promise<boolean> => {
   return true;
 };
 
+export const deleteAttemptAdmin = async (attemptId: string): Promise<boolean> => {
+  const { error } = await supabase
+    .from('diagnostic_attempts')
+    .delete()
+    .eq('id', attemptId);
+  if (error) { console.error('deleteAttemptAdmin:', error); return false; }
+  return true;
+};
+
+export const getAttemptsByUser = async (userId: string, userEmail?: string): Promise<DiagnosticAttempt[]> => {
+  let attempts: DiagnosticAttempt[] = [];
+  if (userId) {
+    const { data } = await supabase
+      .from('diagnostic_attempts').select('*')
+      .eq('test_id', TEST_ID).eq('user_id', userId)
+      .in('status', ['submitted', 'graded'])
+      .order('created_at', { ascending: false });
+    if (data && data.length > 0) attempts = data as DiagnosticAttempt[];
+  }
+  if (attempts.length === 0 && userEmail) {
+    const { data } = await supabase
+      .from('diagnostic_attempts').select('*')
+      .eq('test_id', TEST_ID).eq('user_email', userEmail.toLowerCase().trim())
+      .in('status', ['submitted', 'graded'])
+      .order('created_at', { ascending: false });
+    if (data && data.length > 0) attempts = data as DiagnosticAttempt[];
+  }
+  return attempts;
+};
+
 export const getOrCreateAttempt = async (userId: string, userEmail: string): Promise<DiagnosticAttempt | null> => {
   const { data: existing } = await supabase
     .from('diagnostic_attempts').select('*')

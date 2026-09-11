@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, type FC } from 'react';
 import { HistoryTest, QuizQuestion, DiagnosticAttempt } from '../types';
 import { DiagnosticTestView } from './DiagnosticTestView';
+import { DiagnosticStudentReviewModal } from '../components/DiagnosticStudentReviewModal';
 import { getLatestAttempt } from '../lib/diagnosticService';
 
 import { 
@@ -146,6 +147,7 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
   const [showDiagnosticView, setShowDiagnosticView] = useState(false);
   const [diagnosticAttempt, setDiagnosticAttempt] = useState<DiagnosticAttempt | null>(null);
   const [diagnosticLoading, setDiagnosticLoading] = useState(false);
+  const [reviewAttemptId, setReviewAttemptId] = useState<string | null>(null);
 
   const handleOpenDiagnostic = () => {
     setShowDiagnosticView(true);
@@ -1172,14 +1174,23 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
                             <span className="text-emerald-300 font-mono font-bold text-xl">
                               {diagnosticAttempt.total_score} / {diagnosticAttempt.max_score}
                             </span>
-                            <p className="text-emerald-300/80 text-[10px] font-semibold mt-0.5">შეფასდა</p>
+                            <p className="text-emerald-300/80 text-[10px] font-semibold mt-0.5">შეფასდა ✓</p>
                           </div>
-                          <button
-                            onClick={handleOpenDiagnostic}
-                            className="text-xs text-[#C79B3A] hover:text-white font-bold underline cursor-pointer transition-colors"
-                          >
-                            ხელახლა გაკეთება →
-                          </button>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => setReviewAttemptId(diagnosticAttempt.id)}
+                              className="text-xs text-white bg-[#C79B3A]/20 hover:bg-[#C79B3A]/40 border border-[#C79B3A]/50 px-3 py-1 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1"
+                            >
+                              <MessageSquare className="w-3 h-3 text-[#C79B3A]" />
+                              <span>უკუკავშირი</span>
+                            </button>
+                            <button
+                              onClick={handleOpenDiagnostic}
+                              className="text-xs text-[#C79B3A] hover:text-white font-bold underline cursor-pointer transition-colors"
+                            >
+                              ხელახლა გაკეთება →
+                            </button>
+                          </div>
                         </div>
                       ) : diagnosticAttempt?.status === 'submitted' ? (
                         <div className="flex flex-col items-center gap-2">
@@ -1866,6 +1877,13 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
         </>
       )}
 
+      {/* Diagnostic Feedback Review Modal */}
+      {reviewAttemptId && (
+        <DiagnosticStudentReviewModal
+          attemptId={reviewAttemptId}
+          onClose={() => setReviewAttemptId(null)}
+        />
+      )}
     </div>
   );
 };
