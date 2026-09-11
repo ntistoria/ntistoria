@@ -250,7 +250,7 @@ export const AdminDiagnosticManager: FC = () => {
   const [questions, setQuestions] = useState<DiagnosticQuestion[]>([]);
   const [selectedAttempt, setSelectedAttempt] = useState<DiagnosticAttemptWithAnswers | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'submitted' | 'graded'>('submitted');
+  const [filter, setFilter] = useState<'all' | 'submitted' | 'graded'>('all');
 
   const loadData = async () => {
     setLoading(true);
@@ -318,15 +318,16 @@ export const AdminDiagnosticManager: FC = () => {
         </div>
         <button
           onClick={loadData}
-          className="px-3 py-1.5 border border-[#E6DDCB] text-xs font-bold rounded-xl hover:bg-[#FAF8F3] cursor-pointer"
+          className="px-3 py-1.5 border border-[#E6DDCB] text-xs font-bold rounded-xl hover:bg-[#FAF8F3] cursor-pointer flex items-center gap-1.5"
         >
-          განახლება
+          <Clock className="w-3.5 h-3.5 text-[#C79B3A]" />
+          <span>განახლება</span>
         </button>
       </div>
 
       {/* Filter tabs */}
       <div className="flex items-center gap-2 flex-wrap">
-        {([['submitted', 'შეფასება ელოდება'], ['graded', 'შეფასდა'], ['all', 'ყველა']] as const).map(([key, label]) => (
+        {([['all', 'ყველა'], ['submitted', 'შეფასება ელოდება'], ['graded', 'შეფასდა']] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setFilter(key)}
@@ -347,8 +348,12 @@ export const AdminDiagnosticManager: FC = () => {
           <Loader2 className="w-6 h-6 animate-spin text-[#C79B3A]" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16 text-sm text-[#666666]">
-          მცდელობები არ არის
+        <div className="text-center py-16 text-sm text-[#666666] space-y-2 bg-white rounded-2xl border border-[#E6DDCB] p-8">
+          <ClipboardCheck className="w-8 h-8 text-[#C79B3A] mx-auto opacity-50" />
+          <p className="font-semibold text-[#0D1B2A]">მცდელობები ვერ მოიძებნა</p>
+          <p className="text-xs text-[#8A8A8A] max-w-md mx-auto">
+            თუ მოსწავლემ ახლახანს გააგზავნა ტესტი, დააჭირეთ „განახლება“-ს. დარწმუნდით, რომ Supabase-ში SQL სქრიპტი `diagnostic_test_setup.sql` შესრულებულია.
+          </p>
         </div>
       ) : (
         <div className="space-y-2">

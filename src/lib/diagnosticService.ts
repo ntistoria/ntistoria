@@ -125,30 +125,81 @@ export const getAnswersForAttempt = async (attemptId: string): Promise<Diagnosti
 export const submitAttempt = async (attemptId: string): Promise<boolean> => {
   const { error } = await supabase.from('diagnostic_attempts')
     .update({ status: 'submitted', submitted_at: new Date().toISOString() })
-    .eq('id', attemptId).eq('status', 'in_progress');
-  if (error) { console.error('submitAttempt:', error); return false; }
+    .eq('id', attemptId);
+  if (error) { console.error('submitAttempt error:', error); return false; }
   return true;
 };
 
 export const getAllAttemptsAdmin = async (): Promise<DiagnosticAttemptWithAnswers[]> => {
   const { data: attempts, error } = await supabase
-    .from('diagnostic_attempts').select('*').eq('test_id', TEST_ID)
+    .from('diagnostic_attempts')
+    .select('*')
     .in('status', ['submitted', 'graded'])
     .order('created_at', { ascending: false });
-  if (error) { console.error('getAllAttemptsAdmin:', error); return []; }
-  const emails = [...new Set((attempts || []).map((a: any) => a.user_email))];
-  const { data: profiles } = await supabase.from('profiles').select('email, full_name').in('email', emails);
+
+  if (error) {
+    console.error('getAllAttemptsAdmin error:', error);
+    return [];
+  }
+
+  const emails = [...new Set((attempts || []).map((a: any) => a.user_email).filter(Boolean))];
   const profileMap: Record<string, string> = {};
-  (profiles || []).forEach((p: any) => { profileMap[p.email] = p.full_name || p.email; });
-  return (attempts || []).map((a: any) => ({ ...a, answers: [], student_name: profileMap[a.user_email] || a.user_email })) as DiagnosticAttemptWithAnswers[];
+
+  if (emails.length > 0) {
+    try {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .in('email', emails);
+
+      (profiles || []).forEach((p: any) => {
+        if (p.email) {
+          profileMap[p.email.toLowerCase().trim()] = p.full_name || p.email;
+        }
+      });
+    } catch (err) {
+      console.warn('getAllAttemptsAdmin: profile lookup error', err);
+    }
+  }
+
+  return (attempts || []).map((a: any) => ({
+    ...a,
+    answers: [],
+    student_name: profileMap[(a.user_email || '').toLowerCase().trim()] || a.user_email || 'მოსწავლე',
+  })) as DiagnosticAttemptWithAnswers[];
 };
 
 export const getAttemptWithAnswers = async (attemptId: string): Promise<DiagnosticAttemptWithAnswers | null> => {
-  const { data: attempt, error: aErr } = await supabase.from('diagnostic_attempts').select('*').eq('id', attemptId).maybeSingle();
+  const { data: attempt, error: aErr } = await supabase
+    .from('diagnostic_attempts')
+    .select('*')
+    .eq('id', attemptId)
+    .maybeSingle();
+
   if (aErr || !attempt) return null;
-  const { data: answers } = await supabase.from('diagnostic_answers').select('*').eq('attempt_id', attemptId);
-  const { data: profile } = await supabase.from('profiles').select('full_name').eq('email', attempt.user_email).maybeSingle();
-  return { ...attempt, answers: (answers || []) as DiagnosticAnswer[], student_name: (profile as any)?.full_name || attempt.user_email } as DiagnosticAttemptWithAnswers;
+
+  const { data: answers } = await supabase
+    .from('diagnostic_answers')
+    .select('*')
+    .eq('attempt_id', attemptId);
+
+  let studentName = attempt.user_email;
+  if (attempt.user_email) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('full_name')
+      .eq('email', attempt.user_email.toLowerCase().trim())
+      .maybeSingle();
+    if (profile?.full_name) {
+      studentName = profile.full_name;
+    }
+  }
+
+  return {
+    ...attempt,
+    answers: (answers || []) as DiagnosticAnswer[],
+    student_name: studentName,
+  } as DiagnosticAttemptWithAnswers;
 };
 
 export const awardPointsToAnswer = async (payload: DiagnosticGradePayload): Promise<boolean> => {

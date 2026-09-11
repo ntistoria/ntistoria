@@ -78,16 +78,18 @@ CREATE POLICY "Admin full access diagnostic_questions"
   ON public.diagnostic_questions
   FOR ALL
   USING (
+    lower(auth.email()) = 'ntistoria@gmail.com' OR
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE profiles.user_id = auth.uid()
+      WHERE (profiles.id = auth.uid() OR lower(profiles.email) = lower(auth.email()))
         AND profiles.role = 'admin'
     )
   )
   WITH CHECK (
+    lower(auth.email()) = 'ntistoria@gmail.com' OR
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE profiles.user_id = auth.uid()
+      WHERE (profiles.id = auth.uid() OR lower(profiles.email) = lower(auth.email()))
         AND profiles.role = 'admin'
     )
   );
@@ -118,9 +120,10 @@ CREATE POLICY "Admin all attempts"
   ON public.diagnostic_attempts
   FOR ALL
   USING (
+    lower(auth.email()) = 'ntistoria@gmail.com' OR
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE profiles.user_id = auth.uid()
+      WHERE (profiles.id = auth.uid() OR lower(profiles.email) = lower(auth.email()))
         AND profiles.role = 'admin'
     )
   );
@@ -167,9 +170,10 @@ CREATE POLICY "Admin all answers"
   ON public.diagnostic_answers
   FOR ALL
   USING (
+    lower(auth.email()) = 'ntistoria@gmail.com' OR
     EXISTS (
       SELECT 1 FROM public.profiles
-      WHERE profiles.user_id = auth.uid()
+      WHERE (profiles.id = auth.uid() OR lower(profiles.email) = lower(auth.email()))
         AND profiles.role = 'admin'
     )
   );
