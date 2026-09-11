@@ -198,3 +198,57 @@ export interface QuizResultFeedback {
   badge: string;
 }
 
+// ================================================================
+// სადიაგნოსტიკო ტესტის სისტემა
+// ================================================================
+
+export interface DiagnosticQuestion {
+  id: string;
+  test_id: string;
+  section: 'I' | 'II' | 'III' | 'IV';
+  section_title: string;
+  question_order: number;
+  question_text: string;
+  question_type: 'multiple_choice' | 'open_text';
+  max_points: number;
+  options?: string[] | null;    // MC-სთვის: ["A. ...", "B. ...", ...]
+  map_url?: string | null;      // photos bucket-ის public URL
+  source_text?: string | null;  // IV ნაწილის წყაროს ტექსტი
+  created_at?: string;
+}
+
+export interface DiagnosticAttempt {
+  id: string;
+  test_id: string;
+  user_id: string;
+  user_email: string;
+  started_at: string;           // ISO string — timer-ის დასათვლელად
+  submitted_at?: string | null;
+  status: 'in_progress' | 'submitted' | 'graded';
+  total_score?: number | null;
+  max_score: number;
+  graded_at?: string | null;
+  created_at?: string;
+}
+
+export interface DiagnosticAnswer {
+  id: string;
+  attempt_id: string;
+  question_id: string;
+  answer_text?: string | null;
+  points_awarded?: number | null;  // admin-ის ქულა
+  teacher_comment?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DiagnosticAttemptWithAnswers extends DiagnosticAttempt {
+  answers: DiagnosticAnswer[];
+  student_name?: string;  // profiles-დან
+}
+
+export interface DiagnosticGradePayload {
+  answerId: string;
+  points_awarded: number;
+  teacher_comment?: string;
+}

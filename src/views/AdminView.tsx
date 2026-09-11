@@ -1,9 +1,10 @@
 import { useState, useEffect, type FC } from 'react';
-import { Plus, Edit2, Trash2, Search, Filter, FileText, ShieldCheck, RefreshCw, AlertTriangle, Eye, HelpCircle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Filter, FileText, ShieldCheck, RefreshCw, AlertTriangle, Eye, HelpCircle, ClipboardCheck } from 'lucide-react';
 import { Article } from '../types';
 import { fetchAllArticles, saveArticle, deleteArticle } from '../lib/blogService';
 import { BlogEditorModal } from '../components/BlogEditorModal';
 import { AdminQuizManager } from '../components/AdminQuizManager';
+import { AdminDiagnosticManager } from '../components/AdminDiagnosticManager';
 
 interface AdminViewProps {
   user: { name: string; email: string } | null;
@@ -11,7 +12,7 @@ interface AdminViewProps {
 }
 
 export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
-  const [adminTab, setAdminTab] = useState<'blogs' | 'quizzes'>('blogs');
+  const [adminTab, setAdminTab] = useState<'blogs' | 'quizzes' | 'diagnostics'>('blogs');
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -152,11 +153,25 @@ export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
           <HelpCircle className="w-4 h-4 text-[#C79B3A]" />
           <span>ქვიზების მართვა</span>
         </button>
+
+        <button
+          onClick={() => setAdminTab('diagnostics')}
+          className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            adminTab === 'diagnostics'
+              ? 'bg-[#0D1B2A] text-[#FAF8F3] shadow-md'
+              : 'text-[#666666] hover:bg-[#FAF8F3] hover:text-[#0D1B2A]'
+          }`}
+        >
+          <ClipboardCheck className="w-4 h-4 text-[#C79B3A]" />
+          <span>სადიაგნოსტიკო ტესტები</span>
+        </button>
       </div>
 
       {/* TAB CONTENT */}
       {adminTab === 'quizzes' ? (
         <AdminQuizManager />
+      ) : adminTab === 'diagnostics' ? (
+        <AdminDiagnosticManager />
       ) : (
         <div className="space-y-8">
           {/* Filter and Search Bar */}

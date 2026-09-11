@@ -1,5 +1,7 @@
-import { useState, useEffect, type FC } from 'react';
-import { HistoryTest, QuizQuestion } from '../types';
+import { useState, useEffect, useCallback, type FC } from 'react';
+import { HistoryTest, QuizQuestion, DiagnosticAttempt } from '../types';
+import { DiagnosticTestView } from './DiagnosticTestView';
+import { getLatestAttempt } from '../lib/diagnosticService';
 
 import { 
   TEST_CATEGORIES, 
@@ -46,13 +48,16 @@ import {
   Lock,
   UserCheck,
   ShieldAlert,
-  LogIn
+  LogIn,
+  ClipboardCheck,
+  Timer
 } from 'lucide-react';
 
 interface TestsViewProps {
   onOpenTest?: (test: HistoryTest) => void;
   user?: { name: string; email: string } | null;
   onOpenAuth?: () => void;
+  isLoggedIn?: boolean;
 }
 
 interface TaskGroup {
@@ -134,9 +139,13 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
   const [chronologyOrders, setChronologyOrders] = useState<Record<number, string[]>>({});
   const [chronologyChecked, setChronologyChecked] = useState<Record<number, boolean>>({});
 
-  // Open-ended typed text state
   const [openTextAnswers, setOpenTextAnswers] = useState<Record<number, string>>({});
   const [openTextChecked, setOpenTextChecked] = useState<Record<number, boolean>>({});
+
+  // DIAGNOSTIC TEST STATE
+  const [showDiagnosticView, setShowDiagnosticView] = useState(false);
+  const [diagnosticAttempt, setDiagnosticAttempt] = useState<DiagnosticAttempt | null>(null);
+  const [diagnosticLoading, setDiagnosticLoading] = useState(false);
 
   const userEmail = user?.email || 'guest_user';
 
@@ -191,6 +200,21 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
       isMounted = false;
     };
   }, [userEmail]);
+
+  // Load latest diagnostic attempt for logged-in students
+  useEffect(() => {
+    if (!isLoggedIn) { setDiagnosticAttempt(null); return; }
+    let mounted = true;
+    const loadDiagnostic = async () => {
+      setDiagnosticLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user || !mounted) { setDiagnosticLoading(false); return; }
+      const att = await getLatestAttempt(session.user.id);
+      if (mounted) { setDiagnosticAttempt(att); setDiagnosticLoading(false); }
+    };
+    loadDiagnostic();
+    return () => { mounted = false; };
+  }, [isLoggedIn]);
 
   // Real-time Database Subscription: Automatically sync new questions/updates in real time!
   useEffect(() => {
@@ -645,6 +669,23 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
         </div>
       )}
 
+      {/* DIAGNOSTIC TEST VIEW (full-page) */}
+      {showDiagnosticView && !activeInlineTest ? (
+        <DiagnosticTestView
+          onBack={() => {
+            setShowDiagnosticView(false);
+            // refresh attempt status after returning
+            if (isLoggedIn) {
+              supabase.auth.getSession().then(({ data: { session } }) => {
+                if (session?.user) {
+                  getLatestAttempt(session.user.id).then(setDiagnosticAttempt);
+                }
+              });
+            }
+          }}
+        />
+      ) : null}
+
       {/* INLINE TEST RUNNER VIEW (When a test is active) */}
       {activeInlineTest ? (
         <div className="space-y-8 animate-fade-in">
@@ -1067,6 +1108,108 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
                 <p className="text-sm sm:text-base text-[#666666] max-w-2xl mx-auto">
                   აირჩიეთ სასურველი კატეგორია. ბაზაში დამატებულია 11-ვე თავის რეალური კითხვები, რუკები, წყაროები და ილუსტრაციები.
                 </p>
+              </div>
+
+              {/* 0. სადიაგნოსტიკო ტესტი — FEATURED CARD */}
+              <div className="space-y-4">
+                <div className="border-b border-[#E6DDCB] pb-3">
+                  <h2 className="font-serif font-bold text-2xl text-[#0D1B2A]">
+                    სადიაგნოსტიკო ტესტები
+                  </h2>
+                </div>
+
+                {/* Diagnostic N1 Card */}
+                <div className="bg-gradient-to-br from-[#0D1B2A] to-[#13253D] rounded-2xl border-2 border-[#C79B3A]/40 shadow-lg overflow-hidden">
+                  <div className="p-6 sm:p-7 flex flex-col sm:flex-row items-start sm:items-center gap-5">
+                    {/* Icon */}
+                    <div className="w-16 h-16 rounded-2xl bg-[#C79B3A]/15 border border-[#C79B3A]/30 flex items-center justify-center shrink-0">
+                      <ClipboardCheck className="w-8 h-8 text-[#C79B3A]" />
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-2.5 py-0.5 bg-[#C79B3A] text-[#0D1B2A] text-[10px] font-bold uppercase tracking-widest rounded-full">
+                          სადიაგნოსტიკო
+                        </span>
+                        <span className="px-2.5 py-0.5 bg-white/10 text-[#FAF8F3] text-[10px] font-bold rounded-full border border-white/20">
+                          N1
+                        </span>
+                        <span className="px-2.5 py-0.5 bg-white/10 text-[#FAF8F3] text-[10px] font-bold rounded-full border border-white/20 flex items-center gap-1">
+                          <Timer className="w-3 h-3 text-[#C79B3A]" />
+                          25 წუთი
+                        </span>
+                      </div>
+                      <h3 className="font-serif font-bold text-xl sm:text-2xl text-[#FAF8F3]">
+                        სადიაგნოსტიკო ტესტი N1
+                      </h3>
+                      <p className="text-xs sm:text-sm text-[#FAF8F3]/70">
+                        ისტორია · IV სექცია · მაქსიმ. 40 ქულა
+                      </p>
+                    </div>
+
+                    {/* Status + CTA */}
+                    <div className="w-full sm:w-auto shrink-0">
+                      {!isLoggedIn ? (
+                        <button
+                          onClick={onOpenAuth}
+                          className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] text-sm font-bold rounded-xl transition-all cursor-pointer shadow-md"
+                        >
+                          <LogIn className="w-4 h-4" />
+                          <span>ავტ. გაიარეთ</span>
+                        </button>
+                      ) : diagnosticLoading ? (
+                        <div className="px-5 py-3 text-xs text-[#FAF8F3]/60 font-semibold flex items-center gap-2">
+                          <div className="w-4 h-4 border-2 border-[#C79B3A] border-t-transparent rounded-full animate-spin" />
+                          <span>იტვირთება...</span>
+                        </div>
+                      ) : diagnosticAttempt?.status === 'graded' ? (
+                        <div className="flex flex-col items-center sm:items-end gap-2">
+                          <div className="px-4 py-2 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-center">
+                            <span className="text-emerald-300 font-mono font-bold text-xl">
+                              {diagnosticAttempt.total_score} / {diagnosticAttempt.max_score}
+                            </span>
+                            <p className="text-emerald-300/80 text-[10px] font-semibold mt-0.5">შეფასდა</p>
+                          </div>
+                          <button
+                            onClick={() => setShowDiagnosticView(true)}
+                            className="text-xs text-[#C79B3A] hover:text-white font-bold underline cursor-pointer transition-colors"
+                          >
+                            ხელახლა გაკეთება →
+                          </button>
+                        </div>
+                      ) : diagnosticAttempt?.status === 'submitted' ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="px-4 py-2.5 bg-amber-500/15 border border-amber-500/30 rounded-xl text-center">
+                            <span className="text-amber-300 font-semibold text-xs block">⏳ შეფასება მიმდინარეობს</span>
+                          </div>
+                          <button
+                            onClick={() => setShowDiagnosticView(true)}
+                            className="text-xs text-[#C79B3A] hover:text-white font-bold underline cursor-pointer transition-colors"
+                          >
+                            ხელახლა გაკეთება →
+                          </button>
+                        </div>
+                      ) : diagnosticAttempt?.status === 'in_progress' ? (
+                        <button
+                          onClick={() => setShowDiagnosticView(true)}
+                          className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 bg-amber-500 hover:bg-amber-400 text-[#0D1B2A] text-sm font-bold rounded-xl transition-all cursor-pointer shadow-md"
+                        >
+                          <Timer className="w-4 h-4" />
+                          <span>გაგრძელება</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setShowDiagnosticView(true)}
+                          className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] text-sm font-bold rounded-xl transition-all cursor-pointer shadow-md"
+                        >
+                          <ClipboardCheck className="w-4 h-4" />
+                          <span>ტესტის დაწყება</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* 1. ეროვნული გამოცდების კატეგორიები */}

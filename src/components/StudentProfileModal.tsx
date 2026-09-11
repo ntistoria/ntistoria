@@ -1,9 +1,12 @@
 import { useState, useEffect, type FC } from 'react';
-import { X, Award, CheckCircle2, XCircle, RotateCcw, ShieldCheck, BookOpen, MapPin, Layers, FileText, Clock, Image as ImageIcon, BookMarked, HelpCircle } from 'lucide-react';
+import { X, Award, CheckCircle2, XCircle, RotateCcw, ShieldCheck, BookOpen, MapPin, Layers, FileText, Clock, Image as ImageIcon, BookMarked, HelpCircle, ClipboardCheck } from 'lucide-react';
 import { getStudentProgress, resetStudentProgress, StudentProfileProgress, ChapterProgressStats } from '../lib/progressService';
 import { TEST_CATEGORIES, fetchProgramsAndSubprograms, ProgramChapter } from '../lib/testService';
 import { isAdminUser } from '../lib/blogService';
 import { fetchUserProfile, syncUserProfile } from '../lib/userService';
+import { getLatestAttempt } from '../lib/diagnosticService';
+import { DiagnosticAttempt } from '../types';
+import { supabase } from '../lib/supabase';
 
 interface StudentProfileModalProps {
   isOpen: boolean;
@@ -21,6 +24,7 @@ export const StudentProfileModal: FC<StudentProfileModalProps> = ({
   const [activeTab, setActiveTab] = useState<'chapters' | 'categories'>('chapters');
   const [isResetting, setIsResetting] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+  const [diagnosticAttempt, setDiagnosticAttempt] = useState<DiagnosticAttempt | null>(null);
 
   const [profileName, setProfileName] = useState('');
   const [isEditingName, setIsEditingName] = useState(false);
@@ -43,6 +47,13 @@ export const StudentProfileModal: FC<StudentProfileModalProps> = ({
           setProfileName(dbProf.full_name);
         } else {
           setProfileName(user?.name || userEmail.split('@')[0]);
+        }
+
+        // Load diagnostic attempt
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const att = await getLatestAttempt(session.user.id);
+          setDiagnosticAttempt(att);
         }
       };
       load();
@@ -356,6 +367,40 @@ export const StudentProfileModal: FC<StudentProfileModalProps> = ({
               </div>
             </div>
           )}
+
+          {/* Diagnostic Test Status Section */}
+          <div className="bg-white rounded-2xl border border-[#E6DDCB] p-5 shadow-sm space-y-3">
+            <div className="flex items-center gap-2 border-b border-[#E6DDCB] pb-3">
+              <ClipboardCheck className="w-4 h-4 text-[#C79B3A]" />
+              <h3 className="font-serif font-bold text-sm text-[#0D1B2A]">სადიაგნოსტიკო ტესტები</h3>
+            </div>
+            <div className="p-4 bg-[#FAF8F3] rounded-xl border border-[#E6DDCB] flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold text-[#0D1B2A]">სადიაგნოსტიკო ტესტი N1</p>
+                <p className="text-[10px] text-[#666666] mt-0.5">ისტორია · 40 ქულა · 25 წუთი</p>
+              </div>
+              {!diagnosticAttempt ? (
+                <span className="px-2.5 py-1 bg-[#FAF8F3] border border-[#E6DDCB] text-[#666666] text-[10px] font-bold rounded-full">
+                  არ ჩაბარებულა
+                </span>
+              ) : diagnosticAttempt.status === 'graded' ? (
+                <div className="text-right">
+                  <span className="text-emerald-700 font-mono font-bold text-base">
+                    {diagnosticAttempt.total_score}/{diagnosticAttempt.max_score}
+                  </span>
+                  <p className="text-[10px] text-emerald-600 font-semibold">შეფასდა ✓</p>
+                </div>
+              ) : diagnosticAttempt.status === 'submitted' ? (
+                <span className="px-2.5 py-1 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-full">
+                  ⏳ შეფასება ელოდება
+                </span>
+              ) : (
+                <span className="px-2.5 py-1 bg-blue-100 text-blue-800 text-[10px] font-bold rounded-full">
+                  მიმდინარე
+                </span>
+              )}
+            </div>
+          </div>
 
           {/* Reset / Clear Data Action Box */}
           <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-5 space-y-3">
