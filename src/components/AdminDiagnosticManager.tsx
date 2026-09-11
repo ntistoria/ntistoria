@@ -218,7 +218,7 @@ export const AdminDiagnosticManager: FC = () => {
   const [questions, setQuestions] = useState<DiagnosticQuestion[]>([]);
   const [selectedAttempt, setSelectedAttempt] = useState<DiagnosticAttemptWithAnswers | null>(null);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<'all' | 'submitted' | 'graded' | 'in_progress'>('all');
+  const [filter, setFilter] = useState<'all' | 'submitted' | 'graded'>('submitted');
 
   const loadData = async () => {
     setLoading(true);
@@ -265,7 +265,7 @@ export const AdminDiagnosticManager: FC = () => {
           </div>
           <div>
             <h3 className="font-serif font-bold text-lg text-[#0D1B2A]">სადიაგნოსტიკო ტესტი N1</h3>
-            <p className="text-xs text-[#666666]">სულ {attempts.length} attempt</p>
+            <p className="text-xs text-[#666666]">სულ {attempts.length} გაგზავნილი ტესტი</p>
           </div>
         </div>
         <button
@@ -278,7 +278,7 @@ export const AdminDiagnosticManager: FC = () => {
 
       {/* Filter tabs */}
       <div className="flex items-center gap-2 flex-wrap">
-        {([['all', 'ყველა'], ['submitted', 'შეფასება ელოდება'], ['graded', 'შეფასდა'], ['in_progress', 'მიმდინარე']] as const).map(([key, label]) => (
+        {([['submitted', 'შეფასება ელოდება'], ['graded', 'შეფასდა'], ['all', 'ყველა']] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setFilter(key)}

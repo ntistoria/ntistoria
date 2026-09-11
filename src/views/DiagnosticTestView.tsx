@@ -291,7 +291,7 @@ export const DiagnosticTestView: FC<DiagnosticTestViewProps> = ({ onBack }) => {
     IV: <FileText className="w-5 h-5 text-[#C79B3A]" />,
   };
   const bySection = (sec: string) => questions.filter((q) => q.section === sec);
-  const isDisabled = submitted || submitting;
+  const isDisabled = submitted || submitting || isTimeUp;
 
   // ── Timer color ──────────────────────────────────────────────
   const timerColor = remainingSecs <= 120
