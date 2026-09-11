@@ -147,6 +147,11 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
   const [diagnosticAttempt, setDiagnosticAttempt] = useState<DiagnosticAttempt | null>(null);
   const [diagnosticLoading, setDiagnosticLoading] = useState(false);
 
+  const handleOpenDiagnostic = () => {
+    setShowDiagnosticView(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const userEmail = user?.email || 'guest_user';
 
   // Load programs, total question counts per category, item details, and student progress
@@ -674,6 +679,7 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
         <DiagnosticTestView
           onBack={() => {
             setShowDiagnosticView(false);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
             // refresh attempt status after returning
             if (isLoggedIn) {
               supabase.auth.getSession().then(({ data: { session } }) => {
@@ -684,10 +690,7 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
             }
           }}
         />
-      ) : null}
-
-      {/* INLINE TEST RUNNER VIEW (When a test is active) */}
-      {activeInlineTest ? (
+      ) : activeInlineTest ? (
         <div className="space-y-8 animate-fade-in">
           
           {/* Top Test Header Bar */}
@@ -1172,7 +1175,7 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
                             <p className="text-emerald-300/80 text-[10px] font-semibold mt-0.5">შეფასდა</p>
                           </div>
                           <button
-                            onClick={() => setShowDiagnosticView(true)}
+                            onClick={handleOpenDiagnostic}
                             className="text-xs text-[#C79B3A] hover:text-white font-bold underline cursor-pointer transition-colors"
                           >
                             ხელახლა გაკეთება →
@@ -1184,7 +1187,7 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
                             <span className="text-amber-300 font-semibold text-xs block">⏳ შეფასება მიმდინარეობს</span>
                           </div>
                           <button
-                            onClick={() => setShowDiagnosticView(true)}
+                            onClick={handleOpenDiagnostic}
                             className="text-xs text-[#C79B3A] hover:text-white font-bold underline cursor-pointer transition-colors"
                           >
                             ხელახლა გაკეთება →
@@ -1192,7 +1195,7 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
                         </div>
                       ) : diagnosticAttempt?.status === 'in_progress' ? (
                         <button
-                          onClick={() => setShowDiagnosticView(true)}
+                          onClick={handleOpenDiagnostic}
                           className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 bg-amber-500 hover:bg-amber-400 text-[#0D1B2A] text-sm font-bold rounded-xl transition-all cursor-pointer shadow-md"
                         >
                           <Timer className="w-4 h-4" />
@@ -1200,7 +1203,7 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
                         </button>
                       ) : (
                         <button
-                          onClick={() => setShowDiagnosticView(true)}
+                          onClick={handleOpenDiagnostic}
                           className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] text-sm font-bold rounded-xl transition-all cursor-pointer shadow-md"
                         >
                           <ClipboardCheck className="w-4 h-4" />
