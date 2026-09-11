@@ -132,6 +132,23 @@ const GradingView: FC<GradingViewProps> = ({ attempt, questions, onBack, onSaved
                 {qs[0]?.section_title || `${sec} ნაწილი`}
               </h4>
             </div>
+
+            {/* Task Prompt / Source Text Header if present */}
+            {qs[0]?.source_text ? (
+              <div className="p-4 bg-[#FAF8F3] rounded-xl border-l-4 border-[#C79B3A] text-xs font-serif font-semibold text-[#0D1B2A] leading-relaxed">
+                <span className="text-[#C79B3A] font-bold block uppercase tracking-wider text-[10px] mb-1">
+                  {sec === 'IV' ? 'ისტორიული წყარო:' : 'დავალების პირობა:'}
+                </span>
+                {qs[0].source_text}
+              </div>
+            ) : sec === 'III' ? (
+              <div className="p-4 bg-[#FAF8F3] rounded-xl border-l-4 border-[#C79B3A] text-xs font-serif font-bold text-[#0D1B2A]">
+                <span className="text-[#C79B3A] font-bold block uppercase tracking-wider text-[10px] mb-1">
+                  დავალების პირობა:
+                </span>
+                1799 წელს გენერალი ბონაპარტე პირველი კონსული გახდა.
+              </div>
+            ) : null}
             {qs.map((q) => {
               const ans = attempt.answers.find((a) => a.question_id === q.id);
               const g = grades[q.id];

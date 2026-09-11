@@ -500,6 +500,18 @@ export const DiagnosticTestView: FC<DiagnosticTestViewProps> = ({ onBack }) => {
         {bySection('III').length > 0 && (
           <div className="bg-white rounded-3xl border border-[#E6DDCB] p-6 sm:p-8 shadow-sm space-y-6">
             <SectionHeader roman="III" title={sectionTitles['III']} icon={sectionIcons['III']} />
+
+            {/* Task prompt / context box — like Section IV */}
+            <div className="p-5 bg-[#FAF8F3] rounded-2xl border-l-4 border-[#C79B3A] space-y-2">
+              <div className="flex items-center gap-2 text-xs font-bold text-[#C79B3A] uppercase tracking-wider">
+                <FileText className="w-4 h-4" />
+                <span>დავალების პირობა</span>
+              </div>
+              <p className="font-serif font-bold text-base sm:text-lg text-[#0D1B2A] leading-relaxed">
+                {bySection('III')[0]?.source_text || '1799 წელს გენერალი ბონაპარტე პირველი კონსული გახდა.'}
+              </p>
+            </div>
+
             <div className="space-y-8">
               {bySection('III').map((q) => (
                 <div key={q.id} className="border-b border-[#F5F2EA] pb-6 last:border-0 last:pb-0">
