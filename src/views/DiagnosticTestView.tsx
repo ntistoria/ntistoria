@@ -164,10 +164,10 @@ export const DiagnosticTestView: FC<DiagnosticTestViewProps> = ({ onBack }) => {
   const [submitted, setSubmitted] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [isTimeUp, setIsTimeUp] = useState(false);
   const [mapModalUrl, setMapModalUrl] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoSubmittedRef = useRef(false);
 
   // ── Load questions & attempt ─────────────────────────────────
   useEffect(() => {
@@ -200,7 +200,11 @@ export const DiagnosticTestView: FC<DiagnosticTestViewProps> = ({ onBack }) => {
             if (a.question_id && a.answer_text) restored[a.question_id] = a.answer_text;
           });
           setAnswers(restored);
-          setRemainingSecs(getRemainingSeconds(att.started_at));
+          const rem = getRemainingSeconds(att.started_at);
+          setRemainingSecs(rem);
+          if (rem <= 0) {
+            setIsTimeUp(true);
+          }
         }
       }
       setLoading(false);
@@ -212,20 +216,23 @@ export const DiagnosticTestView: FC<DiagnosticTestViewProps> = ({ onBack }) => {
   // ── Timer tick ───────────────────────────────────────────────
   useEffect(() => {
     if (submitted || !attempt || attempt.status !== 'in_progress') return;
+    const initialRem = getRemainingSeconds(attempt.started_at);
+    setRemainingSecs(initialRem);
+    if (initialRem <= 0) {
+      setIsTimeUp(true);
+      return;
+    }
+
     timerRef.current = setInterval(() => {
-      setRemainingSecs(getRemainingSeconds(attempt.started_at));
+      const rem = getRemainingSeconds(attempt.started_at);
+      setRemainingSecs(rem);
+      if (rem <= 0) {
+        setIsTimeUp(true);
+        if (timerRef.current) clearInterval(timerRef.current);
+      }
     }, 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [attempt, submitted]);
-
-  // ── Auto-submit on timeout ───────────────────────────────────
-  useEffect(() => {
-    if (remainingSecs <= 0 && attempt && !submitted && !autoSubmittedRef.current) {
-      autoSubmittedRef.current = true;
-      if (timerRef.current) clearInterval(timerRef.current);
-      handleDoSubmit(true);
-    }
-  }, [remainingSecs]);
 
   // ── Debounced answer save ────────────────────────────────────
   const handleAnswerChange = useCallback((questionId: string, value: string) => {
@@ -593,6 +600,48 @@ export const DiagnosticTestView: FC<DiagnosticTestViewProps> = ({ onBack }) => {
                 className="px-5 py-2 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold rounded-xl shadow-md cursor-pointer disabled:opacity-50"
               >
                 {submitting ? 'იგზავნება...' : 'დიახ, გაგზავნა'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TIME UP MODAL */}
+      {isTimeUp && !submitted && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-in fade-in duration-300">
+          <div className="bg-white border-2 border-[#C79B3A] rounded-3xl max-w-md w-full p-8 text-center space-y-6 shadow-2xl relative overflow-hidden">
+            <div className="w-20 h-20 rounded-3xl bg-rose-100 border border-rose-300 text-rose-600 mx-auto flex items-center justify-center shadow-md animate-pulse">
+              <Clock className="w-10 h-10" />
+            </div>
+            <div className="space-y-2">
+              <span className="px-3 py-1 bg-rose-100 text-rose-700 text-[11px] font-bold uppercase tracking-widest rounded-full inline-block">
+                დრო ამოიწურა
+              </span>
+              <h3 className="font-serif font-bold text-2xl text-[#0D1B2A]">
+                საგამოცდო დრო ამოიწურა!
+              </h3>
+              <p className="text-xs sm:text-sm text-[#666666] leading-relaxed">
+                თქვენთვის განკუთვნილი 25 წუთი ამოიწურა. გთხოვთ გააგზავნოთ თქვენ მიერ შევსებული პასუხები შეფასებისთვის.
+              </p>
+            </div>
+            <div className="pt-2 flex flex-col gap-3">
+              <button
+                onClick={() => handleDoSubmit()}
+                disabled={submitting}
+                className="w-full py-4 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold uppercase tracking-wider rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {submitting ? (
+                  <><Loader2 className="w-5 h-5 animate-spin" /><span>იგზავნება...</span></>
+                ) : (
+                  <><Send className="w-5 h-5" /><span>პასუხების გაგზავნა</span></>
+                )}
+              </button>
+              <button
+                onClick={onBack}
+                disabled={submitting}
+                className="w-full py-3 bg-[#FAF8F3] hover:bg-[#E6DDCB]/60 border border-[#E6DDCB] text-[#0D1B2A] text-xs font-bold rounded-2xl transition-all cursor-pointer"
+              >
+                ტესტებში დაბრუნება
               </button>
             </div>
           </div>

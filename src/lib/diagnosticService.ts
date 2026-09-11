@@ -29,12 +29,6 @@ export const getOrCreateAttempt = async (userId: string, userEmail: string): Pro
     .eq('test_id', TEST_ID).eq('user_id', userId).eq('status', 'in_progress')
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
   if (existing) {
-    const elapsed = Math.floor((Date.now() - new Date(existing.started_at).getTime()) / 1000);
-    if (elapsed >= TIME_LIMIT_SECONDS) {
-      await submitAttempt(existing.id);
-      const { data: s } = await supabase.from('diagnostic_attempts').select('*').eq('id', existing.id).maybeSingle();
-      return s as DiagnosticAttempt | null;
-    }
     return existing as DiagnosticAttempt;
   }
   const { data: created, error } = await supabase
@@ -82,6 +76,7 @@ export const submitAttempt = async (attemptId: string): Promise<boolean> => {
 export const getAllAttemptsAdmin = async (): Promise<DiagnosticAttemptWithAnswers[]> => {
   const { data: attempts, error } = await supabase
     .from('diagnostic_attempts').select('*').eq('test_id', TEST_ID)
+    .in('status', ['submitted', 'graded'])
     .order('created_at', { ascending: false });
   if (error) { console.error('getAllAttemptsAdmin:', error); return []; }
   const emails = [...new Set((attempts || []).map((a: any) => a.user_email))];
