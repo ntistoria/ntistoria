@@ -23,13 +23,28 @@ export const getDiagnosticQuestions = async (): Promise<DiagnosticQuestion[]> =>
   })) as DiagnosticQuestion[];
 };
 
+export const deleteAttempt = async (attemptId: string): Promise<boolean> => {
+  const { error } = await supabase
+    .from('diagnostic_attempts')
+    .delete()
+    .eq('id', attemptId)
+    .eq('status', 'in_progress');
+  if (error) { console.error('deleteAttempt:', error); return false; }
+  return true;
+};
+
 export const getOrCreateAttempt = async (userId: string, userEmail: string): Promise<DiagnosticAttempt | null> => {
   const { data: existing } = await supabase
     .from('diagnostic_attempts').select('*')
     .eq('test_id', TEST_ID).eq('user_id', userId).eq('status', 'in_progress')
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
   if (existing) {
-    return existing as DiagnosticAttempt;
+    const elapsed = Math.floor((Date.now() - new Date(existing.started_at).getTime()) / 1000);
+    if (elapsed >= TIME_LIMIT_SECONDS) {
+      await deleteAttempt(existing.id);
+    } else {
+      return existing as DiagnosticAttempt;
+    }
   }
   const { data: created, error } = await supabase
     .from('diagnostic_attempts')
@@ -43,6 +58,7 @@ export const getLatestAttempt = async (userId: string): Promise<DiagnosticAttemp
   const { data } = await supabase
     .from('diagnostic_attempts').select('*')
     .eq('test_id', TEST_ID).eq('user_id', userId)
+    .in('status', ['submitted', 'graded'])
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
   return data as DiagnosticAttempt | null;
 };

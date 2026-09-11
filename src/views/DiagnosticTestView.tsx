@@ -8,7 +8,7 @@ import {
 } from '../types';
 import {
   getDiagnosticQuestions, getOrCreateAttempt, getAnswersForAttempt,
-  saveAnswer, submitAttempt, getRemainingSeconds, TIME_LIMIT_SECONDS
+  saveAnswer, submitAttempt, deleteAttempt, getRemainingSeconds, TIME_LIMIT_SECONDS
 } from '../lib/diagnosticService';
 import { supabase } from '../lib/supabase';
 
@@ -168,6 +168,28 @@ export const DiagnosticTestView: FC<DiagnosticTestViewProps> = ({ onBack }) => {
   const [mapModalUrl, setMapModalUrl] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const submittedRef = useRef(submitted);
+  submittedRef.current = submitted;
+  const attemptRef = useRef(attempt);
+  attemptRef.current = attempt;
+
+  // Cancel and clean up attempt from DB if leaving without submitting
+  const handleCancelAndBack = async () => {
+    if (attempt?.id && !submitted) {
+      await deleteAttempt(attempt.id);
+    }
+    onBack();
+  };
+
+  // Cleanup on unmount if leaving unsubmitted
+  useEffect(() => {
+    return () => {
+      if (attemptRef.current?.id && !submittedRef.current) {
+        deleteAttempt(attemptRef.current.id);
+      }
+    };
+  }, []);
 
   // ── Load questions & attempt ─────────────────────────────────
   useEffect(() => {
@@ -352,7 +374,7 @@ export const DiagnosticTestView: FC<DiagnosticTestViewProps> = ({ onBack }) => {
       {/* STICKY TIMER HEADER */}
       <div className="sticky top-[73px] z-30 bg-white/95 backdrop-blur-sm border-b border-[#E6DDCB] shadow-sm -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 flex items-center justify-between">
         <button
-          onClick={onBack}
+          onClick={handleCancelAndBack}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#FAF8F3] hover:bg-[#E6DDCB]/60 border border-[#E6DDCB] text-[#13253D] text-xs font-bold rounded-xl transition-all cursor-pointer"
         >
           <ChevronLeft className="w-3.5 h-3.5 text-[#C79B3A]" />
@@ -649,7 +671,7 @@ export const DiagnosticTestView: FC<DiagnosticTestViewProps> = ({ onBack }) => {
                 )}
               </button>
               <button
-                onClick={onBack}
+                onClick={handleCancelAndBack}
                 disabled={submitting}
                 className="w-full py-3 bg-[#FAF8F3] hover:bg-[#E6DDCB]/60 border border-[#E6DDCB] text-[#0D1B2A] text-xs font-bold rounded-2xl transition-all cursor-pointer"
               >
