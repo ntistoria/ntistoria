@@ -54,13 +54,24 @@ export const getOrCreateAttempt = async (userId: string, userEmail: string): Pro
   return created as DiagnosticAttempt;
 };
 
-export const getLatestAttempt = async (userId: string): Promise<DiagnosticAttempt | null> => {
-  const { data } = await supabase
-    .from('diagnostic_attempts').select('*')
-    .eq('test_id', TEST_ID).eq('user_id', userId)
-    .in('status', ['submitted', 'graded'])
-    .order('created_at', { ascending: false }).limit(1).maybeSingle();
-  return data as DiagnosticAttempt | null;
+export const getLatestAttempt = async (userId: string, userEmail?: string): Promise<DiagnosticAttempt | null> => {
+  if (userId) {
+    const { data } = await supabase
+      .from('diagnostic_attempts').select('*')
+      .eq('test_id', TEST_ID).eq('user_id', userId)
+      .in('status', ['submitted', 'graded'])
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (data) return data as DiagnosticAttempt;
+  }
+  if (userEmail) {
+    const { data } = await supabase
+      .from('diagnostic_attempts').select('*')
+      .eq('test_id', TEST_ID).eq('user_email', userEmail.toLowerCase().trim())
+      .in('status', ['submitted', 'graded'])
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (data) return data as DiagnosticAttempt;
+  }
+  return null;
 };
 
 export const getRemainingSeconds = (startedAt: string): number => {
@@ -118,14 +129,30 @@ export const awardPointsToAnswer = async (payload: DiagnosticGradePayload): Prom
   return true;
 };
 
-export const finalizeGrading = async (attemptId: string, grades: DiagnosticGradePayload[]): Promise<boolean> => {
+export interface FinalizeGradeItem {
+  questionId: string;
+  points_awarded: number;
+  teacher_comment?: string;
+}
+
+export const finalizeGrading = async (attemptId: string, grades: FinalizeGradeItem[]): Promise<boolean> => {
   const updates = grades.map((g) =>
-    supabase.from('diagnostic_answers')
-      .update({ points_awarded: g.points_awarded, teacher_comment: g.teacher_comment ?? null, updated_at: new Date().toISOString() })
-      .eq('id', g.answerId)
+    supabase.from('diagnostic_answers').upsert(
+      {
+        attempt_id: attemptId,
+        question_id: g.questionId,
+        points_awarded: g.points_awarded,
+        teacher_comment: g.teacher_comment || null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'attempt_id,question_id' }
+    )
   );
   const results = await Promise.all(updates);
-  if (results.some((r) => r.error)) { console.error('finalizeGrading: error in bulk update'); return false; }
+  if (results.some((r) => r.error)) {
+    console.error('finalizeGrading: error in bulk update', results.find((r) => r.error)?.error);
+    return false;
+  }
   const totalScore = grades.reduce((sum, g) => sum + (g.points_awarded || 0), 0);
   const { error } = await supabase.from('diagnostic_attempts')
     .update({ status: 'graded', total_score: totalScore, graded_at: new Date().toISOString() })

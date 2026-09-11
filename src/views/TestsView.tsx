@@ -213,13 +213,14 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
     const loadDiagnostic = async () => {
       setDiagnosticLoading(true);
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user || !mounted) { setDiagnosticLoading(false); return; }
-      const att = await getLatestAttempt(session.user.id);
+      const userId = session?.user?.id || '';
+      if (!mounted) return;
+      const att = await getLatestAttempt(userId, userEmail);
       if (mounted) { setDiagnosticAttempt(att); setDiagnosticLoading(false); }
     };
     loadDiagnostic();
     return () => { mounted = false; };
-  }, [isLoggedIn]);
+  }, [isLoggedIn, userEmail]);
 
   // Real-time Database Subscription: Automatically sync new questions/updates in real time!
   useEffect(() => {
@@ -683,9 +684,8 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
             // refresh attempt status after returning
             if (isLoggedIn) {
               supabase.auth.getSession().then(({ data: { session } }) => {
-                if (session?.user) {
-                  getLatestAttempt(session.user.id).then(setDiagnosticAttempt);
-                }
+                const userId = session?.user?.id || '';
+                getLatestAttempt(userId, userEmail).then(setDiagnosticAttempt);
               });
             }
           }}

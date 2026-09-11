@@ -101,18 +101,18 @@ DROP POLICY IF EXISTS "Admin all attempts"           ON public.diagnostic_attemp
 CREATE POLICY "Student own attempts select"
   ON public.diagnostic_attempts
   FOR SELECT
-  USING (user_id = auth.uid());
+  USING (user_id = auth.uid() OR lower(user_email) = lower(auth.email()));
 
 CREATE POLICY "Student own attempts insert"
   ON public.diagnostic_attempts
   FOR INSERT
-  WITH CHECK (user_id = auth.uid());
+  WITH CHECK (user_id = auth.uid() OR lower(user_email) = lower(auth.email()));
 
 CREATE POLICY "Student own attempts update"
   ON public.diagnostic_attempts
   FOR UPDATE
-  USING (user_id = auth.uid())
-  WITH CHECK (user_id = auth.uid());
+  USING (user_id = auth.uid() OR lower(user_email) = lower(auth.email()))
+  WITH CHECK (user_id = auth.uid() OR lower(user_email) = lower(auth.email()));
 
 CREATE POLICY "Admin all attempts"
   ON public.diagnostic_attempts
@@ -137,7 +137,7 @@ CREATE POLICY "Student own answers select"
   USING (
     attempt_id IN (
       SELECT id FROM public.diagnostic_attempts
-      WHERE user_id = auth.uid()
+      WHERE user_id = auth.uid() OR lower(user_email) = lower(auth.email())
     )
   );
 
@@ -147,7 +147,7 @@ CREATE POLICY "Student own answers insert"
   WITH CHECK (
     attempt_id IN (
       SELECT id FROM public.diagnostic_attempts
-      WHERE user_id = auth.uid()
+      WHERE user_id = auth.uid() OR lower(user_email) = lower(auth.email())
     )
   );
 
@@ -158,7 +158,7 @@ CREATE POLICY "Student own answers update"
   USING (
     attempt_id IN (
       SELECT id FROM public.diagnostic_attempts
-      WHERE user_id = auth.uid()
+      WHERE (user_id = auth.uid() OR lower(user_email) = lower(auth.email()))
         AND status = 'in_progress'
     )
   );

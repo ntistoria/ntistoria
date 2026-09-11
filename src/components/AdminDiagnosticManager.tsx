@@ -64,9 +64,14 @@ const GradingView: FC<GradingViewProps> = ({ attempt, questions, onBack, onSaved
   const handleFinalize = async () => {
     setSaving(true);
     setSaveError(null);
-    const payload = Object.values(grades)
-      .filter((g) => g.answerId)
-      .map((g) => ({ answerId: g.answerId, points_awarded: g.points, teacher_comment: g.comment }));
+    const payload = questions.map((q) => {
+      const g = grades[q.id];
+      return {
+        questionId: q.id,
+        points_awarded: g?.points ?? 0,
+        teacher_comment: g?.comment || '',
+      };
+    });
 
     const ok = await finalizeGrading(attempt.id, payload);
     if (ok) {

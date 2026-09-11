@@ -272,9 +272,9 @@ export const DiagnosticTestView: FC<DiagnosticTestViewProps> = ({ onBack }) => {
     setSubmitError(null);
     if (timerRef.current) clearInterval(timerRef.current);
 
-    // save all current answers first
-    const saveOps = Object.entries(answers).map(([qId, ans]) =>
-      saveAnswer(attempt.id, qId, ans)
+    // save answers for ALL questions (saving empty string for unanswered ones)
+    const saveOps = questions.map((q) =>
+      saveAnswer(attempt.id, q.id, answers[q.id] || '')
     );
     await Promise.all(saveOps);
 

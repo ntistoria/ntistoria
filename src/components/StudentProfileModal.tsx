@@ -51,10 +51,9 @@ export const StudentProfileModal: FC<StudentProfileModalProps> = ({
 
         // Load diagnostic attempt
         const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          const att = await getLatestAttempt(session.user.id);
-          setDiagnosticAttempt(att);
-        }
+        const userId = session?.user?.id || '';
+        const att = await getLatestAttempt(userId, userEmail);
+        setDiagnosticAttempt(att);
       };
       load();
     }
