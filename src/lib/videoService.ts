@@ -1,40 +1,7 @@
 import { supabase } from './supabase';
 import { VideoItem } from '../types';
 
-export const DEFAULT_VIDEOS: VideoItem[] = [
-  {
-    id: 'vid-didgori-1121',
-    title: 'დავით IV აღმაშენებელი და დიდგორის ომის სამხედრო ტაქტიკა',
-    description: 'ვიდეოლექციაში დეტალურად განხილულია დავით აღმაშენებლის რეფორმები, ყივჩაღთა ჩამოსახლება, მონასპას შექმნა და დიდგორის ბრძოლის ეტაპობრივი რესტავრაცია.',
-    youtube_url: 'https://www.youtube.com/watch?v=L_LUpnjgPso',
-    tags: ['საქართველოს ისტორია', 'სააბიტურიენტო', 'ეროვნული გამოცდები'],
-    created_at: new Date('2025-08-15').toISOString()
-  },
-  {
-    id: 'vid-naec-map-analysis',
-    title: 'ისტორიული რუკის კითხვისა და ანალიზის ტექნიკა საგამოცდოდ',
-    description: 'როგორ ამოვიცნოთ რუკაზე საზღვრების ცვლილებები, ჯარების გადაადგილების ისრები და ისტორიული ქალაქები. პრაქტიკული სავარჯიშოები გასული წლების ეროვნული გამოცდების რუკებზე.',
-    youtube_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-    tags: ['ეროვნული გამოცდები', 'რუკები', 'სააბიტურიენტო'],
-    created_at: new Date('2025-09-02').toISOString()
-  },
-  {
-    id: 'vid-georgievsk-1783',
-    title: 'გეორგიევსკის ტრაქტატი (1783) და კრწანისის ბრძოლა (1795)',
-    description: 'ერეკლე II-ის პოლიტიკური არჩევანი, ტრაქტატის მუხლების იურიდიული შეფასება, აღა-მაჰმად-ხანის ულტიმატუმი და 300 არაგველის თავდადება.',
-    youtube_url: 'https://www.youtube.com/watch?v=3JZ_D3ELwOQ',
-    tags: ['ახალი და უახლესი ისტორია', 'საქართველოს ისტორია', 'სააბიტურიენტო'],
-    created_at: new Date('2025-10-20').toISOString()
-  },
-  {
-    id: 'vid-rome-republic',
-    title: 'რომის რესპუბლიკიდან იმპერიამდე: იულიუს კეისარი და ოქტავიანე',
-    description: 'ტრიუმვირატები, სამოქალაქო ომები რომში, რუბიკონის გადავლახვა, იდუსის მარტი და პაქს რომანას (რომაული მშვიდობის) დასაბამი.',
-    youtube_url: 'https://www.youtube.com/watch?v=L_LUpnjgPso',
-    tags: ['ძველი მსოფლიო', 'მსოფლიო ისტორია'],
-    created_at: new Date('2025-11-10').toISOString()
-  }
-];
+export const DEFAULT_VIDEOS: VideoItem[] = [];
 
 /**
  * Extracts 11-character YouTube video ID from various YouTube URL formats.

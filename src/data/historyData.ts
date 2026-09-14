@@ -206,68 +206,7 @@ export const TESTS: HistoryTest[] = [
   }
 ];
 
-export const VIDEOS: VideoLesson[] = [
-  {
-    id: 'video-didgori',
-    title: 'დავით IV აღმაშენებელი და დიდგორის ომის სამხედრო ტაქტიკა',
-    category: 'საქართველოს ისტორია',
-    duration: '24:15',
-    youtubeId: 'L_LUpnjgPso', // standard illustrative youtube video ID format
-    thumbnailUrl: 'https://images.unsplash.com/photo-1564507592333-c60657eea523?auto=format&fit=crop&w=800&q=80',
-    instructor: 'ნოდარ თორთლაძე (NT)',
-    description: 'ვიდეოლექციაში დეტალურად განხილულია დავით აღმაშენებლის რეფორმები, ყივჩაღთა ჩამოსახლება, მონასპას შექმნა და დიდგორის ბრძოლის ეტაპობრივი რესტავრაცია.',
-    keyTopics: ['სამხედრო რეფორმა', 'ყივჩაღთა 40 000 ოჯახი', '200 მხედრის ოპერაცია', 'თბილისის გათავისუფლება 1122'],
-    materialsCount: 3,
-    views: 4820,
-    publishedDate: '15 აგვისტო, 2025',
-    notes: 'ლექცია მომზადებულია NAEC-ის პროგრამის შესაბამისად. თან ახლავს გრაფიკული რუკა და ისტორიული წყაროს ტექსტი.'
-  },
-  {
-    id: 'video-naec-map-analysis',
-    title: 'ისტორიული რუკის კითხვისა და ანალიზის ტექნიკა საგამოცდოდ',
-    category: 'ეროვნული გამოცდები',
-    duration: '31:40',
-    youtubeId: 'dQw4w9WgXcQ',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=800&q=80',
-    instructor: 'ნოდარ თორთლაძე (NT)',
-    description: 'როგორ ამოვიცნოთ რუკაზე საზღვრების ცვლილებები, ჯარების გადაადგილების ისრები და ისტორიული ქალაქები. პრაქტიკული სავარჯიშოები გასული წლების ეროვნული გამოცდების რუკებზე.',
-    keyTopics: ['პირობითი ნიშნების გაშიფვრა', 'საუკუნის იდენტიფიცირება', 'საბრძოლო მარშრუტები', 'ხშირი შეცდომების პრევენცია'],
-    materialsCount: 5,
-    views: 7190,
-    publishedDate: '02 სექტემბერი, 2025',
-    notes: 'ერთ-ერთი ყველაზე მოთხოვნადი ვიდეო აბიტურიენტებისთვის.'
-  },
-  {
-    id: 'video-georgievsk',
-    title: 'გეორგიევსკის ტრაქტატი (1783) და კრწანისის ბრძოლა (1795)',
-    category: 'ახალი და უახლესი ისტორია',
-    duration: '28:10',
-    youtubeId: '3JZ_D3ELwOQ',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&w=800&q=80',
-    instructor: 'ნოდარ თორთლაძე (NT)',
-    description: 'ერეკლე II-ის პოლიტიკური არჩევანი, ტრაქტატის მუხლების იურიდიული შეფასება, აღა-მაჰმად-ხანის ულტიმატუმი და 300 არაგველის თავდადება.',
-    keyTopics: ['ერეკლე II & ეკატერინე II', 'ტრაქტატის 13 მუხლი', '300 არაგველი', '1801 წლის მანიფესტი'],
-    materialsCount: 4,
-    views: 5310,
-    publishedDate: '20 ოქტომბერი, 2025',
-    notes: 'მოიცავს საგამოცდო წყაროების (წერილების, მანიფესტების) სიღრმისეულ ანალიზს.'
-  },
-  {
-    id: 'video-rome-republic',
-    title: 'რომის რესპუბლიკიდან იმპერიამდე: იულიუს კეისარი და ოქტავიანე',
-    category: 'ძველი მსოფლიო',
-    duration: '22:05',
-    youtubeId: 'L_LUpnjgPso',
-    thumbnailUrl: 'https://images.unsplash.com/photo-1544967082-d9d25d867d66?auto=format&fit=crop&w=800&q=80',
-    instructor: 'ნოდარ თორთლაძე (NT)',
-    description: 'ტრიუმვირატები, სამოქალაქო ომები რომში, რუბიკონის გადავლახვა, იდუსის მარტი და პაქს რომანას (რომაული მშვიდობის) დასაბამი.',
-    keyTopics: ['პირველი და მეორე ტრიუმვირატი', '„წილი ნაყარია“ (Alea iacta est)', 'აქციუმის კონცხის ბრძოლა', 'Pax Romana'],
-    materialsCount: 2,
-    views: 3940,
-    publishedDate: '10 ნოემბერი, 2025',
-    notes: 'იდეალურია მსოფლიო ისტორიის ბლოკის ასათვისებლად.'
-  }
-];
+export const VIDEOS: VideoLesson[] = [];
 
 export const FAQS = [
   {
