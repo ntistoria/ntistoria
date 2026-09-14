@@ -116,6 +116,16 @@ export interface VideoLesson {
   notes?: string;
 }
 
+export interface VideoItem {
+  id: string;
+  title: string;
+  description?: string | null;
+  youtube_url: string;
+  tags: string[];
+  created_at?: string;
+}
+
+
 export interface HistoricalEpoch {
   id: string;
   period: string;

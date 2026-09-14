@@ -1,10 +1,11 @@
 import { useState, useEffect, type FC } from 'react';
-import { Plus, Edit2, Trash2, Search, Filter, FileText, ShieldCheck, RefreshCw, AlertTriangle, Eye, HelpCircle, ClipboardCheck } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Filter, FileText, ShieldCheck, RefreshCw, AlertTriangle, Eye, HelpCircle, ClipboardCheck, Video } from 'lucide-react';
 import { Article } from '../types';
 import { fetchAllArticles, saveArticle, deleteArticle } from '../lib/blogService';
 import { BlogEditorModal } from '../components/BlogEditorModal';
 import { AdminQuizManager } from '../components/AdminQuizManager';
 import { AdminDiagnosticManager } from '../components/AdminDiagnosticManager';
+import { AdminVideoManager } from '../components/AdminVideoManager';
 
 interface AdminViewProps {
   user: { name: string; email: string } | null;
@@ -12,7 +13,8 @@ interface AdminViewProps {
 }
 
 export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
-  const [adminTab, setAdminTab] = useState<'blogs' | 'quizzes' | 'diagnostics'>('blogs');
+  const [adminTab, setAdminTab] = useState<'blogs' | 'quizzes' | 'diagnostics' | 'videos'>('blogs');
+
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -165,6 +167,18 @@ export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
           <ClipboardCheck className="w-4 h-4 text-[#C79B3A]" />
           <span>სადიაგნოსტიკო ტესტები</span>
         </button>
+
+        <button
+          onClick={() => setAdminTab('videos')}
+          className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+            adminTab === 'videos'
+              ? 'bg-[#0D1B2A] text-[#FAF8F3] shadow-md'
+              : 'text-[#666666] hover:bg-[#FAF8F3] hover:text-[#0D1B2A]'
+          }`}
+        >
+          <Video className="w-4 h-4 text-[#C79B3A]" />
+          <span>ვიდეოების მართვა</span>
+        </button>
       </div>
 
       {/* TAB CONTENT */}
@@ -172,7 +186,10 @@ export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
         <AdminQuizManager />
       ) : adminTab === 'diagnostics' ? (
         <AdminDiagnosticManager />
+      ) : adminTab === 'videos' ? (
+        <AdminVideoManager />
       ) : (
+
         <div className="space-y-8">
           {/* Filter and Search Bar */}
           <div className="bg-white p-4 rounded-2xl border border-[#E6DDCB] shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
