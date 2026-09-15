@@ -8,7 +8,8 @@ import {
 } from '../types';
 import {
   getDiagnosticQuestions, getOrCreateAttempt, getAnswersForAttempt,
-  saveAnswer, submitAttempt, deleteAttempt, getRemainingSeconds, TIME_LIMIT_SECONDS
+  saveAnswer, submitAttempt, deleteAttempt, getRemainingSeconds, TIME_LIMIT_SECONDS,
+  DEFAULT_DIAGNOSTIC_MAP_URL
 } from '../lib/diagnosticService';
 import { supabase } from '../lib/supabase';
 
@@ -365,7 +366,7 @@ export const DiagnosticTestView: FC<DiagnosticTestViewProps> = ({ onBack }) => {
 
   // ── Map URL for section II ───────────────────────────────────
   const sectionIIQuestions = bySection('II');
-  const mapUrl = sectionIIQuestions.find((q) => q.map_url)?.map_url;
+  const mapUrl = sectionIIQuestions.find((q) => q.map_url && q.map_url !== 'REPLACE_WITH_YOUR_MAP_URL')?.map_url || DEFAULT_DIAGNOSTIC_MAP_URL;
 
   // ── Main test UI ─────────────────────────────────────────────
   return (
@@ -470,25 +471,41 @@ export const DiagnosticTestView: FC<DiagnosticTestViewProps> = ({ onBack }) => {
           <div className="bg-white rounded-3xl border border-[#E6DDCB] p-6 sm:p-8 shadow-sm space-y-6">
             <SectionHeader roman="II" title={sectionTitles['II']} icon={sectionIcons['II']} />
 
-            {/* Map viewer button */}
-            {mapUrl && mapUrl !== 'REPLACE_WITH_YOUR_MAP_URL' && (
-              <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#0D1B2A] flex items-center justify-center shrink-0">
-                    <MapPin className="w-5 h-5 text-[#C79B3A]" />
+            {/* Map viewer box & inline preview */}
+            {mapUrl && (
+              <div className="p-4 sm:p-5 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[#0D1B2A] flex items-center justify-center shrink-0">
+                      <MapPin className="w-5 h-5 text-[#C79B3A]" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-[#0D1B2A]">ისტორიული რუკა</p>
+                      <p className="text-xs text-[#666666]">დავალების შესასრულებლად დააჭირეთ სურათს ან „რუკის გახსნა“-ს</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-bold text-[#0D1B2A]">ისტორიული რუკა</p>
-                    <p className="text-xs text-[#666666]">დავალების შესასრულებლად გახსენით რუკა</p>
+                  <button
+                    onClick={() => setMapModalUrl(mapUrl)}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm shrink-0"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                    <span>რუკის გახსნა</span>
+                  </button>
+                </div>
+                <div
+                  onClick={() => setMapModalUrl(mapUrl)}
+                  className="relative group cursor-pointer overflow-hidden rounded-xl border border-[#E6DDCB] bg-[#0D1B2A] max-h-80 flex items-center justify-center p-2"
+                >
+                  <img
+                    src={mapUrl}
+                    alt="ისტორიული რუკა"
+                    className="max-h-76 w-full object-contain transition-transform duration-300 group-hover:scale-[1.01] rounded-lg"
+                  />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-sm gap-2">
+                    <ZoomIn className="w-5 h-5 text-[#C79B3A]" />
+                    <span>გადიდება</span>
                   </div>
                 </div>
-                <button
-                  onClick={() => setMapModalUrl(mapUrl)}
-                  className="flex items-center gap-2 px-4 py-2 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm shrink-0"
-                >
-                  <ZoomIn className="w-4 h-4" />
-                  <span>რუკის გახსნა</span>
-                </button>
               </div>
             )}
 

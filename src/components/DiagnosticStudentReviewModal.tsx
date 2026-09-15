@@ -1,7 +1,7 @@
 import { useState, useEffect, type FC } from 'react';
-import { X, CheckCircle2, Clock, Loader2, Star, MessageSquare, BookOpen, Map, FileText, AlertTriangle } from 'lucide-react';
+import { X, CheckCircle2, Clock, Loader2, Star, MessageSquare, BookOpen, Map, FileText, AlertTriangle, ZoomIn, MapPin } from 'lucide-react';
 import { DiagnosticAttemptWithAnswers, DiagnosticQuestion } from '../types';
-import { getAttemptWithAnswers, getDiagnosticQuestions } from '../lib/diagnosticService';
+import { getAttemptWithAnswers, getDiagnosticQuestions, DEFAULT_DIAGNOSTIC_MAP_URL } from '../lib/diagnosticService';
 
 interface DiagnosticStudentReviewModalProps {
   attemptId: string;
@@ -12,6 +12,7 @@ export const DiagnosticStudentReviewModal: FC<DiagnosticStudentReviewModalProps>
   const [attempt, setAttempt] = useState<DiagnosticAttemptWithAnswers | null>(null);
   const [questions, setQuestions] = useState<DiagnosticQuestion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reviewMapModalUrl, setReviewMapModalUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -103,6 +104,7 @@ export const DiagnosticStudentReviewModal: FC<DiagnosticStudentReviewModalProps>
                 {sectionOrder.map((sec) => {
                   const qs = bySection(sec);
                   if (!qs.length) return null;
+                  const secMapUrl = qs.find((q) => q.map_url && q.map_url !== 'REPLACE_WITH_YOUR_MAP_URL')?.map_url || (sec === 'II' ? DEFAULT_DIAGNOSTIC_MAP_URL : null);
                   return (
                     <div key={sec} className="bg-white rounded-2xl border border-[#E6DDCB] p-5 space-y-5 shadow-sm">
                       <div className="flex items-center gap-3 border-b border-[#E6DDCB] pb-3">
@@ -113,6 +115,35 @@ export const DiagnosticStudentReviewModal: FC<DiagnosticStudentReviewModalProps>
                           {qs[0]?.section_title || `${sec} ნაწილი`}
                         </h4>
                       </div>
+
+                      {/* Section II Map Preview */}
+                      {sec === 'II' && secMapUrl && (
+                        <div className="p-4 bg-[#FAF8F3] rounded-xl border border-[#E6DDCB] space-y-3">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-2">
+                              <Map className="w-4 h-4 text-[#C79B3A]" />
+                              <span className="text-xs font-bold text-[#0D1B2A]">ისტორიული რუკა</span>
+                            </div>
+                            <button
+                              onClick={() => setReviewMapModalUrl(secMapUrl)}
+                              className="px-3 py-1.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <ZoomIn className="w-3.5 h-3.5" />
+                              <span>რუკის ნახვა</span>
+                            </button>
+                          </div>
+                          <div
+                            onClick={() => setReviewMapModalUrl(secMapUrl)}
+                            className="relative group cursor-pointer overflow-hidden rounded-lg border border-[#E6DDCB] bg-[#0D1B2A] max-h-48 flex items-center justify-center p-1"
+                          >
+                            <img
+                              src={secMapUrl}
+                              alt="ისტორიული რუკა"
+                              className="max-h-44 w-full object-contain rounded"
+                            />
+                          </div>
+                        </div>
+                      )}
 
                       {/* Prompt / Source context */}
                       {qs[0]?.source_text ? (
@@ -203,6 +234,39 @@ export const DiagnosticStudentReviewModal: FC<DiagnosticStudentReviewModalProps>
           </button>
         </div>
       </div>
+
+      {/* Map viewer modal */}
+      {reviewMapModalUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={() => setReviewMapModalUrl(null)}
+        >
+          <div
+            className="relative bg-white rounded-2xl overflow-hidden shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 bg-[#0D1B2A] text-white">
+              <div className="flex items-center gap-2">
+                <Map className="w-4 h-4 text-[#C79B3A]" />
+                <span className="text-sm font-bold">ისტორიული რუკა</span>
+              </div>
+              <button
+                onClick={() => setReviewMapModalUrl(null)}
+                className="p-1.5 hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="overflow-auto flex-1 bg-[#0D1B2A] flex items-center justify-center p-2">
+              <img
+                src={reviewMapModalUrl}
+                alt="ისტორიული რუკა"
+                className="max-w-full max-h-[75vh] object-contain rounded-lg"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,13 +1,14 @@
 import { useState, useEffect, type FC } from 'react';
 import {
   ClipboardCheck, ChevronLeft, CheckCircle2, Clock, Loader2,
-  AlertTriangle, Save, User, Calendar, Star, Trash2
+  AlertTriangle, Save, User, Calendar, Star, Trash2, Map, ZoomIn, MapPin, X
 } from 'lucide-react';
 import {
   DiagnosticAttemptWithAnswers, DiagnosticQuestion, DiagnosticAnswer
 } from '../types';
 import {
-  getAllAttemptsAdmin, getAttemptWithAnswers, getDiagnosticQuestions, finalizeGrading, deleteAttemptAdmin
+  getAllAttemptsAdmin, getAttemptWithAnswers, getDiagnosticQuestions, finalizeGrading, deleteAttemptAdmin,
+  DEFAULT_DIAGNOSTIC_MAP_URL
 } from '../lib/diagnosticService';
 
 // ── Status badge ────────────────────────────────────────────────
@@ -43,6 +44,7 @@ const GradingView: FC<GradingViewProps> = ({ attempt, questions, onBack, onSaved
   const [grades, setGrades] = useState<Record<string, GradeRow>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [adminMapModalUrl, setAdminMapModalUrl] = useState<string | null>(null);
 
   // Initialise from existing answers
   useEffect(() => {
@@ -137,6 +139,7 @@ const GradingView: FC<GradingViewProps> = ({ attempt, questions, onBack, onSaved
       {sectionOrder.map((sec) => {
         const qs = bySection(sec);
         if (!qs.length) return null;
+        const secMapUrl = qs.find((q) => q.map_url && q.map_url !== 'REPLACE_WITH_YOUR_MAP_URL')?.map_url || (sec === 'II' ? DEFAULT_DIAGNOSTIC_MAP_URL : null);
         return (
           <div key={sec} className="bg-white rounded-2xl border border-[#E6DDCB] p-5 space-y-5 shadow-sm">
             <div className="flex items-center gap-3 border-b border-[#E6DDCB] pb-3">
@@ -147,6 +150,35 @@ const GradingView: FC<GradingViewProps> = ({ attempt, questions, onBack, onSaved
                 {qs[0]?.section_title || `${sec} ნაწილი`}
               </h4>
             </div>
+
+            {/* Section II Map Preview */}
+            {sec === 'II' && secMapUrl && (
+              <div className="p-4 bg-[#FAF8F3] rounded-xl border border-[#E6DDCB] space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-[#C79B3A]" />
+                    <span className="text-xs font-bold text-[#0D1B2A]">ისტორიული რუკა</span>
+                  </div>
+                  <button
+                    onClick={() => setAdminMapModalUrl(secMapUrl)}
+                    className="px-3 py-1.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ZoomIn className="w-3.5 h-3.5" />
+                    <span>რუკის ნახვა</span>
+                  </button>
+                </div>
+                <div
+                  onClick={() => setAdminMapModalUrl(secMapUrl)}
+                  className="relative group cursor-pointer overflow-hidden rounded-lg border border-[#E6DDCB] bg-[#0D1B2A] max-h-48 flex items-center justify-center p-1"
+                >
+                  <img
+                    src={secMapUrl}
+                    alt="ისტორიული რუკა"
+                    className="max-h-44 w-full object-contain rounded"
+                  />
+                </div>
+              </div>
+            )}
 
             {/* Task Prompt / Source Text Header if present */}
             {qs[0]?.source_text ? (
@@ -238,6 +270,39 @@ const GradingView: FC<GradingViewProps> = ({ attempt, questions, onBack, onSaved
           )}
         </button>
       </div>
+
+      {/* Map modal viewer for Admin */}
+      {adminMapModalUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={() => setAdminMapModalUrl(null)}
+        >
+          <div
+            className="relative bg-white rounded-2xl overflow-hidden shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 bg-[#0D1B2A] text-white">
+              <div className="flex items-center gap-2">
+                <Map className="w-4 h-4 text-[#C79B3A]" />
+                <span className="text-sm font-bold">ისტორიული რუკა</span>
+              </div>
+              <button
+                onClick={() => setAdminMapModalUrl(null)}
+                className="p-1.5 hover:bg-white/10 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="overflow-auto flex-1 bg-[#0D1B2A] flex items-center justify-center p-2">
+              <img
+                src={adminMapModalUrl}
+                alt="ისტორიული რუკა"
+                className="max-w-full max-h-[75vh] object-contain rounded-lg"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

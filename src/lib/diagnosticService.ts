@@ -9,6 +9,7 @@ import {
 
 export const TEST_ID = 'diagnostic-1';
 export const TIME_LIMIT_SECONDS = 25 * 60;
+export const DEFAULT_DIAGNOSTIC_MAP_URL = 'https://enjnwxpzafroxapksdlt.supabase.co/storage/v1/object/public/photos/diagnostika.PNG';
 
 export const getDiagnosticQuestions = async (): Promise<DiagnosticQuestion[]> => {
   const { data, error } = await supabase
@@ -20,6 +21,9 @@ export const getDiagnosticQuestions = async (): Promise<DiagnosticQuestion[]> =>
   return (data || []).map((row: any) => ({
     ...row,
     options: Array.isArray(row.options) ? row.options : row.options ? JSON.parse(row.options) : null,
+    map_url: (row.map_url && row.map_url !== 'REPLACE_WITH_YOUR_MAP_URL')
+      ? row.map_url
+      : (row.section === 'II' ? DEFAULT_DIAGNOSTIC_MAP_URL : row.map_url),
   })) as DiagnosticQuestion[];
 };
 
