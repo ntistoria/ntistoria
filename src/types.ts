@@ -1,4 +1,4 @@
-export type NavTab = 'home' | 'blog' | 'tests' | 'videos' | 'quizzes' | 'contact' | 'admin' | 'universities' | 'colleges' | 'programs';
+export type NavTab = 'home' | 'blog' | 'tests' | 'videos' | 'quizzes' | 'contact' | 'admin' | 'universities' | 'colleges' | 'programs' | 'profile';
 
 export interface University {
   id: number;

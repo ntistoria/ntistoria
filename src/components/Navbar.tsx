@@ -131,15 +131,17 @@ export const Navbar: FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenSearch,
                   </button>
                 )}
 
-                {onOpenProfile && (
-                  <button
-                    onClick={onOpenProfile}
-                    className="flex items-center gap-1.5 text-xs font-semibold text-[#13253D] bg-[#F5F2EA] hover:bg-[#E6DDCB]/60 px-3 py-1.5 rounded-lg border border-[#E6DDCB] cursor-pointer transition-colors whitespace-nowrap"
-                  >
-                    <User className="w-3.5 h-3.5 text-[#C79B3A]" />
-                    <span>{user.name}</span>
-                  </button>
-                )}
+                <button
+                  onClick={() => handleNavClick('profile')}
+                  className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border cursor-pointer transition-all whitespace-nowrap ${
+                    activeTab === 'profile'
+                      ? 'bg-[#0D1B2A] text-white border-[#C79B3A]'
+                      : 'bg-[#F5F2EA] text-[#13253D] hover:bg-[#E6DDCB]/60 border-[#E6DDCB]'
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5 text-[#C79B3A]" />
+                  <span>{user.name}</span>
+                </button>
 
                 <button
                   onClick={onLogout}
@@ -230,15 +232,13 @@ export const Navbar: FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenSearch,
                       <span>ადმინ პანელი</span>
                     </button>
                   )}
-                  {onOpenProfile && (
-                    <button
-                      onClick={() => { if (onOpenProfile) onOpenProfile(); setMobileMenuOpen(false); }}
-                      className="w-full flex items-center gap-2 px-4 py-2.5 bg-[#F5F2EA] hover:bg-[#E6DDCB] text-[#13253D] font-semibold text-sm rounded-xl border border-[#E6DDCB] cursor-pointer"
-                    >
-                      <User className="w-4 h-4 text-[#C79B3A]" />
-                      <span>პროფილი</span>
-                    </button>
-                  )}
+                  <button
+                    onClick={() => { handleNavClick('profile'); }}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 bg-[#F5F2EA] hover:bg-[#E6DDCB] text-[#13253D] font-semibold text-sm rounded-xl border border-[#E6DDCB] cursor-pointer"
+                  >
+                    <User className="w-4 h-4 text-[#C79B3A]" />
+                    <span>პროფილი</span>
+                  </button>
                 </div>
               ) : (
                 <button

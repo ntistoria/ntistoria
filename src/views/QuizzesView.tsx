@@ -181,12 +181,6 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
           handleBackToList(true);
         });
       }
-    } else {
-      if (viewState !== 'list') {
-        setViewState('list');
-        setActiveQuiz(null);
-        onActiveQuizChange?.(null);
-      }
     }
   }, [initialQuizId, quizzes, loadingList]);
 

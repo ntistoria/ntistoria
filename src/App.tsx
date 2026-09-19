@@ -20,6 +20,7 @@ import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { SearchModal } from './components/SearchModal';
 import { AuthModal } from './components/AuthModal';
 import { StudentProfileModal } from './components/StudentProfileModal';
+import { ProfileView } from './views/ProfileView';
 import { supabase } from './lib/supabase';
 import { isAdminUser, fetchAllArticles, getInitialArticles, generateSlug } from './lib/blogService';
 import { fetchUserProfile, syncUserProfile } from './lib/userService';
@@ -221,6 +222,12 @@ export function App() {
 
     if (pathname === '/admin') {
       setActiveTab('admin');
+      clearOtherStates();
+      return;
+    }
+
+    if (pathname === '/profile') {
+      setActiveTab('profile');
       clearOtherStates();
       return;
     }
@@ -437,9 +444,17 @@ export function App() {
 
       case 'contact':
         updateSeoMetaData({
-          title: 'კონტაქტი — NT ისტორიის მასწავლებელი ნოდარ თოთაძე',
-          description: 'დაუკავშირდით ისტორიის პედაგოგ ნოდარ თოთაძეს. ეროვნული გამოცდების მოსამზადებელი ჯგუფები, მისამართი და საკონტაქტო ინფორმაცია.',
+          title: 'კონტაქტი — NT ისტორიის მასწავლებელი',
+          description: 'დაუკავშირდით ისტორიის პედაგოგ ნოდარ თოთაძეს. საკონტაქტო ინფორმაცია, ტელეფონი, ელ-ფოსტა და მისამართი.',
           canonicalUrl: `${domain}/contact`
+        });
+        break;
+
+      case 'profile':
+        updateSeoMetaData({
+          title: 'მოსწავლის პროფილი — NT ისტორია',
+          description: 'იხილეთ თქვენი ტესტების პროგრესი, ნაპასუხები ქვიზების შედეგები და დეტალური ანალიზი.',
+          canonicalUrl: `${domain}/profile`
         });
         break;
 
@@ -683,6 +698,17 @@ export function App() {
                     onOpenArticle={handleOpenArticle}
                   />
                 )}
+
+                {activeTab === 'profile' && (
+                  <ProfileView
+                    user={user}
+                    onOpenQuiz={(quizId) => {
+                      setSelectedQuizId(quizId);
+                      handleTabChange('quizzes');
+                    }}
+                    onOpenAuth={() => setIsAuthOpen(true)}
+                  />
+                )}
               </>
             )}
           </>
@@ -723,16 +749,7 @@ export function App() {
         }}
       />
 
-      <StudentProfileModal
-        isOpen={isProfileOpen}
-        onClose={() => setIsProfileOpen(false)}
-        user={user}
-        onOpenQuiz={(quizId) => {
-          setIsProfileOpen(false);
-          setSelectedQuizId(quizId);
-          handleTabChange('quizzes');
-        }}
-      />
+      {/* Interactive Modals */}
     </div>
   );
 }
