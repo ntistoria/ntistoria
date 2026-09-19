@@ -130,10 +130,10 @@ export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
       </div>
 
       {/* ADMIN TABS NAVIGATION */}
-      <div className="flex items-center gap-2 p-1.5 bg-white rounded-2xl border border-[#E6DDCB] shadow-sm w-fit">
+      <div className="flex items-center gap-2 p-1.5 bg-white rounded-2xl border border-[#E6DDCB] shadow-sm w-full max-w-full overflow-x-auto no-scrollbar flex-nowrap">
         <button
           onClick={() => setAdminTab('blogs')}
-          className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+          className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap ${
             adminTab === 'blogs'
               ? 'bg-[#0D1B2A] text-[#FAF8F3] shadow-md'
               : 'text-[#666666] hover:bg-[#FAF8F3] hover:text-[#0D1B2A]'
@@ -145,7 +145,7 @@ export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
 
         <button
           onClick={() => setAdminTab('quizzes')}
-          className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+          className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap ${
             adminTab === 'quizzes'
               ? 'bg-[#0D1B2A] text-[#FAF8F3] shadow-md'
               : 'text-[#666666] hover:bg-[#FAF8F3] hover:text-[#0D1B2A]'
@@ -157,7 +157,7 @@ export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
 
         <button
           onClick={() => setAdminTab('videos')}
-          className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+          className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap ${
             adminTab === 'videos'
               ? 'bg-[#0D1B2A] text-[#FAF8F3] shadow-md'
               : 'text-[#666666] hover:bg-[#FAF8F3] hover:text-[#0D1B2A]'

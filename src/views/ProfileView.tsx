@@ -258,10 +258,10 @@ export const ProfileView: FC<ProfileViewProps> = ({
       </div>
 
       {/* Navigation In-Page Tabs */}
-      <div className="flex items-center gap-2 p-1.5 bg-white rounded-2xl border border-[#E6DDCB] shadow-sm w-fit overflow-x-auto">
+      <div className="flex items-center gap-2 p-1.5 bg-white rounded-2xl border border-[#E6DDCB] shadow-sm w-full max-w-full overflow-x-auto no-scrollbar flex-nowrap">
         <button
           onClick={() => setActiveTab('quizzes')}
-          className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+          className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'quizzes'
               ? 'bg-[#0D1B2A] text-[#FAF8F3] shadow-md'
               : 'text-[#666666] hover:bg-[#FAF8F3] hover:text-[#0D1B2A]'
@@ -273,7 +273,7 @@ export const ProfileView: FC<ProfileViewProps> = ({
 
         <button
           onClick={() => setActiveTab('chapters')}
-          className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+          className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'chapters'
               ? 'bg-[#0D1B2A] text-[#FAF8F3] shadow-md'
               : 'text-[#666666] hover:bg-[#FAF8F3] hover:text-[#0D1B2A]'
@@ -285,7 +285,7 @@ export const ProfileView: FC<ProfileViewProps> = ({
 
         <button
           onClick={() => setActiveTab('categories')}
-          className={`px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 ${
+          className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap ${
             activeTab === 'categories'
               ? 'bg-[#0D1B2A] text-[#FAF8F3] shadow-md'
               : 'text-[#666666] hover:bg-[#FAF8F3] hover:text-[#0D1B2A]'
