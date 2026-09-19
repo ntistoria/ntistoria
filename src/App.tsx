@@ -727,6 +727,11 @@ export function App() {
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
         user={user}
+        onOpenQuiz={(quizId) => {
+          setIsProfileOpen(false);
+          setSelectedQuizId(quizId);
+          handleTabChange('quizzes');
+        }}
       />
     </div>
   );

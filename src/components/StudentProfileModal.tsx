@@ -1,26 +1,41 @@
 import { useState, useEffect, type FC } from 'react';
-import { X, Award, CheckCircle2, RotateCcw, ShieldCheck, BookOpen, MapPin, Layers, FileText, Clock, Image as ImageIcon, BookMarked, ExternalLink } from 'lucide-react';
+import {
+  X, Award, CheckCircle2, RotateCcw, ShieldCheck, BookOpen, MapPin,
+  Layers, FileText, Clock, Image as ImageIcon, BookMarked, HelpCircle,
+  Trophy, Trash2, Eye, Play, Sparkles
+} from 'lucide-react';
 import { getStudentProgress, resetStudentProgress, StudentProfileProgress, ChapterProgressStats } from '../lib/progressService';
 import { TEST_CATEGORIES, fetchProgramsAndSubprograms, ProgramChapter } from '../lib/testService';
 import { isAdminUser } from '../lib/blogService';
 import { fetchUserProfile, syncUserProfile } from '../lib/userService';
+import { fetchUserQuizAttempts, deleteQuizAttempt, getQuizImageUrl, getQuizResultFeedback } from '../lib/quizService';
+import { QuizAttempt } from '../types';
+import { QuizStudentReviewModal } from './QuizStudentReviewModal';
+import { supabase } from '../lib/supabase';
 
 interface StudentProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: { name: string; email: string } | null;
+  onOpenQuiz?: (quizId: string) => void;
 }
 
 export const StudentProfileModal: FC<StudentProfileModalProps> = ({
   isOpen,
   onClose,
-  user
+  user,
+  onOpenQuiz
 }) => {
   const [progress, setProgress] = useState<StudentProfileProgress | null>(null);
   const [programs, setPrograms] = useState<ProgramChapter[]>([]);
-  const [activeTab, setActiveTab] = useState<'chapters' | 'categories'>('chapters');
+  const [activeTab, setActiveTab] = useState<'chapters' | 'categories' | 'quizzes'>('chapters');
   const [isResetting, setIsResetting] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+
+  // Quiz Attempts state
+  const [quizAttempts, setQuizAttempts] = useState<QuizAttempt[]>([]);
+  const [loadingQuizzes, setLoadingQuizzes] = useState(false);
+  const [selectedReviewAttempt, setSelectedReviewAttempt] = useState<QuizAttempt | null>(null);
 
   const [profileName, setProfileName] = useState('');
   const [isEditingName, setIsEditingName] = useState(false);
@@ -28,24 +43,39 @@ export const StudentProfileModal: FC<StudentProfileModalProps> = ({
 
   const userEmail = user?.email || '';
 
+  const loadData = async () => {
+    if (!userEmail) return;
+    const progs = await fetchProgramsAndSubprograms();
+    setPrograms(progs);
+
+    const data = await getStudentProgress(userEmail);
+    setProgress(data);
+
+    // Fetch profile from Supabase profiles table
+    const dbProf = await fetchUserProfile(userEmail);
+    if (dbProf && dbProf.full_name) {
+      setProfileName(dbProf.full_name);
+    } else {
+      setProfileName(user?.name || userEmail.split('@')[0]);
+    }
+
+    // Load Quiz attempts for logged-in user
+    setLoadingQuizzes(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id || '';
+      const attempts = await fetchUserQuizAttempts(userId, user?.name);
+      setQuizAttempts(attempts);
+    } catch (err) {
+      console.error('Error loading user quiz attempts:', err);
+    } finally {
+      setLoadingQuizzes(false);
+    }
+  };
+
   useEffect(() => {
     if (isOpen && userEmail) {
-      const load = async () => {
-        const progs = await fetchProgramsAndSubprograms();
-        setPrograms(progs);
-
-        const data = await getStudentProgress(userEmail);
-        setProgress(data);
-
-        // Fetch profile from Supabase profiles table
-        const dbProf = await fetchUserProfile(userEmail);
-        if (dbProf && dbProf.full_name) {
-          setProfileName(dbProf.full_name);
-        } else {
-          setProfileName(user?.name || userEmail.split('@')[0]);
-        }
-      };
-      load();
+      loadData();
     }
   }, [isOpen, userEmail, user]);
 
@@ -66,6 +96,12 @@ export const StudentProfileModal: FC<StudentProfileModalProps> = ({
     } finally {
       setIsSavingName(false);
     }
+  };
+
+  const handleDeleteQuizAttemptItem = async (attemptId: string) => {
+    if (!confirm('ნამდვილად გსურთ ამ ქვიზის შედეგის წაშლა?')) return;
+    await deleteQuizAttempt(attemptId);
+    setQuizAttempts(prev => prev.filter(a => a.id !== attemptId));
   };
 
   const isAdmin = isAdminUser(user);
@@ -180,29 +216,41 @@ export const StudentProfileModal: FC<StudentProfileModalProps> = ({
           </div>
 
           {/* Navigation Sub-Tabs */}
-          <div className="px-6 pt-3 bg-[#FAF8F3] border-b border-[#E6DDCB] flex items-center gap-4">
+          <div className="px-6 pt-3 bg-[#FAF8F3] border-b border-[#E6DDCB] flex items-center gap-3 overflow-x-auto">
             <button
               onClick={() => setActiveTab('chapters')}
-              className={`pb-2.5 text-xs font-bold transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
+              className={`pb-2.5 text-xs font-bold transition-all border-b-2 cursor-pointer flex items-center gap-2 shrink-0 ${
                 activeTab === 'chapters'
                   ? 'border-[#C79B3A] text-[#0D1B2A]'
                   : 'border-transparent text-[#666666] hover:text-[#0D1B2A]'
               }`}
             >
               <BookMarked className="w-4 h-4 text-[#C79B3A]" />
-              <span>პროგრამის თავების პროგრესი ({programs.length} თავი)</span>
+              <span>თავების პროგრესი ({programs.length})</span>
             </button>
 
             <button
               onClick={() => setActiveTab('categories')}
-              className={`pb-2.5 text-xs font-bold transition-all border-b-2 cursor-pointer flex items-center gap-2 ${
+              className={`pb-2.5 text-xs font-bold transition-all border-b-2 cursor-pointer flex items-center gap-2 shrink-0 ${
                 activeTab === 'categories'
                   ? 'border-[#C79B3A] text-[#0D1B2A]'
                   : 'border-transparent text-[#666666] hover:text-[#0D1B2A]'
               }`}
             >
               <Award className="w-4 h-4 text-[#C79B3A]" />
-              <span>დავალების ტიპების პროგრესი</span>
+              <span>ტიპების პროგრესი</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('quizzes')}
+              className={`pb-2.5 text-xs font-bold transition-all border-b-2 cursor-pointer flex items-center gap-2 shrink-0 ${
+                activeTab === 'quizzes'
+                  ? 'border-[#C79B3A] text-[#0D1B2A]'
+                  : 'border-transparent text-[#666666] hover:text-[#0D1B2A]'
+              }`}
+            >
+              <HelpCircle className="w-4 h-4 text-[#C79B3A]" />
+              <span>ქვიზების შედეგები ({quizAttempts.length})</span>
             </button>
           </div>
 
@@ -358,6 +406,116 @@ export const StudentProfileModal: FC<StudentProfileModalProps> = ({
               </div>
             )}
 
+            {/* TAB 3: QUIZ ATTEMPTS & RESULTS */}
+            {activeTab === 'quizzes' && (
+              <div className="bg-white rounded-2xl border border-[#E6DDCB] p-5 space-y-4 shadow-sm">
+                <div className="flex items-center justify-between border-b border-[#E6DDCB] pb-3">
+                  <div className="flex items-center gap-2">
+                    <HelpCircle className="w-4 h-4 text-[#C79B3A]" />
+                    <h3 className="font-serif font-bold text-base text-[#0D1B2A]">ნაპასუხები ქვიზების შედეგები</h3>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-[#666666]">
+                    {quizAttempts.length} მცდელობა
+                  </span>
+                </div>
+
+                {loadingQuizzes ? (
+                  <div className="py-10 text-center text-xs text-[#666666] font-medium space-y-2">
+                    <div className="w-5 h-5 border-2 border-[#C79B3A] border-t-transparent rounded-full animate-spin mx-auto" />
+                    <span>ქვიზების ჩატვირთვა...</span>
+                  </div>
+                ) : quizAttempts.length === 0 ? (
+                  <div className="p-8 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] text-center space-y-2">
+                    <HelpCircle className="w-8 h-8 text-[#C79B3A] mx-auto opacity-50" />
+                    <p className="text-xs text-[#666666]">
+                      ინტერაქტიული ქვიზი ჯერ არ გაგივლიათ.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {quizAttempts.map((attempt) => {
+                      const feedback = getQuizResultFeedback(attempt.percentage);
+                      const coverUrl = getQuizImageUrl(attempt.quiz_cover_image_path, 'quiz-covers');
+
+                      return (
+                        <div
+                          key={attempt.id}
+                          className="bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] overflow-hidden shadow-xs flex flex-col justify-between hover:border-[#C79B3A]/60 transition-all"
+                        >
+                          <div>
+                            {/* Card Cover Header */}
+                            <div className="relative h-28 bg-[#0D1B2A] overflow-hidden flex items-center justify-center">
+                              {coverUrl ? (
+                                <img
+                                  src={coverUrl}
+                                  alt={attempt.quiz_title || 'Quiz'}
+                                  className="w-full h-full object-cover opacity-75"
+                                />
+                              ) : (
+                                <div className="absolute inset-0 bg-gradient-to-br from-[#0D1B2A] to-[#13253D] flex items-center justify-center">
+                                  <HelpCircle className="w-10 h-10 text-[#C79B3A]/40" />
+                                </div>
+                              )}
+                              <div className="absolute top-2 right-2 px-2.5 py-1 bg-[#0D1B2A]/85 backdrop-blur-xs text-[#C79B3A] font-bold text-xs font-mono rounded-lg border border-[#C79B3A]/30">
+                                {attempt.percentage}%
+                              </div>
+                              <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/60 backdrop-blur-xs text-[#FAF8F3] text-[10px] font-bold rounded-md">
+                                {feedback.badge}
+                              </div>
+                            </div>
+
+                            {/* Card Content */}
+                            <div className="p-4 space-y-2">
+                              <h4 className="font-serif font-bold text-sm text-[#0D1B2A] line-clamp-1">
+                                {attempt.quiz_title || 'ისტორიული ქვიზი'}
+                              </h4>
+                              <div className="flex items-center justify-between text-xs text-[#666666]">
+                                <span>შედეგი: <strong className="text-[#0D1B2A] font-mono">{attempt.correct_answers}/{attempt.total_questions}</strong></span>
+                                <span className="text-[10px] font-mono">{new Date(attempt.created_at).toLocaleDateString('ka-GE')}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Card Footer Actions */}
+                          <div className="p-3 bg-white border-t border-[#E6DDCB] flex items-center justify-between gap-1.5">
+                            <button
+                              onClick={() => setSelectedReviewAttempt(attempt)}
+                              className="px-3 py-1.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-[11px] font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>დეტალები</span>
+                            </button>
+
+                            {onOpenQuiz && (
+                              <button
+                                onClick={() => {
+                                  onClose();
+                                  onOpenQuiz(attempt.quiz_id);
+                                }}
+                                className="px-2.5 py-1.5 bg-[#FAF8F3] hover:bg-[#E6DDCB] text-[#0D1B2A] text-[11px] font-bold rounded-xl border border-[#E6DDCB] transition-all cursor-pointer flex items-center gap-1"
+                              >
+                                <RotateCcw className="w-3 h-3 text-[#C79B3A]" />
+                                <span>ხელახლა</span>
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => handleDeleteQuizAttemptItem(attempt.id)}
+                              className="p-1.5 text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                              title="წაშლა"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Reset / Clear Data Action Box */}
             <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-5 space-y-3">
               <div className="flex items-start gap-3">
@@ -397,6 +555,18 @@ export const StudentProfileModal: FC<StudentProfileModalProps> = ({
         </div>
       </div>
 
+      {/* Detailed Quiz Attempt Review Modal */}
+      {selectedReviewAttempt && (
+        <QuizStudentReviewModal
+          attempt={selectedReviewAttempt}
+          onClose={() => setSelectedReviewAttempt(null)}
+          onRetake={(quizId) => {
+            setSelectedReviewAttempt(null);
+            onClose();
+            onOpenQuiz?.(quizId);
+          }}
+        />
+      )}
     </>
   );
 };

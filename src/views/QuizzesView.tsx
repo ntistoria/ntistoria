@@ -9,6 +9,8 @@ import {
   getQuizResultFeedback, getQuizImageUrl
 } from '../lib/quizService';
 import { QuizLeaderboardModal } from '../components/QuizLeaderboardModal';
+import { QuizStudentReviewModal } from '../components/QuizStudentReviewModal';
+import { supabase } from '../lib/supabase';
 
 interface QuizzesViewProps {
   user?: { name: string; email: string } | null;
@@ -70,11 +72,8 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Result state
-  const [attemptResult, setAttemptResult] = useState<{
-    correct_answers: number;
-    total_questions: number;
-    percentage: number;
-  } | null>(null);
+  const [attemptResult, setAttemptResult] = useState<QuizAttempt | null>(null);
+  const [reviewAttempt, setReviewAttempt] = useState<QuizAttempt | null>(null);
 
   // Leaderboard modal state
   const [leaderboardQuiz, setLeaderboardQuiz] = useState<{ id: string; title: string } | null>(null);
@@ -265,18 +264,32 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
         answer_id
       }));
 
+      // Get logged-in user session ID if available
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentUserId = session?.user?.id || null;
+
       const res = await submitQuizAttempt(
         activeQuiz.id,
-        user?.email ? null : null, // keep guest/user clean
+        currentUserId,
         displayName,
         userAnswersList
       );
 
-      setAttemptResult({
+      const createdAttempt: QuizAttempt = {
+        id: res.attempt_id,
+        quiz_id: activeQuiz.id,
+        user_id: currentUserId,
+        guest_name: displayName,
         correct_answers: res.correct_answers,
         total_questions: res.total_questions,
-        percentage: res.percentage
-      });
+        percentage: res.percentage,
+        created_at: new Date().toISOString(),
+        user_answers: userAnswersList,
+        quiz_title: activeQuiz.title,
+        quiz_cover_image_path: activeQuiz.cover_image_path
+      };
+
+      setAttemptResult(createdAttempt);
 
       setIsGuestNameModalOpen(false);
       setViewState('result');
@@ -774,8 +787,16 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
                   </div>
                 </div>
 
-                {/* Action Buttons (Try Again / Leaderboard / Exit) */}
+                {/* Action Buttons (Detailed Review / Try Again / Leaderboard / Exit) */}
                 <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <button
+                    onClick={() => setReviewAttempt(attemptResult)}
+                    className="w-full sm:w-auto px-6 py-3.5 bg-[#0D1B2A] hover:bg-[#1A2E40] text-white text-xs font-bold rounded-xl transition-all shadow flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Eye className="w-4 h-4 text-[#C79B3A]" />
+                    <span>დეტალური შედეგის ნახვა</span>
+                  </button>
+
                   <button
                     onClick={() => handleStartQuiz(activeQuiz)}
                     className="w-full sm:w-auto px-6 py-3.5 bg-[#FAF8F3] hover:bg-[#F3EEDF] text-[#0D1B2A] text-xs font-bold rounded-xl border border-[#E6DDCB] transition-all flex items-center justify-center gap-2 cursor-pointer"
@@ -816,6 +837,18 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
           onClose={() => setLeaderboardQuiz(null)}
           quizId={leaderboardQuiz.id}
           quizTitle={leaderboardQuiz.title}
+        />
+      )}
+
+      {/* Detailed Review Modal for Quiz Attempt */}
+      {reviewAttempt && (
+        <QuizStudentReviewModal
+          attempt={reviewAttempt}
+          onClose={() => setReviewAttempt(null)}
+          onRetake={(quizId) => {
+            setReviewAttempt(null);
+            if (activeQuiz) handleStartQuiz(activeQuiz);
+          }}
         />
       )}
 

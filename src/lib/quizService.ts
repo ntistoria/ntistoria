@@ -239,7 +239,8 @@ export async function submitQuizAttempt(
       guest_name: cleanGuest,
       correct_answers: correct,
       total_questions: total,
-      percentage: percentage
+      percentage: percentage,
+      user_answers: userAnswers
     });
   } catch (e) {
     console.warn('Failed to insert attempt to Supabase, saving to localStorage:', e);
@@ -251,7 +252,8 @@ export async function submitQuizAttempt(
       correct_answers: correct,
       total_questions: total,
       percentage: percentage,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      user_answers: userAnswers
     });
   }
 
@@ -261,6 +263,147 @@ export async function submitQuizAttempt(
     total_questions: total,
     percentage: percentage
   };
+}
+
+// Local attempts helpers
+function saveLocalAttempt(attempt: QuizAttempt) {
+  try {
+    const existing = getLocalAttempts();
+    const updated = [attempt, ...existing];
+    localStorage.setItem('nt_quiz_attempts', JSON.stringify(updated));
+  } catch (e) {
+    console.error('Error saving local quiz attempt:', e);
+  }
+}
+
+function getLocalAttempts(quizId?: string): QuizAttempt[] {
+  try {
+    const raw = localStorage.getItem('nt_quiz_attempts');
+    if (!raw) return [];
+    const parsed: QuizAttempt[] = JSON.parse(raw);
+    if (quizId) {
+      return parsed.filter(a => a.quiz_id === quizId);
+    }
+    return parsed;
+  } catch (e) {
+    return [];
+  }
+}
+
+export function removeLocalAttempt(attemptId: string) {
+  try {
+    const existing = getLocalAttempts();
+    const updated = existing.filter(a => a.id !== attemptId);
+    localStorage.setItem('nt_quiz_attempts', JSON.stringify(updated));
+  } catch (e) {
+    console.error('Error removing local quiz attempt:', e);
+  }
+}
+
+// Fetch all attempts for a specific logged-in user or guest
+export async function fetchUserQuizAttempts(userId: string, guestName?: string): Promise<QuizAttempt[]> {
+  try {
+    let query = supabase
+      .from('quiz_attempts')
+      .select('id, quiz_id, user_id, guest_name, correct_answers, total_questions, percentage, created_at, user_answers')
+      .order('created_at', { ascending: false });
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    } else if (guestName) {
+      query = query.eq('guest_name', guestName);
+    } else {
+      return getLocalAttempts();
+    }
+
+    const { data: attempts, error } = await query;
+
+    let dbAttempts = attempts || [];
+
+    if (error || dbAttempts.length === 0) {
+      dbAttempts = getLocalAttempts();
+    }
+
+    if (dbAttempts.length === 0) return [];
+
+    // Fetch quiz titles and cover images for each attempt
+    const quizIds = [...new Set(dbAttempts.map(a => a.quiz_id))];
+    const quizMap = new Map<string, { title: string; cover_image_path: string | null }>();
+
+    if (quizIds.length > 0) {
+      const { data: quizzes } = await supabase
+        .from('quizzes')
+        .select('id, title, cover_image_path')
+        .in('id', quizIds);
+
+      (quizzes || []).forEach(q => {
+        quizMap.set(q.id, { title: q.title, cover_image_path: q.cover_image_path });
+      });
+    }
+
+    return dbAttempts.map(a => {
+      const qInfo = quizMap.get(a.quiz_id);
+      return {
+        ...a,
+        quiz_title: qInfo?.title || a.quiz_title || 'ისტორიული ქვიზი',
+        quiz_cover_image_path: qInfo?.cover_image_path || a.quiz_cover_image_path || null
+      };
+    });
+  } catch (err) {
+    console.error('Error fetching user quiz attempts:', err);
+    return getLocalAttempts();
+  }
+}
+
+// Delete Quiz Attempt
+export async function deleteQuizAttempt(attemptId: string): Promise<boolean> {
+  removeLocalAttempt(attemptId);
+  try {
+    const { error } = await supabase
+      .from('quiz_attempts')
+      .delete()
+      .eq('id', attemptId);
+
+    if (error) {
+      console.error('Error deleting quiz attempt from DB:', error);
+    }
+    return true;
+  } catch (err) {
+    console.error('Error in deleteQuizAttempt:', err);
+    return true;
+  }
+}
+
+// Fetch Quiz Questions with correct answer flags for Detailed Review Modal
+export async function fetchQuizQuestionsWithAnswers(quizId: string): Promise<QuizQuestionItem[]> {
+  try {
+    const { data: questionsData, error: qError } = await supabase
+      .from('quiz_questions')
+      .select('id, quiz_id, question_text, image_path, question_order')
+      .eq('quiz_id', quizId)
+      .order('question_order', { ascending: true });
+
+    if (qError || !questionsData) return [];
+
+    const result: QuizQuestionItem[] = [];
+    for (const q of questionsData) {
+      const { data: answersData } = await supabase
+        .from('quiz_answers')
+        .select('id, question_id, answer_text, is_correct, answer_order')
+        .eq('question_id', q.id)
+        .order('answer_order', { ascending: true });
+
+      result.push({
+        ...q,
+        answers: answersData || []
+      });
+    }
+
+    return result;
+  } catch (err) {
+    console.error('Error fetching questions with answers for review:', err);
+    return [];
+  }
 }
 
 // Fetch Leaderboard for a specific quiz (Best score per user/guest)

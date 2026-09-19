@@ -186,6 +186,9 @@ export interface QuizAttempt {
   total_questions: number;
   percentage: number;
   created_at: string;
+  user_answers?: { question_id: string; answer_id: string }[] | Record<string, string> | null;
+  quiz_title?: string;
+  quiz_cover_image_path?: string | null;
 }
 
 export interface QuizLeaderboardItem {
