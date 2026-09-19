@@ -1,7 +1,7 @@
 import { useState, useEffect, type FC } from 'react';
 import {
   HelpCircle, ArrowRight, ArrowLeft, Trophy, CheckCircle2, RotateCcw,
-  Share2, Copy, Check, Sparkles, Award, User, Clock, AlertCircle, X, ExternalLink, Link as LinkIcon
+  Share2, Copy, Check, Sparkles, Award, User, Clock, AlertCircle, X, ExternalLink, Link as LinkIcon, Eye
 } from 'lucide-react';
 import { QuizItem, QuizQuestionItem, QuizAnswerItem, QuizAttempt } from '../types';
 import {
