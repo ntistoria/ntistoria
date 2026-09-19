@@ -1,13 +1,9 @@
 import { useState, useEffect, type FC } from 'react';
-import { X, Award, CheckCircle2, RotateCcw, ShieldCheck, BookOpen, MapPin, Layers, FileText, Clock, Image as ImageIcon, BookMarked, ClipboardCheck, MessageSquare, ExternalLink } from 'lucide-react';
+import { X, Award, CheckCircle2, RotateCcw, ShieldCheck, BookOpen, MapPin, Layers, FileText, Clock, Image as ImageIcon, BookMarked, ExternalLink } from 'lucide-react';
 import { getStudentProgress, resetStudentProgress, StudentProfileProgress, ChapterProgressStats } from '../lib/progressService';
 import { TEST_CATEGORIES, fetchProgramsAndSubprograms, ProgramChapter } from '../lib/testService';
 import { isAdminUser } from '../lib/blogService';
 import { fetchUserProfile, syncUserProfile } from '../lib/userService';
-import { getAttemptsByUser } from '../lib/diagnosticService';
-import { DiagnosticAttempt } from '../types';
-import { supabase } from '../lib/supabase';
-import { DiagnosticStudentReviewModal } from './DiagnosticStudentReviewModal';
 
 interface StudentProfileModalProps {
   isOpen: boolean;
@@ -25,8 +21,6 @@ export const StudentProfileModal: FC<StudentProfileModalProps> = ({
   const [activeTab, setActiveTab] = useState<'chapters' | 'categories'>('chapters');
   const [isResetting, setIsResetting] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
-  const [diagnosticAttempts, setDiagnosticAttempts] = useState<DiagnosticAttempt[]>([]);
-  const [reviewAttemptId, setReviewAttemptId] = useState<string | null>(null);
 
   const [profileName, setProfileName] = useState('');
   const [isEditingName, setIsEditingName] = useState(false);
@@ -50,12 +44,6 @@ export const StudentProfileModal: FC<StudentProfileModalProps> = ({
         } else {
           setProfileName(user?.name || userEmail.split('@')[0]);
         }
-
-        // Load all diagnostic attempts for student
-        const { data: { session } } = await supabase.auth.getSession();
-        const userId = session?.user?.id || '';
-        const atts = await getAttemptsByUser(userId, userEmail);
-        setDiagnosticAttempts(atts);
       };
       load();
     }
@@ -370,66 +358,6 @@ export const StudentProfileModal: FC<StudentProfileModalProps> = ({
               </div>
             )}
 
-            {/* Diagnostic Test Status Section (Lists all attempts for retakes) */}
-            <div className="bg-white rounded-2xl border border-[#E6DDCB] p-5 shadow-sm space-y-3">
-              <div className="flex items-center justify-between border-b border-[#E6DDCB] pb-3">
-                <div className="flex items-center gap-2">
-                  <ClipboardCheck className="w-4 h-4 text-[#C79B3A]" />
-                  <h3 className="font-serif font-bold text-sm text-[#0D1B2A]">სადიაგნოსტიკო ტესტების შედეგები</h3>
-                </div>
-                <span className="text-[11px] text-[#666666] font-mono font-bold">
-                  {diagnosticAttempts.length} მცდელობა
-                </span>
-              </div>
-
-              {diagnosticAttempts.length === 0 ? (
-                <div className="p-4 bg-[#FAF8F3] rounded-xl border border-[#E6DDCB] text-center text-xs text-[#666666]">
-                  სადიაგნოსტიკო ტესტი ჯერ არ ჩაგიბარებიათ
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {diagnosticAttempts.map((att, idx) => (
-                    <div
-                      key={att.id}
-                      className="p-4 bg-[#FAF8F3] rounded-xl border border-[#E6DDCB] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3"
-                    >
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-[#0D1B2A]">
-                            სადიაგნოსტიკო ტესტი N1 (მცდელობა #{diagnosticAttempts.length - idx})
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-[#666666] mt-0.5 font-mono">
-                          გაგზავნილია: {att.submitted_at ? new Date(att.submitted_at).toLocaleString('ka-GE') : att.created_at ? new Date(att.created_at).toLocaleString('ka-GE') : '—'}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-3 self-end sm:self-auto">
-                        {att.status === 'graded' ? (
-                          <div className="flex items-center gap-3">
-                            <span className="text-emerald-700 font-mono font-bold text-base">
-                              {att.total_score}/{att.max_score}
-                            </span>
-                            <button
-                              onClick={() => setReviewAttemptId(att.id)}
-                              className="flex items-center gap-1 px-3 py-1.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
-                            >
-                              <MessageSquare className="w-3.5 h-3.5" />
-                              <span>უკუკავშირი</span>
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="px-2.5 py-1 bg-amber-100 text-amber-800 text-[10px] font-bold rounded-full">
-                            ⏳ შეფასება ელოდება
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
             {/* Reset / Clear Data Action Box */}
             <div className="bg-rose-50/70 border border-rose-200 rounded-2xl p-5 space-y-3">
               <div className="flex items-start gap-3">
@@ -469,13 +397,6 @@ export const StudentProfileModal: FC<StudentProfileModalProps> = ({
         </div>
       </div>
 
-      {/* Student Feedback Detail Modal */}
-      {reviewAttemptId && (
-        <DiagnosticStudentReviewModal
-          attemptId={reviewAttemptId}
-          onClose={() => setReviewAttemptId(null)}
-        />
-      )}
     </>
   );
 };
