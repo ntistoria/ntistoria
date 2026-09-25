@@ -502,6 +502,9 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
   // INLINE TEST RUNNER HANDLERS
   const handleSelectOptionInline = (optIndex: number) => {
     if (!activeInlineTest || isTestFinished) return;
+    // Lock answer: once selected, student cannot change their answer
+    if (selectedAnswers[currentQIndex] !== -1) return;
+
     const updated = [...selectedAnswers];
     updated[currentQIndex] = optIndex;
     setSelectedAnswers(updated);
@@ -880,16 +883,6 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
                               )}
                             </div>
                           </div>
-
-                          <button
-                            onClick={() => {
-                              setOpenTextChecked({ ...openTextChecked, [currentQIndex]: false });
-                              setOpenTextAnswers({ ...openTextAnswers, [currentQIndex]: '' });
-                            }}
-                            className="px-3 py-1.5 bg-white border border-[#E6DDCB] hover:bg-[#FAF8F3] text-[#0D1B2A] text-xs font-bold rounded-xl transition-colors cursor-pointer shrink-0 shadow-xs"
-                          >
-                            ხელახლა აკრეფა
-                          </button>
                         </div>
                       )}
                     </div>
@@ -926,7 +919,10 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
                         <button
                           key={optIdx}
                           onClick={() => handleSelectOptionInline(optIdx)}
-                          className={`w-full p-4 sm:p-5 rounded-2xl border-2 text-left transition-all flex items-center gap-4 cursor-pointer ${borderClass}`}
+                          disabled={isAnswered}
+                          className={`w-full p-4 sm:p-5 rounded-2xl border-2 text-left transition-all flex items-center gap-4 ${
+                            isAnswered ? 'cursor-default' : 'cursor-pointer'
+                          } ${borderClass}`}
                         >
                           <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${badgeClass}`}>
                             {optLabels[optIdx] || optIdx + 1}
