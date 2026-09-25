@@ -32,6 +32,13 @@
     overflow-x: hidden;
   }
 
+  /* Anti-cheating text selection prevention */
+  .prevent-select {
+    -webkit-user-select: none; /* Safari */
+    -ms-user-select: none; /* IE 10+ */
+    user-select: none; /* Modern browsers */
+  }
+
   h1, h2, h3, .font-heading {
     font-family: var(--font-georgian-serif);
   }

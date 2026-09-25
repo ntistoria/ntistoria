@@ -11,6 +11,7 @@ import {
 import { QuizLeaderboardModal } from '../components/QuizLeaderboardModal';
 import { QuizStudentReviewModal } from '../components/QuizStudentReviewModal';
 import { supabase } from '../lib/supabase';
+import { useAntiCheating } from '../hooks/useAntiCheating';
 
 interface QuizzesViewProps {
   user?: { name: string; email: string } | null;
@@ -51,6 +52,11 @@ const copyToClipboard = async (text: string): Promise<boolean> => {
 export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQuizId, onActiveQuizChange }) => {
   // Master View States: 'list' | 'play' | 'result'
   const [viewState, setViewState] = useState<'list' | 'play' | 'result'>('list');
+
+  // Anti-cheating & Tab Switch tracking for Quizzes
+  const { tabSwitchCount, switchCountRef } = useAntiCheating({
+    isActive: viewState === 'play'
+  });
 
   // Quizzes list state
   const [quizzes, setQuizzes] = useState<QuizItem[]>([]);
@@ -266,7 +272,8 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
         activeQuiz.id,
         currentUserId,
         displayName,
-        userAnswersList
+        userAnswersList,
+        switchCountRef.current
       );
 
       const createdAttempt: QuizAttempt = {
@@ -280,7 +287,8 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
         created_at: new Date().toISOString(),
         user_answers: userAnswersList,
         quiz_title: activeQuiz.title,
-        quiz_cover_image_path: activeQuiz.cover_image_path
+        quiz_cover_image_path: activeQuiz.cover_image_path,
+        tab_switches: switchCountRef.current
       };
 
       setAttemptResult(createdAttempt);
@@ -538,8 +546,21 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
               <p className="text-xs font-bold text-[#0D1B2A]">კითხვები იტვირთება...</p>
             </div>
           ) : currentQuestion ? (
-            <div className="bg-white rounded-3xl border-2 border-[#E6DDCB] shadow-2xl p-6 sm:p-10 space-y-8 relative overflow-hidden">
+            <div className="bg-white rounded-3xl border-2 border-[#E6DDCB] shadow-2xl p-6 sm:p-10 space-y-8 relative overflow-hidden prevent-select select-none">
               
+              {/* Anti-cheating Warning Banner */}
+              {tabSwitchCount > 0 && (
+                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl text-amber-950 text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>⚠️ გაფრთხილება: ტესტის/ქვიზის მიმდინარეობისას გვერდი/ტაბი დატოვეთ {tabSwitchCount}-ჯერ!</span>
+                  </div>
+                  <span className="text-[10px] font-mono uppercase bg-amber-200 text-amber-950 px-2 py-0.5 rounded font-extrabold shrink-0">
+                    დაფიქსირდა
+                  </span>
+                </div>
+              )}
+
               {/* Progress Indicator */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs font-bold text-[#0D1B2A]">
@@ -754,6 +775,21 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
                   <p className="font-serif font-bold text-base sm:text-lg text-[#0D1B2A] leading-relaxed italic">
                     {feedback.comment}
                   </p>
+                </div>
+
+                {/* Tab Switches Anti-cheating Status */}
+                <div className="p-3.5 bg-white rounded-2xl border border-[#E6DDCB] text-xs font-bold shadow-xs">
+                  {(attemptResult.tab_switches ?? 0) > 0 ? (
+                    <span className="text-amber-800 flex items-center justify-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>⚠️ ტესტის/ქვიზის მიმდინარეობისას {attemptResult.tab_switches}-ჯერ დაფიქსირდა გვერდის/ტაბის დატოვება</span>
+                    </span>
+                  ) : (
+                    <span className="text-emerald-800 flex items-center justify-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>✓ გვერდის/ტაბის დატოვება არ დაფიქსირებულა</span>
+                    </span>
+                  )}
                 </div>
 
                 {/* Share Result Section (Requirement 5) */}

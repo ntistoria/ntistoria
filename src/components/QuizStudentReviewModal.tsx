@@ -112,6 +112,21 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
             </div>
           </div>
 
+          {/* Anti-cheating Tab Switch Status */}
+          <div className="flex items-center gap-2">
+            {(attempt.tab_switches ?? 0) > 0 ? (
+              <span className="px-3 py-1 bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-xs">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>⚠️ ტესტის მიმდინარეობისას {attempt.tab_switches}-ჯერ დატოვა გვერდი</span>
+              </span>
+            ) : (
+              <span className="px-3 py-1 bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-xs">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>✓ გვერდის დატოვება არ დაფიქსირებულა</span>
+              </span>
+            )}
+          </div>
+
           <div className="text-right">
             <span className="text-xs font-bold text-[#C79B3A] block">{feedback.title}</span>
             <span className="text-[11px] text-[#666666] italic">{feedback.comment}</span>

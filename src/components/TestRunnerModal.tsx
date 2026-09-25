@@ -3,6 +3,7 @@ import { HistoryTest, TestResult } from '../types';
 import { X, CheckCircle2, XCircle, Clock, AlertCircle, Award, RotateCcw, ChevronRight, HelpCircle, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { recordUserAnswers } from '../lib/progressService';
+import { useAntiCheating } from '../hooks/useAntiCheating';
 
 
 interface TestRunnerModalProps {
@@ -24,6 +25,11 @@ export const TestRunnerModal: FC<TestRunnerModalProps> = ({
   const [isFinished, setIsFinished] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [startTime] = useState<number>(Date.now());
+
+  // Anti-cheating & Tab Switch tracking
+  const { tabSwitchCount, switchCountRef } = useAntiCheating({
+    isActive: Boolean(test) && !isFinished
+  });
 
   useEffect(() => {
     if (test) {
@@ -108,7 +114,8 @@ export const TestRunnerModal: FC<TestRunnerModalProps> = ({
         questionIndex: idx,
         selectedIndex: selectedAnswers[idx],
         isCorrect: selectedAnswers[idx] === q.correctAnswerIndex
-      }))
+      })),
+      tab_switches: switchCountRef.current
     };
 
     // Save to Progress Service
@@ -158,7 +165,7 @@ export const TestRunnerModal: FC<TestRunnerModalProps> = ({
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.96 }}
-          className="relative w-full max-w-3xl bg-[#FAF8F3] rounded-2xl shadow-2xl overflow-hidden z-10 border border-[#E6DDCB] max-h-[92vh] flex flex-col"
+          className="relative w-full max-w-3xl bg-[#FAF8F3] rounded-2xl shadow-2xl overflow-hidden z-10 border border-[#E6DDCB] max-h-[92vh] flex flex-col prevent-select select-none"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 bg-[#F5F2EA] border-b border-[#E6DDCB]">
@@ -186,6 +193,19 @@ export const TestRunnerModal: FC<TestRunnerModalProps> = ({
             
             {!isFinished ? (
               <>
+                {/* Anti-cheating Warning Banner */}
+                {tabSwitchCount > 0 && (
+                  <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-xl text-amber-950 text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>⚠️ გაფრთხილება: ტესტის მიმდინარეობისას გვერდი/ტაბი დატოვეთ {tabSwitchCount}-ჯერ!</span>
+                    </div>
+                    <span className="text-[10px] font-mono uppercase bg-amber-200 text-amber-950 px-2 py-0.5 rounded font-extrabold shrink-0">
+                      დაფიქსირდა
+                    </span>
+                  </div>
+                )}
+
                 {/* Stepper Progress Bar */}
                 <div className="space-y-2">
                   <div className="flex justify-between items-center text-xs text-[#666666] font-medium">
@@ -346,6 +366,21 @@ export const TestRunnerModal: FC<TestRunnerModalProps> = ({
                   {scorePct >= 80 
                     ? 'ბრწყინვალე შედეგია! თქვენ კარგად ფლობთ ამ ისტორიულ თემატიკას.' 
                     : 'კარგი მცდელობაა! გირჩევთ გადახედოთ შესაბამის ვიდეოლექციას და სტატიას ცოდნის გასაღრმავებლად.'}
+                </div>
+
+                {/* Tab Switch Status Result */}
+                <div className="max-w-md mx-auto">
+                  {switchCountRef.current > 0 ? (
+                    <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-950 text-xs font-bold flex items-center justify-center gap-2 shadow-xs">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span>⚠️ ტესტის მიმდინარეობისას {switchCountRef.current}-ჯერ დაფიქსირდა გვერდის/ტაბის დატოვება</span>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-950 text-xs font-bold flex items-center justify-center gap-2 shadow-xs">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>✓ გვერდის/ტაბის დატოვება არ დაფიქსირებულა</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Action buttons */}

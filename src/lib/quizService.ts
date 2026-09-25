@@ -455,12 +455,14 @@ export async function submitQuizAttempt(
   quizId: string,
   userId: string | null,
   guestName: string | null,
-  userAnswers: { question_id: string; answer_id: string }[]
+  userAnswers: { question_id: string; answer_id: string }[],
+  tabSwitches: number = 0
 ): Promise<{
   attempt_id: string;
   correct_answers: number;
   total_questions: number;
   percentage: number;
+  tab_switches?: number;
 }> {
   const cleanGuest = guestName ? guestName.trim() : null;
 
@@ -473,7 +475,8 @@ export async function submitQuizAttempt(
       p_quiz_id: quizId,
       p_user_id: userId || null,
       p_guest_name: cleanGuest,
-      p_user_answers: userAnswers
+      p_user_answers: userAnswers,
+      p_tab_switches: tabSwitches
     });
 
     if (!error && data) {
@@ -481,7 +484,8 @@ export async function submitQuizAttempt(
         attempt_id: data.attempt_id,
         correct_answers: data.correct_answers,
         total_questions: data.total_questions,
-        percentage: Number(data.percentage)
+        percentage: Number(data.percentage),
+        tab_switches: tabSwitches
       };
     }
 
@@ -525,7 +529,8 @@ export async function submitQuizAttempt(
       correct_answers: correct,
       total_questions: total,
       percentage: percentage,
-      user_answers: userAnswers
+      user_answers: userAnswers,
+      tab_switches: tabSwitches
     });
   } catch (e) {
     console.warn('Failed to insert attempt to Supabase, saving to localStorage:', e);
@@ -538,7 +543,8 @@ export async function submitQuizAttempt(
       total_questions: total,
       percentage: percentage,
       created_at: new Date().toISOString(),
-      user_answers: userAnswers
+      user_answers: userAnswers,
+      tab_switches: tabSwitches
     });
   }
 
@@ -546,7 +552,8 @@ export async function submitQuizAttempt(
     attempt_id: newId,
     correct_answers: correct,
     total_questions: total,
-    percentage: percentage
+    percentage: percentage,
+    tab_switches: tabSwitches
   };
 }
 
@@ -619,7 +626,7 @@ export async function fetchUserQuizAttempts(userId: string, guestName?: string):
   try {
     let query = supabase
       .from('quiz_attempts')
-      .select('id, quiz_id, user_id, guest_name, correct_answers, total_questions, percentage, created_at, user_answers')
+      .select('id, quiz_id, user_id, guest_name, correct_answers, total_questions, percentage, created_at, user_answers, tab_switches')
       .order('created_at', { ascending: false });
 
     if (userId) {

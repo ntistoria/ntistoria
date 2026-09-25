@@ -145,6 +145,7 @@ export interface TestResult {
   timeSpentSeconds: number;
   date: string;
   userAnswers: { questionIndex: number; selectedIndex: number; isCorrect: boolean }[];
+  tab_switches?: number;
 }
 
 // Quiz System Interfaces
@@ -189,6 +190,7 @@ export interface QuizAttempt {
   user_answers?: { question_id: string; answer_id: string }[] | Record<string, string> | null;
   quiz_title?: string;
   quiz_cover_image_path?: string | null;
+  tab_switches?: number;
 }
 
 export interface QuizLeaderboardItem {
