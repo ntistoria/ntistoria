@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, type FC } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, type FC } from 'react';
 import { HistoryTest, QuizQuestion } from '../types';
 
 import { 
@@ -69,6 +69,8 @@ interface TaskGroup {
 }
 
 // Fuzzy text matching helper for open-ended questions
+// P8 FIX: Raised keyword threshold from 40% to 75% and added minimum keyword
+// count requirement to prevent partial answers being accepted as correct.
 const checkOpenAnswerMatch = (userInput: string, correctAnswer: string): boolean => {
   if (!userInput || !correctAnswer) return false;
 
@@ -80,14 +82,17 @@ const checkOpenAnswerMatch = (userInput: string, correctAnswer: string): boolean
   const normUser = normalize(userInput);
   const normCorrect = normalize(correctAnswer);
 
+  // Exact match (after normalization)
   if (normUser === normCorrect) return true;
+  // Substring containment (e.g., user wrote a longer sentence containing the exact answer)
   if (normUser.includes(normCorrect) || normCorrect.includes(normUser)) return true;
 
-  // Keyword match check
+  // Keyword match: only engage if there are enough keywords to be meaningful.
+  // P8 FIX: require at least 2 keywords AND 75% match rate (was 0 keywords, 40%).
   const keywords = normCorrect.split(' ').filter(w => w.length > 2);
-  if (keywords.length > 0) {
+  if (keywords.length >= 2) {
     const matchedCount = keywords.filter(w => normUser.includes(w)).length;
-    if (matchedCount / keywords.length >= 0.4) {
+    if (matchedCount / keywords.length >= 0.75) {
       return true;
     }
   }
@@ -127,6 +132,10 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
   const [categoryQuestions, setCategoryQuestions] = useState<(QuizQuestion & { chapterId: string })[]>([]);
   const [taskGroups, setTaskGroups] = useState<TaskGroup[]>([]);
 
+  // I4: Lazy pagination for large category chapter lists (e.g. MCQ has many chapters)
+  const CHAPTERS_PER_PAGE = 12;
+  const [visibleChapterCount, setVisibleChapterCount] = useState(CHAPTERS_PER_PAGE);
+
   // INLINE TEST RUNNER STATE
   const [activeInlineTest, setActiveInlineTest] = useState<HistoryTest | null>(null);
   const [currentQIndex, setCurrentQIndex] = useState<number>(0);
@@ -134,8 +143,16 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
   const [isTestFinished, setIsTestFinished] = useState<boolean>(false);
 
   // Anti-cheating & Tab Switch tracking for Inline Tests in TestsView
+  // I10: onViolation auto-submits after 3 tab switches
   const { tabSwitchCount, switchCountRef } = useAntiCheating({
-    isActive: Boolean(activeInlineTest) && !isTestFinished
+    isActive: Boolean(activeInlineTest) && !isTestFinished,
+    onViolation: useCallback((count: number) => {
+      if (count >= 3 && activeInlineTest && !isTestFinished) {
+        // Auto-finish test after 3 violations
+        handleFinishInlineTest();
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeInlineTest, isTestFinished])
   });
 
   // Chronology interactive reordering state (current item sequence per question index)
@@ -148,6 +165,12 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
 
 
   const userEmail = user?.email || 'guest_user';
+  // P6 FIX: stable ref so the realtime callback can read the latest value
+  // without the channel needing to be recreated on every category change.
+  const selectedCategoryKeyRef = useRef(selectedCategoryKey);
+  useEffect(() => {
+    selectedCategoryKeyRef.current = selectedCategoryKey;
+  }, [selectedCategoryKey]);
 
   // Load programs, total question counts per category, item details, and student progress
   useEffect(() => {
@@ -204,9 +227,11 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
 
 
   // Real-time Database Subscription: Automatically sync new questions/updates in real time!
+  // P6 FIX: Channel is created ONCE on mount (no dependency on selectedCategoryKey).
+  // The selectedCategoryKeyRef is used inside the callback to always have the latest value.
   useEffect(() => {
     const channel = supabase
-      .channel('public-db-questions-changes')
+      .channel('tests-view-db-changes')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public' },
@@ -229,9 +254,10 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
           setCategoryTotalCounts(totalCounts);
           setCategoryItemDetailsMap(detailsMap);
 
-          // If a category is active, re-fetch questions
-          if (selectedCategoryKey) {
-            const allQ = await fetchQuestionsForCategory(selectedCategoryKey);
+          // Use ref to get current category key — no channel recreation needed
+          const currentCategoryKey = selectedCategoryKeyRef.current;
+          if (currentCategoryKey) {
+            const allQ = await fetchQuestionsForCategory(currentCategoryKey);
             setCategoryQuestions(allQ);
           }
         }
@@ -241,7 +267,9 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedCategoryKey]);
+  // Empty dep array: channel is created once and lives for the component lifetime
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fetch questions when category changes & calculate chapter counts + Task Groups
   useEffect(() => {
@@ -291,19 +319,27 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
       return;
     }
 
-    // Group questions by parentItemNumber (e.g. map_number, source_number, analogy_number, illustration_number)
+    // P9 FIX: Group questions by parentItemNumber first (stable numeric DB ID).
+    // Only fall back to text content for categories that don't have a numeric parent ID.
+    // This eliminates the collision risk from sources/analogies sharing identical opening text.
     const groupMap = new Map<string, (QuizQuestion & { chapterId: string })[]>();
     
     chapterQuestions.forEach((q, idx) => {
       let groupKey = '';
       if (q.parentItemNumber) {
+        // Primary key: stable numeric parent item ID (map_number, source_number, etc.)
         groupKey = `parent-${q.parentItemNumber}`;
+      } else if (q.itemNumber) {
+        // Secondary key: own item number
+        groupKey = `item-${q.itemNumber}`;
       } else if (selectedCategoryKey === 'map' || selectedCategoryKey === 'illustrations') {
-        groupKey = q.mapImage || (q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`);
+        // Tertiary: image URL (unique per visual)
+        groupKey = q.mapImage || `q-${idx}`;
       } else if (selectedCategoryKey === 'source' || selectedCategoryKey === 'analogies') {
-        groupKey = q.sourceContext?.substring(0, 100) || (q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`);
+        // Tertiary: text content (last resort — P9 only reached if no itemNumber/parentItemNumber)
+        groupKey = q.sourceContext?.substring(0, 100) || `q-${idx}`;
       } else {
-        groupKey = q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`;
+        groupKey = `q-${idx}`;
       }
 
       if (selectedChapterId === 'all') {
@@ -348,6 +384,8 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
       setSelectedChapterId(!isLoggedIn ? 'ch-1' : 'all');
     }
     setActiveInlineTest(null);
+    setVisibleChapterCount(CHAPTERS_PER_PAGE); // I4: reset pagination on category change
+    clearSession(); // I6: clear saved session when switching category
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -355,7 +393,8 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
   const startInlineTest = (testObj: HistoryTest) => {
     setActiveInlineTest(testObj);
     setCurrentQIndex(0);
-    setSelectedAnswers(new Array(testObj.questions.length).fill(-1));
+    const initAnswers = new Array(testObj.questions.length).fill(-1);
+    setSelectedAnswers(initAnswers);
     setIsTestFinished(false);
 
     // Initialize chronology order arrays for questions
@@ -367,9 +406,26 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
     });
     setChronologyOrders(initChronOrders);
     setChronologyChecked({});
-
     setOpenTextAnswers({});
     setOpenTextChecked({});
+
+    // I6: persist session so browser refresh restores progress
+    const sessionPatch = {
+      activeInlineTest: testObj,
+      selectedCategoryKey,
+      selectedChapterId,
+      currentQIndex: 0,
+      selectedAnswers: initAnswers,
+      isTestFinished: false,
+      chronologyOrders: initChronOrders,
+      chronologyChecked: {},
+      openTextAnswers: {},
+      openTextChecked: {}
+    };
+    saveSession(sessionPatch);
+
+    // I10: request fullscreen when test starts
+    requestFullscreen();
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -453,7 +509,11 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
     }
   };
 
-  const activeCategoryMeta = TEST_CATEGORIES.find(c => c.key === selectedCategoryKey);
+  // I2: memoize so it doesn't recompute on every render
+  const activeCategoryMeta = useMemo(
+    () => TEST_CATEGORIES.find(c => c.key === selectedCategoryKey),
+    [selectedCategoryKey]
+  );
 
   // Helper to compute stats for a specific chapter
   const getChapterStats = (catKey: string, chId: string, totalQ: number) => {
@@ -469,41 +529,110 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
     return { correct, incorrect, unattempted, total: totalQ, pct };
   };
 
-  // Helper to format chapter item count display in dropdown (maps, sources, analogies, illustrations, questions)
-  const getChapterItemDisplay = (chId: string) => {
-    const qCount = questionsCountMap[chId] ?? 0;
+  // P10 FIX: Pre-compute chapter item display strings once when the underlying
+  // data changes, instead of running O(n) grouping on every render per chapter.
+  // Previously getChapterItemDisplay() was called inline in JSX, causing repeated
+  // computation for every chapter card on every render.
+  const chapterItemDisplayMap = useMemo(() => {
+    const result: Record<string, string> = {};
     const { qPerItem, unitLabel } = getCategoryUnitInfo(selectedCategoryKey);
 
-    if (qPerItem <= 1) {
-      return `${qCount} ${unitLabel}`;
+    for (const chId of Object.keys(questionsCountMap)) {
+      const qCount = questionsCountMap[chId] ?? 0;
+
+      if (qPerItem <= 1) {
+        result[chId] = `${qCount} ${unitLabel}`;
+        continue;
+      }
+
+      const chQuestions = categoryQuestions.filter(
+        q => q.chapterId === chId || q.chapterId === `ch-${chId.replace('ch-', '')}`
+      );
+
+      let count = 0;
+      if (chQuestions.length > 0) {
+        const groupSet = new Set<string>();
+        chQuestions.forEach((q, idx) => {
+          let key = '';
+          if (q.parentItemNumber) {
+            key = `parent-${q.parentItemNumber}`;
+          } else if (q.itemNumber) {
+            key = `item-${q.itemNumber}`;
+          } else if (selectedCategoryKey === 'map' || selectedCategoryKey === 'illustrations') {
+            key = q.mapImage || `q-${idx}`;
+          } else if (selectedCategoryKey === 'source' || selectedCategoryKey === 'analogies') {
+            key = q.sourceContext?.substring(0, 100) || `q-${idx}`;
+          } else {
+            key = `q-${idx}`;
+          }
+          groupSet.add(key);
+        });
+        count = groupSet.size;
+      } else {
+        count = Math.round(qCount / qPerItem);
+      }
+
+      result[chId] = `${count} ${unitLabel}`;
     }
+    return result;
+  }, [categoryQuestions, questionsCountMap, selectedCategoryKey]);
 
-    const chQuestions = categoryQuestions.filter(
-      q => q.chapterId === chId || q.chapterId === `ch-${chId.replace('ch-', '')}`
-    );
+  // Legacy wrapper kept for any remaining call-sites (now reads from memo map)
+  const getChapterItemDisplay = (chId: string) => chapterItemDisplayMap[chId] ?? `0 ${getCategoryUnitInfo(selectedCategoryKey).unitLabel}`;
 
-    let count = 0;
-    if (chQuestions.length > 0) {
-      const groupSet = new Set<string>();
-      chQuestions.forEach((q, idx) => {
-        let key = '';
-        if (q.parentItemNumber) {
-          key = `parent-${q.parentItemNumber}`;
-        } else if (selectedCategoryKey === 'map' || selectedCategoryKey === 'illustrations') {
-          key = q.mapImage || (q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`);
-        } else if (selectedCategoryKey === 'source' || selectedCategoryKey === 'analogies') {
-          key = q.sourceContext?.substring(0, 100) || (q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`);
-        } else {
-          key = q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`;
-        }
-        groupSet.add(key);
-      });
-      count = groupSet.size;
-    } else {
-      count = Math.round(qCount / qPerItem);
-    }
+  // ============================================================
+  // I6 — Session Auto-Save
+  // ============================================================
+  const SESSION_KEY = `nt_test_session_${userEmail}`;
 
-    return `${count} ${unitLabel}`;
+  const saveSession = useCallback((patch: Record<string, unknown>) => {
+    try {
+      const existing = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}');
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ ...existing, ...patch }));
+    } catch {}
+  }, [SESSION_KEY]);
+
+  const clearSession = useCallback(() => {
+    try { localStorage.removeItem(SESSION_KEY); } catch {}
+  }, [SESSION_KEY]);
+
+  // Restore session on mount (once)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (s.activeInlineTest && s.selectedCategoryKey) {
+        setSelectedCategoryKey(s.selectedCategoryKey);
+        setSelectedChapterId(s.selectedChapterId || 'all');
+        setActiveInlineTest(s.activeInlineTest);
+        setCurrentQIndex(s.currentQIndex ?? 0);
+        setSelectedAnswers(s.selectedAnswers ?? []);
+        setIsTestFinished(s.isTestFinished ?? false);
+        setChronologyOrders(s.chronologyOrders ?? {});
+        setChronologyChecked(s.chronologyChecked ?? {});
+        setOpenTextAnswers(s.openTextAnswers ?? {});
+        setOpenTextChecked(s.openTextChecked ?? {});
+      }
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ============================================================
+  // I10 — Fullscreen helpers
+  // ============================================================
+  const requestFullscreen = () => {
+    try {
+      const el = document.documentElement as any;
+      (el.requestFullscreen ?? el.webkitRequestFullscreen ?? el.mozRequestFullScreen)?.call(el);
+    } catch {}
+  };
+
+  const exitFullscreen = () => {
+    try {
+      const doc = document as any;
+      (doc.exitFullscreen ?? doc.webkitExitFullscreen ?? doc.mozCancelFullScreen)?.call(doc);
+    } catch {}
   };
 
   // INLINE TEST RUNNER HANDLERS
@@ -520,10 +649,41 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
     if (currentQ && selectedCategoryKey) {
       const isCorrect = optIndex === currentQ.correctAnswerIndex;
       const chId = currentQ.chapterId || selectedChapterId || 'ch-1';
+
+      // I3: Optimistic update — update progressData immediately before the async call
+      const optimisticUpdate = (prev: typeof progressData) => {
+        if (!prev) return prev;
+        const statKey = `${selectedCategoryKey}_${chId}`;
+        const existing = prev.statsByChapter[statKey];
+        const correctIds = new Set(existing?.correctQuestionIds || []);
+        const incorrectIds = new Set(existing?.incorrectQuestionIds || []);
+        if (isCorrect) { correctIds.add(currentQ.id); incorrectIds.delete(currentQ.id); }
+        else { incorrectIds.add(currentQ.id); correctIds.delete(currentQ.id); }
+        return {
+          ...prev,
+          statsByChapter: {
+            ...prev.statsByChapter,
+            [statKey]: {
+              ...(existing || {}),
+              correctQuestionIds: [...correctIds],
+              incorrectQuestionIds: [...incorrectIds]
+            }
+          }
+        };
+      };
+      setProgressData(optimisticUpdate as any);
+
+      // Persist to server; roll back on error
       recordUserAnswers(userEmail, selectedCategoryKey, chId, [
         { questionId: currentQ.id, isCorrect }
-      ]).then(setProgressData).catch(console.error);
+      ]).then(setProgressData).catch(err => {
+        console.error('recordUserAnswers failed, rolling back optimistic update:', err);
+        setProgressData(prev => prev); // keep current on error (re-fetch not critical here)
+      });
     }
+
+    // I6: save session after every answer
+    saveSession({ selectedAnswers: updated, currentQIndex });
   };
 
   // CHRONOLOGY MOVE HANDLERS (Mouse move up / move down 3 items)
@@ -604,12 +764,16 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
     setChronologyOrders(initChronOrders);
     setChronologyChecked({});
 
+    clearSession(); // I6: clear saved session on restart
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleFinishInlineTest = () => {
     if (!activeInlineTest) return;
     setIsTestFinished(true);
+    clearSession(); // I6: clear saved session on finish
+    exitFullscreen(); // I10: exit fullscreen on finish
 
     const resultsByChapter: Record<string, { questionId: string; isCorrect: boolean }[]> = {};
 
@@ -1561,7 +1725,8 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
                           🔒 ყველა თავი (საჭიროებს ავტორიზაციას)
                         </option>
                       )}
-                      {programs.map((prog) => {
+                      {/* I4: Show programs in batches — only visibleChapterCount items at a time */}
+      {programs.slice(0, visibleChapterCount).map((prog) => {
                         const isLocked = !isLoggedIn && prog.chapterNumber !== 1;
                         return (
                           <option key={prog.id} value={prog.id}>

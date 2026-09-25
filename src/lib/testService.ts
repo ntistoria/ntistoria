@@ -168,8 +168,10 @@ export const DEFAULT_PROGRAMS: ProgramChapter[] = [
  * Fetch Program Chapters from Supabase tables (exam_programs & sub_programs)
  */
 export const fetchProgramsAndSubprograms = async (): Promise<ProgramChapter[]> => {
-  const possibleProgramTables = ['exam_programs', 'program', 'programs'];
-  const possibleSubprogramTables = ['sub_programs', 'exam_subprograms', 'subprogram', 'subprograms'];
+  // P4 FIX: Reduced from 3+4 trial table names to 2+2, cutting cold-start requests.
+  // The primary name is tried first; only on failure is the fallback attempted.
+  const possibleProgramTables = ['exam_programs', 'programs'];
+  const possibleSubprogramTables = ['sub_programs', 'subprograms'];
 
   for (const pTable of possibleProgramTables) {
     try {
@@ -245,76 +247,62 @@ export const getCategoryUnitInfo = (categoryKey: string | null): CategoryUnitInf
 };
 
 /**
+/**
+ * P11 FIX: Single config table replaces 4 nearly-identical if-blocks.
+ * Adding a new category type now requires only one entry here.
+ */
+const PARENT_TABLE_CONFIG: Record<string, {
+  tables: string[];
+  getGroupKey: (q: { mapImage?: string; itemNumber?: number; sourceContext?: string; id: string }) => string;
+}> = {
+  map: {
+    tables: ['maps'],
+    getGroupKey: (q) => q.mapImage || (q.itemNumber ? `item-${q.itemNumber}` : q.id)
+  },
+  source: {
+    tables: ['sources', 'source'],
+    getGroupKey: (q) => (q.sourceContext ? q.sourceContext.substring(0, 100) : '') || (q.itemNumber ? `item-${q.itemNumber}` : q.id)
+  },
+  analogies: {
+    tables: ['analogies', 'analogy'],
+    getGroupKey: (q) => (q.sourceContext ? q.sourceContext.substring(0, 100) : '') || (q.itemNumber ? `item-${q.itemNumber}` : q.id)
+  },
+  illustrations: {
+    tables: ['illustrations', 'illustration'],
+    getGroupKey: (q) => q.mapImage || (q.itemNumber ? `item-${q.itemNumber}` : q.id)
+  }
+};
+
+/**
  * Fetch total item count and unit label for a category (maps -> "რუკა", sources -> "წყარო", analogies -> "ანალოგია", illustrations -> "ილუსტრაცია", mcq/chronology -> "კითხვა")
  */
 export const fetchCategoryItemDetails = async (categoryKey: string): Promise<CategoryItemDetails> => {
   const { qPerItem, unitLabel } = getCategoryUnitInfo(categoryKey);
+  const parentConfig = PARENT_TABLE_CONFIG[categoryKey];
 
-  if (categoryKey === 'map') {
-    try {
-      const { count, error } = await supabase.from('maps').select('*', { count: 'exact', head: true });
-      if (!error && typeof count === 'number' && count > 0) {
-        return { count, unitLabel };
-      }
-    } catch (e) {}
-
-    const questions = await fetchQuestionsForCategory('map');
-    const groupKeys = new Set(questions.map(q => q.mapImage || (q.itemNumber ? `item-${q.itemNumber}` : q.id)));
-    const c = groupKeys.size > 0 ? groupKeys.size : Math.round(questions.length / qPerItem);
-    return { count: c, unitLabel };
-  }
-
-  if (categoryKey === 'source') {
-    for (const t of ['sources', 'source']) {
+  if (parentConfig) {
+    // 1. Try fetching count directly from the parent table
+    for (const tableName of parentConfig.tables) {
       try {
-        const { count, error } = await supabase.from(t).select('*', { count: 'exact', head: true });
+        const { count, error } = await supabase.from(tableName).select('*', { count: 'exact', head: true });
         if (!error && typeof count === 'number' && count > 0) {
           return { count, unitLabel };
         }
       } catch (e) {}
     }
 
-    const questions = await fetchQuestionsForCategory('source');
-    const groupKeys = new Set(questions.map(q => q.sourceContext?.substring(0, 100) || (q.itemNumber ? `item-${q.itemNumber}` : q.id)));
+    // 2. Fallback: derive count from questions by grouping
+    const questions = await fetchQuestionsForCategory(categoryKey);
+    const groupKeys = new Set(questions.map(parentConfig.getGroupKey));
     const c = groupKeys.size > 0 ? groupKeys.size : Math.round(questions.length / qPerItem);
     return { count: c, unitLabel };
   }
 
-  if (categoryKey === 'analogies') {
-    for (const t of ['analogies', 'analogy']) {
-      try {
-        const { count, error } = await supabase.from(t).select('*', { count: 'exact', head: true });
-        if (!error && typeof count === 'number' && count > 0) {
-          return { count, unitLabel };
-        }
-      } catch (e) {}
-    }
-
-    const questions = await fetchQuestionsForCategory('analogies');
-    const groupKeys = new Set(questions.map(q => q.sourceContext?.substring(0, 100) || (q.itemNumber ? `item-${q.itemNumber}` : q.id)));
-    const c = groupKeys.size > 0 ? groupKeys.size : Math.round(questions.length / qPerItem);
-    return { count: c, unitLabel };
-  }
-
-  if (categoryKey === 'illustrations') {
-    for (const t of ['illustrations', 'illustration']) {
-      try {
-        const { count, error } = await supabase.from(t).select('*', { count: 'exact', head: true });
-        if (!error && typeof count === 'number' && count > 0) {
-          return { count, unitLabel };
-        }
-      } catch (e) {}
-    }
-
-    const questions = await fetchQuestionsForCategory('illustrations');
-    const groupKeys = new Set(questions.map(q => q.mapImage || (q.itemNumber ? `item-${q.itemNumber}` : q.id)));
-    const c = groupKeys.size > 0 ? groupKeys.size : Math.round(questions.length / qPerItem);
-    return { count: c, unitLabel };
-  }
-
+  // MCQ / Chronology: just count questions directly
   const count = await fetchCategoryQuestionsCount(categoryKey);
   return { count, unitLabel };
 };
+
 
 /**
  * Fetch Total Question Count for a Category directly from Supabase DB (public schema)
@@ -390,56 +378,58 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
         let sourceMap: Record<number, { source: string; program_number: number; sub_program_number: number }> = {};
         let illustrationMap: Record<number, { illustration_url: string; program_number: number; sub_program_number: number }> = {};
 
-        if (categoryKey === 'map' && !rawQuestions[0].maps) {
-          const { data: mData } = await supabase.from('maps').select('*');
-          if (mData) {
-            mData.forEach((m: any) => {
-              mapsMap[m.map_number || m.id] = {
-                map_url: m.map_url || m.image_url || m.url,
-                program_number: Number(m.program_number || 1),
-                sub_program_number: Number(m.sub_program_number || 1)
-              };
-            });
-          }
-        }
+        // P3 FIX: Fetch ALL parent lookup tables in parallel instead of sequentially.
+        // Each fetch is independent — no reason to await one before starting the next.
+        const [mapsResult, analogyResult, sourceResult, illustrationResult] = await Promise.all([
+          (categoryKey === 'map' && !rawQuestions[0].maps)
+            ? supabase.from('maps').select('*')
+            : Promise.resolve({ data: null }),
+          (categoryKey === 'analogies' && !rawQuestions[0].analogy)
+            ? supabase.from('analogy').select('*')
+            : Promise.resolve({ data: null }),
+          (categoryKey === 'source' && !rawQuestions[0].source)
+            ? supabase.from('source').select('*')
+            : Promise.resolve({ data: null }),
+          (categoryKey === 'illustrations' && !rawQuestions[0].illustrations)
+            ? supabase.from('illustrations').select('*')
+            : Promise.resolve({ data: null }),
+        ]);
 
-        if (categoryKey === 'analogies' && !rawQuestions[0].analogy) {
-          const { data: aData } = await supabase.from('analogy').select('*');
-          if (aData) {
-            aData.forEach((a: any) => {
-              analogyMap[a.analogy_number || a.id] = {
-                analogy: a.analogy || a.text,
-                program_number: Number(a.program_number || 1),
-                sub_program_number: Number(a.sub_program_number || 1)
-              };
-            });
-          }
+        if (mapsResult.data) {
+          mapsResult.data.forEach((m: any) => {
+            mapsMap[m.map_number || m.id] = {
+              map_url: m.map_url || m.image_url || m.url,
+              program_number: Number(m.program_number || 1),
+              sub_program_number: Number(m.sub_program_number || 1)
+            };
+          });
         }
-
-        if (categoryKey === 'source' && !rawQuestions[0].source) {
-          const { data: sData } = await supabase.from('source').select('*');
-          if (sData) {
-            sData.forEach((s: any) => {
-              sourceMap[s.source_number || s.id] = {
-                source: s.source || s.text,
-                program_number: Number(s.program_number || 1),
-                sub_program_number: Number(s.sub_program_number || 1)
-              };
-            });
-          }
+        if (analogyResult.data) {
+          analogyResult.data.forEach((a: any) => {
+            analogyMap[a.analogy_number || a.id] = {
+              analogy: a.analogy || a.text,
+              program_number: Number(a.program_number || 1),
+              sub_program_number: Number(a.sub_program_number || 1)
+            };
+          });
         }
-
-        if (categoryKey === 'illustrations' && !rawQuestions[0].illustrations) {
-          const { data: iData } = await supabase.from('illustrations').select('*');
-          if (iData) {
-            iData.forEach((i: any) => {
-              illustrationMap[i.illustration_number || i.id] = {
-                illustration_url: i.illustration_url || i.image_url || i.url,
-                program_number: Number(i.program_number || 1),
-                sub_program_number: Number(i.sub_program_number || 1)
-              };
-            });
-          }
+        if (sourceResult.data) {
+          sourceResult.data.forEach((s: any) => {
+            sourceMap[s.source_number || s.id] = {
+              source: s.source || s.text,
+              program_number: Number(s.program_number || 1),
+              sub_program_number: Number(s.sub_program_number || 1)
+            };
+          });
+        }
+        if (illustrationResult.data) {
+          illustrationResult.data.forEach((i: any) => {
+            illustrationMap[i.illustration_number || i.id] = {
+              illustration_url: i.illustration_url || i.image_url || i.url,
+              program_number: Number(i.program_number || 1),
+              sub_program_number: Number(i.sub_program_number || 1)
+            };
+          });
         }
 
         return rawQuestions.map((item: any, idx: number) => {
@@ -657,7 +647,9 @@ export const buildHistoryTest = async (
     : catMeta.title;
 
   return {
-    id: `${categoryKey}-${chapterId || 'all'}-${Date.now()}`,
+    // P14 FIX: ID is now human-readable for debugging (category+chapter as prefix).
+    // Date.now() is kept only as a uniqueness suffix for rapid consecutive starts.
+    id: `test-${categoryKey}-${(chapterId || 'all').replace(/[^a-z0-9-]/gi, '')}-${Date.now()}`,
     title: testTitle,
     category: 'ეროვნული გამოცდები' as HistoricalCategory,
     difficulty: 'საგამოცდო',

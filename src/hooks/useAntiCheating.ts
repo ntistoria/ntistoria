@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 interface UseAntiCheatingOptions {
   isActive: boolean;
@@ -10,6 +10,13 @@ export function useAntiCheating({ isActive, onViolation }: UseAntiCheatingOption
   const switchCountRef = useRef(0);
   const prevIsActiveRef = useRef(false);
   const lastViolationTimeRef = useRef(0);
+  // P5 FIX: Store onViolation in a ref so it's always current without being
+  // in the useEffect dependency array. This prevents event listeners from
+  // being detached/re-attached on every parent re-render.
+  const onViolationRef = useRef(onViolation);
+  useEffect(() => {
+    onViolationRef.current = onViolation;
+  }, [onViolation]);
 
   useEffect(() => {
     // When switching from inactive to active (starting a new test/quiz), reset count
@@ -40,8 +47,9 @@ export function useAntiCheating({ isActive, onViolation }: UseAntiCheatingOption
       switchCountRef.current += 1;
       setTabSwitchCount(switchCountRef.current);
       console.warn(`გვერდის დატოვება/ტაბის გადართვა დაფიქსირდა: ${switchCountRef.current}`);
-      if (onViolation) {
-        onViolation(switchCountRef.current);
+      // Call via ref — always up-to-date without being a dependency
+      if (onViolationRef.current) {
+        onViolationRef.current(switchCountRef.current);
       }
     };
 
@@ -72,12 +80,14 @@ export function useAntiCheating({ isActive, onViolation }: UseAntiCheatingOption
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleWindowBlur);
     };
-  }, [isActive, onViolation]);
+  // P5 FIX: `onViolation` intentionally removed from deps — stored in onViolationRef above.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive]);
 
-  const resetTabSwitches = () => {
+  const resetTabSwitches = useCallback(() => {
     switchCountRef.current = 0;
     setTabSwitchCount(0);
-  };
+  }, []);
 
   return {
     tabSwitchCount,

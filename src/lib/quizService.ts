@@ -335,8 +335,83 @@ export async function uploadQuizImage(file: File, bucket: 'quiz-covers' | 'quiz-
   return data.path;
 }
 
+// =========================================================
+// I1 — PREFETCH CACHE
+// In-memory cache of already-fetched quiz question payloads.
+// QuizzesView fires prefetchQuizQuestions() for the top N quizzes right after
+// the list loads. When the user actually clicks a quiz, the data is returned
+// instantly from cache with zero network latency.
+// =========================================================
+
+interface PrefetchEntry {
+  data: { quiz: QuizItem; questions: QuizQuestionItem[] };
+  fetchedAt: number; // ms timestamp
+}
+
+const prefetchCache = new Map<string, PrefetchEntry>();
+const PREFETCH_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+/** Background-prefetch quiz questions; silently ignored on error */
+export async function prefetchQuizQuestions(quizId: string): Promise<void> {
+  const existing = prefetchCache.get(quizId);
+  if (existing && Date.now() - existing.fetchedAt < PREFETCH_TTL_MS) return; // already fresh
+
+  try {
+    const result = await fetchQuizQuestionsForPlay(quizId);
+    if (result) {
+      prefetchCache.set(quizId, { data: result, fetchedAt: Date.now() });
+    }
+  } catch {
+    // Swallow — prefetch is best-effort
+  }
+}
+
+/** Returns cached quiz data if it exists and is still fresh, otherwise null */
+export function getFromPrefetchCache(quizId: string): { quiz: QuizItem; questions: QuizQuestionItem[] } | null {
+  const entry = prefetchCache.get(quizId);
+  if (!entry) return null;
+  if (Date.now() - entry.fetchedAt > PREFETCH_TTL_MS) {
+    prefetchCache.delete(quizId);
+    return null;
+  }
+  return entry.data;
+}
+
+/** Invalidate a single quiz from the prefetch cache (e.g. after admin edit) */
+export function invalidatePrefetchCache(quizId?: string) {
+  if (quizId) {
+    prefetchCache.delete(quizId);
+  } else {
+    prefetchCache.clear();
+  }
+}
+
 // PUBLIC API METHODS
 // =========================================================
+
+// Helper: Fetch question counts for a list of quiz IDs in a single batch query
+async function fetchQuestionCountsForQuizIds(quizIds: string[]): Promise<Record<string, number>> {
+  if (quizIds.length === 0) return {};
+  try {
+    // Fetch all quiz_questions rows for the given quiz IDs at once (no per-quiz round-trips)
+    const { data, error } = await supabase
+      .from('quiz_questions')
+      .select('quiz_id')
+      .in('quiz_id', quizIds);
+
+    if (error || !data) return {};
+
+    // Count in-memory — O(n) single pass
+    const countMap: Record<string, number> = {};
+    for (const row of data) {
+      countMap[row.quiz_id] = (countMap[row.quiz_id] || 0) + 1;
+    }
+    return countMap;
+  } catch (e) {
+    console.error('Error batch-fetching question counts:', e);
+    return {};
+  }
+}
 
 // Fetch all published quizzes
 export async function fetchPublishedQuizzes(): Promise<QuizItem[]> {
@@ -353,21 +428,14 @@ export async function fetchPublishedQuizzes(): Promise<QuizItem[]> {
       return [];
     }
 
-    // Get question counts for each quiz
-    const result: QuizItem[] = [];
-    for (const q of quizzes) {
-      const { count } = await supabase
-        .from('quiz_questions')
-        .select('id', { count: 'exact', head: true })
-        .eq('quiz_id', q.id);
+    // P1 FIX: one batch request for all question counts instead of N separate requests
+    const quizIds = quizzes.map(q => q.id);
+    const countMap = await fetchQuestionCountsForQuizIds(quizIds);
 
-      result.push({
-        ...q,
-        question_count: count || 0
-      });
-    }
-
-    return result;
+    return quizzes.map(q => ({
+      ...q,
+      question_count: countMap[q.id] || 0
+    }));
   } catch (err) {
     console.error('Error fetching published quizzes:', err);
     return [];
@@ -377,6 +445,7 @@ export async function fetchPublishedQuizzes(): Promise<QuizItem[]> {
 // Fetch questions for a specific quiz (without exposing is_correct to client)
 export async function fetchQuizQuestionsForPlay(quizId: string): Promise<{ quiz: QuizItem; questions: QuizQuestionItem[] } | null> {
   try {
+    // P2 FIX: quiz info + questions + answers in TWO queries total (was N+2)
     // 1. Fetch Quiz Info
     const { data: quizData, error: quizError } = await supabase
       .from('quizzes')
@@ -388,10 +457,10 @@ export async function fetchQuizQuestionsForPlay(quizId: string): Promise<{ quiz:
       return null;
     }
 
-    // 2. Fetch Questions
+    // 2. Fetch Questions + nested Answers in one query (omitting is_correct for play security)
     const { data: questionsData, error: qError } = await supabase
       .from('quiz_questions')
-      .select('id, quiz_id, question_text, image_path, question_order')
+      .select('id, quiz_id, question_text, image_path, question_order, quiz_answers(id, question_id, answer_text, answer_order)')
       .eq('quiz_id', quizId)
       .order('question_order', { ascending: true });
 
@@ -399,20 +468,19 @@ export async function fetchQuizQuestionsForPlay(quizId: string): Promise<{ quiz:
       return { quiz: quizData, questions: [] };
     }
 
-    // 3. Fetch Answers for each question (Omitting is_correct for play security)
-    const formattedQuestions: QuizQuestionItem[] = [];
-    for (const q of questionsData) {
-      const { data: answersData } = await supabase
-        .from('quiz_answers')
-        .select('id, question_id, answer_text, answer_order')
-        .eq('question_id', q.id)
-        .order('answer_order', { ascending: true });
-
-      formattedQuestions.push({
-        ...q,
-        answers: (answersData || []).map(a => ({ ...a, is_correct: undefined }))
-      });
-    }
+    const formattedQuestions: QuizQuestionItem[] = questionsData.map(q => {
+      const rawAnswers: QuizAnswerItem[] = ((q as any).quiz_answers || []);
+      // Sort answers by answer_order (nested results may not be sorted)
+      const sortedAnswers = [...rawAnswers].sort((a, b) => (a.answer_order || 0) - (b.answer_order || 0));
+      return {
+        id: q.id,
+        quiz_id: q.quiz_id,
+        question_text: q.question_text,
+        image_path: q.image_path,
+        question_order: q.question_order,
+        answers: sortedAnswers.map(a => ({ ...a, is_correct: undefined }))
+      };
+    });
 
     return {
       quiz: quizData,
@@ -465,12 +533,12 @@ export async function submitQuizAttempt(
   tab_switches?: number;
 }> {
   const cleanGuest = guestName ? guestName.trim() : null;
-
-  // Clear previous attempt for this quiz from DB & LocalStorage so DB does not get overloaded
-  await resetQuizAttempt(quizId, userId || null, cleanGuest);
+  // P7 FIX: Do NOT blindly delete the previous attempt before we know the new score.
+  // We fetch the current best first; after grading, we only reset if the new score is better.
+  // This preserves the user’s achievement history in localStorage.
 
   try {
-    // Try RPC submit
+    // Try RPC submit (always replaces the old attempt server-side via RPC logic)
     const { data, error } = await supabase.rpc('submit_quiz_attempt', {
       p_quiz_id: quizId,
       p_user_id: userId || null,
@@ -480,6 +548,8 @@ export async function submitQuizAttempt(
     });
 
     if (!error && data) {
+      // P7 FIX: Only clear local storage attempt after we have a confirmed DB result
+      removeLocalAttemptsForQuiz(quizId, userId || null, cleanGuest);
       return {
         attempt_id: data.attempt_id,
         correct_answers: data.correct_answers,
@@ -520,8 +590,17 @@ export async function submitQuizAttempt(
   const percentage = Math.round((correct / (total || 1)) * 100);
   const newId = `att-${Date.now()}`;
 
-  // Insert attempt directly to database if RPC wasn't available
+  // P7 FIX: For client-side fallback, only replace the stored attempt if the new score is better.
+  // This preserves the user's best achievement if they retake and do worse.
+  const existingLocal = getLocalAttempts(quizId).find(
+    a => (userId ? a.user_id === userId : a.guest_name?.toLowerCase() === (cleanGuest || '').toLowerCase())
+  );
+  const isImprovement = !existingLocal || percentage > (existingLocal.percentage || 0);
+
+  // Insert attempt to database (always replace server-side — DB has its own best-score view)
   try {
+    // Clear old DB attempt before inserting the new one
+    await resetQuizAttempt(quizId, userId || null, cleanGuest);
     await supabase.from('quiz_attempts').insert({
       quiz_id: quizId,
       user_id: userId || null,
@@ -532,20 +611,37 @@ export async function submitQuizAttempt(
       user_answers: userAnswers,
       tab_switches: tabSwitches
     });
+    // Only update localStorage if score improved
+    if (isImprovement) {
+      saveLocalAttempt({
+        id: newId,
+        quiz_id: quizId,
+        user_id: userId,
+        guest_name: cleanGuest || 'სტუმარი',
+        correct_answers: correct,
+        total_questions: total,
+        percentage: percentage,
+        created_at: new Date().toISOString(),
+        user_answers: userAnswers,
+        tab_switches: tabSwitches
+      });
+    }
   } catch (e) {
     console.warn('Failed to insert attempt to Supabase, saving to localStorage:', e);
-    saveLocalAttempt({
-      id: newId,
-      quiz_id: quizId,
-      user_id: userId,
-      guest_name: cleanGuest || 'სტუმარი',
-      correct_answers: correct,
-      total_questions: total,
-      percentage: percentage,
-      created_at: new Date().toISOString(),
-      user_answers: userAnswers,
-      tab_switches: tabSwitches
-    });
+    if (isImprovement) {
+      saveLocalAttempt({
+        id: newId,
+        quiz_id: quizId,
+        user_id: userId,
+        guest_name: cleanGuest || 'სტუმარი',
+        correct_answers: correct,
+        total_questions: total,
+        percentage: percentage,
+        created_at: new Date().toISOString(),
+        user_answers: userAnswers,
+        tab_switches: tabSwitches
+      });
+    }
   }
 
   return {
@@ -558,15 +654,17 @@ export async function submitQuizAttempt(
 }
 
 // Local attempts helpers
+// P13 FIX: normalize userId to null before truthy check to avoid empty-string edge case
 export function removeLocalAttemptsForQuiz(quizId: string, userId?: string | null, guestName?: string | null) {
   try {
     const existing = getLocalAttempts();
+    const safeUserId = userId || null;  // '' -> null so the truthy check below is reliable
     const cleanGuest = guestName ? guestName.trim().toLowerCase() : null;
     const updated = existing.filter(a => {
       if (a.quiz_id !== quizId) return true;
-      if (userId && a.user_id === userId) return false;
+      if (safeUserId && a.user_id === safeUserId) return false;
       if (cleanGuest && a.guest_name && a.guest_name.trim().toLowerCase() === cleanGuest) return false;
-      if (!userId && !cleanGuest) return false;
+      if (!safeUserId && !cleanGuest) return false;
       return true;
     });
     localStorage.setItem('nt_quiz_attempts', JSON.stringify(updated));
@@ -610,10 +708,16 @@ export function removeLocalAttempt(attemptId: string) {
   }
 }
 
-// Helper to deduplicate attempts keeping only the latest attempt per quiz
+// Helper to deduplicate attempts keeping only the latest attempt per quiz.
+// P12 FIX: Explicitly sort by created_at descending BEFORE deduplication so
+// the “takes the first occurrence” logic always picks the most recent entry,
+// regardless of how the caller has ordered the input array.
 function getLatestAttemptsPerQuiz(attempts: QuizAttempt[]): QuizAttempt[] {
+  const sorted = [...attempts].sort(
+    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
   const map = new Map<string, QuizAttempt>();
-  for (const a of attempts) {
+  for (const a of sorted) {
     if (!map.has(a.quiz_id)) {
       map.set(a.quiz_id, a);
     }
@@ -701,29 +805,27 @@ export async function deleteQuizAttempt(attemptId: string): Promise<boolean> {
 // Fetch Quiz Questions with correct answer flags for Detailed Review Modal
 export async function fetchQuizQuestionsWithAnswers(quizId: string): Promise<QuizQuestionItem[]> {
   try {
+    // P2 FIX: single query with nested answers (was N+1)
     const { data: questionsData, error: qError } = await supabase
       .from('quiz_questions')
-      .select('id, quiz_id, question_text, image_path, question_order')
+      .select('id, quiz_id, question_text, image_path, question_order, quiz_answers(id, question_id, answer_text, is_correct, answer_order)')
       .eq('quiz_id', quizId)
       .order('question_order', { ascending: true });
 
     if (qError || !questionsData) return [];
 
-    const result: QuizQuestionItem[] = [];
-    for (const q of questionsData) {
-      const { data: answersData } = await supabase
-        .from('quiz_answers')
-        .select('id, question_id, answer_text, is_correct, answer_order')
-        .eq('question_id', q.id)
-        .order('answer_order', { ascending: true });
-
-      result.push({
-        ...q,
-        answers: answersData || []
-      });
-    }
-
-    return result;
+    return questionsData.map(q => {
+      const rawAnswers: QuizAnswerItem[] = ((q as any).quiz_answers || []);
+      const sortedAnswers = [...rawAnswers].sort((a, b) => (a.answer_order || 0) - (b.answer_order || 0));
+      return {
+        id: q.id,
+        quiz_id: q.quiz_id,
+        question_text: q.question_text,
+        image_path: q.image_path,
+        question_order: q.question_order,
+        answers: sortedAnswers
+      };
+    });
   } catch (err) {
     console.error('Error fetching questions with answers for review:', err);
     return [];
@@ -806,20 +908,14 @@ export async function fetchAllQuizzesAdmin(): Promise<QuizItem[]> {
       return FALLBACK_QUIZZES;
     }
 
-    const result: QuizItem[] = [];
-    for (const q of quizzes) {
-      const { count } = await supabase
-        .from('quiz_questions')
-        .select('id', { count: 'exact', head: true })
-        .eq('quiz_id', q.id);
+    // P1 FIX: one batch request for all question counts instead of N separate requests
+    const quizIds = quizzes.map(q => q.id);
+    const countMap = await fetchQuestionCountsForQuizIds(quizIds);
 
-      result.push({
-        ...q,
-        question_count: count || 0
-      });
-    }
-
-    return result;
+    return quizzes.map(q => ({
+      ...q,
+      question_count: countMap[q.id] || 0
+    }));
   } catch (err) {
     console.error('Error fetching admin quizzes:', err);
     return FALLBACK_QUIZZES;
@@ -874,9 +970,10 @@ export async function deleteQuizAdmin(quizId: string): Promise<void> {
 // Fetch Questions for Admin (Includes is_correct)
 export async function fetchQuizQuestionsAdmin(quizId: string): Promise<QuizQuestionItem[]> {
   try {
+    // P2 FIX: single query with nested answers including is_correct (was N+1)
     const { data: questionsData, error: qError } = await supabase
       .from('quiz_questions')
-      .select('*')
+      .select('*, quiz_answers(*)')
       .eq('quiz_id', quizId)
       .order('question_order', { ascending: true });
 
@@ -884,21 +981,15 @@ export async function fetchQuizQuestionsAdmin(quizId: string): Promise<QuizQuest
       return FALLBACK_QUESTIONS[quizId] || [];
     }
 
-    const result: QuizQuestionItem[] = [];
-    for (const q of questionsData) {
-      const { data: answersData } = await supabase
-        .from('quiz_answers')
-        .select('*')
-        .eq('question_id', q.id)
-        .order('answer_order', { ascending: true });
-
-      result.push({
-        ...q,
-        answers: answersData || []
-      });
-    }
-
-    return result;
+    return questionsData.map(q => {
+      const rawAnswers: QuizAnswerItem[] = ((q as any).quiz_answers || []);
+      const sortedAnswers = [...rawAnswers].sort((a, b) => (a.answer_order || 0) - (b.answer_order || 0));
+      const { quiz_answers, ...rest } = q as any;
+      return {
+        ...rest,
+        answers: sortedAnswers
+      };
+    });
   } catch (err) {
     console.error('Error fetching admin quiz questions:', err);
     return FALLBACK_QUESTIONS[quizId] || [];

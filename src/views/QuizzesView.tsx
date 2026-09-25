@@ -6,7 +6,8 @@ import {
 import { QuizItem, QuizQuestionItem, QuizAnswerItem, QuizAttempt } from '../types';
 import {
   fetchPublishedQuizzes, fetchQuizQuestionsForPlay, submitQuizAttempt,
-  getQuizResultFeedback, getQuizImageUrl
+  getQuizResultFeedback, getQuizImageUrl,
+  prefetchQuizQuestions, getFromPrefetchCache
 } from '../lib/quizService';
 import { QuizLeaderboardModal } from '../components/QuizLeaderboardModal';
 import { QuizStudentReviewModal } from '../components/QuizStudentReviewModal';
@@ -88,12 +89,15 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedQuizId, setCopiedQuizId] = useState<string | null>(null);
 
-  // Load published quizzes
+  // Load published quizzes, then prefetch top 5 in the background
   const loadQuizzes = async () => {
     setLoadingList(true);
     try {
       const data = await fetchPublishedQuizzes();
       setQuizzes(data);
+      // I1: Background-prefetch the first 5 quizzes so they open instantly
+      const top5 = data.slice(0, 5);
+      top5.forEach(q => prefetchQuizQuestions(q.id));
     } catch (err) {
       console.error('Error loading quizzes:', err);
     } finally {
@@ -117,7 +121,6 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
 
   // Start playing a quiz & update URL
   const handleStartQuiz = async (quiz: QuizItem, pushUrl = true) => {
-    setLoadingQuiz(true);
     setActiveQuiz(quiz);
     onActiveQuizChange?.(quiz);
     setCurrentIndex(0);
@@ -132,6 +135,19 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
       }
     }
 
+    // I1+I3: Check prefetch cache first — if hit, questions are populated instantly
+    const cached = getFromPrefetchCache(quiz.id);
+    if (cached && cached.questions.length > 0) {
+      setQuestions(cached.questions);
+      if (cached.quiz) {
+        setActiveQuiz(cached.quiz);
+        onActiveQuizChange?.(cached.quiz);
+      }
+      setLoadingQuiz(false);
+      return;
+    }
+
+    setLoadingQuiz(true);
     try {
       const quizData = await fetchQuizQuestionsForPlay(quiz.id);
       if (quizData && quizData.questions.length > 0) {

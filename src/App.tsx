@@ -21,6 +21,7 @@ import { SearchModal } from './components/SearchModal';
 import { AuthModal } from './components/AuthModal';
 import { StudentProfileModal } from './components/StudentProfileModal';
 import { ProfileView } from './views/ProfileView';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { supabase } from './lib/supabase';
 import { isAdminUser, fetchAllArticles, getInitialArticles, generateSlug } from './lib/blogService';
 import { fetchUserProfile, syncUserProfile } from './lib/userService';
@@ -668,20 +669,24 @@ export function App() {
                 )}
 
                 {activeTab === 'tests' && (
-                  <TestsView
-                    onOpenTest={handleOpenTest}
-                    user={user}
-                    onOpenAuth={() => setIsAuthOpen(true)}
-                  />
+                  <ErrorBoundary section="ტესტების გვერდი">
+                    <TestsView
+                      onOpenTest={handleOpenTest}
+                      user={user}
+                      onOpenAuth={() => setIsAuthOpen(true)}
+                    />
+                  </ErrorBoundary>
                 )}
 
                 {activeTab === 'quizzes' && (
-                  <QuizzesView
-                    user={user}
-                    onOpenAuth={() => setIsAuthOpen(true)}
-                    initialQuizId={selectedQuizId}
-                    onActiveQuizChange={(quiz) => setSelectedQuiz(quiz)}
-                  />
+                  <ErrorBoundary section="ქვიზების გვერდი">
+                    <QuizzesView
+                      user={user}
+                      onOpenAuth={() => setIsAuthOpen(true)}
+                      initialQuizId={selectedQuizId}
+                      onActiveQuizChange={(quiz) => setSelectedQuiz(quiz)}
+                    />
+                  </ErrorBoundary>
                 )}
 
                 {activeTab === 'videos' && (
