@@ -706,6 +706,9 @@ export function App() {
                       setSelectedQuizId(quizId);
                       handleTabChange('quizzes');
                     }}
+                    onOpenTest={(categoryKey, chapterId) => {
+                      handleTabChange('tests');
+                    }}
                     onOpenAuth={() => setIsAuthOpen(true)}
                   />
                 )}

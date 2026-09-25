@@ -2,26 +2,30 @@ import { useState, useEffect, type FC } from 'react';
 import {
   User, ShieldCheck, BookMarked, Award, HelpCircle, RotateCcw,
   CheckCircle2, XCircle, Trash2, Eye, Play, Sparkles, BookOpen,
-  MapPin, Layers, FileText, Clock, Image as ImageIcon, Edit2, Check
+  MapPin, Layers, FileText, Clock, Image as ImageIcon, Edit2, Check,
+  ChevronDown, ChevronUp, ArrowRight
 } from 'lucide-react';
 import { getStudentProgress, resetStudentProgress, StudentProfileProgress, ChapterProgressStats } from '../lib/progressService';
-import { TEST_CATEGORIES, fetchProgramsAndSubprograms, ProgramChapter } from '../lib/testService';
+import { TEST_CATEGORIES, fetchProgramsAndSubprograms, fetchQuestionsForCategory, ProgramChapter } from '../lib/testService';
 import { isAdminUser } from '../lib/blogService';
 import { fetchUserProfile, syncUserProfile } from '../lib/userService';
 import { fetchUserQuizAttempts, deleteQuizAttempt, getQuizImageUrl, getQuizResultFeedback } from '../lib/quizService';
-import { QuizAttempt } from '../types';
+import { QuizAttempt, QuizQuestion } from '../types';
 import { QuizStudentReviewModal } from '../components/QuizStudentReviewModal';
+import { IncorrectAnswersModal } from '../components/IncorrectAnswersModal';
 import { supabase } from '../lib/supabase';
 
 interface ProfileViewProps {
   user: { name: string; email: string } | null;
   onOpenQuiz?: (quizId: string) => void;
+  onOpenTest?: (categoryKey: string, chapterId: string) => void;
   onOpenAuth?: () => void;
 }
 
 export const ProfileView: FC<ProfileViewProps> = ({
   user,
   onOpenQuiz,
+  onOpenTest,
   onOpenAuth
 }) => {
   const [progress, setProgress] = useState<StudentProfileProgress | null>(null);
@@ -38,6 +42,23 @@ export const ProfileView: FC<ProfileViewProps> = ({
   const [profileName, setProfileName] = useState('');
   const [isEditingName, setIsEditingName] = useState(false);
   const [isSavingName, setIsSavingName] = useState(false);
+
+  // Accordion & Category Questions State for Chapters Progress
+  const [expandedChapterId, setExpandedChapterId] = useState<string | null>(null);
+  const [categoryQuestionsMap, setCategoryQuestionsMap] = useState<Record<string, (QuizQuestion & { chapterId: string })[]>>({});
+  const [loadingCategoryQuestions, setLoadingCategoryQuestions] = useState(false);
+
+  // Incorrect Answers Modal State
+  const [modalState, setModalState] = useState<{
+    isOpen: boolean;
+    chapterTitle: string;
+    categoryKey: string;
+    categoryTitle: string;
+    chapterId: string;
+    questions: (QuizQuestion & { chapterId: string })[];
+    incorrectQuestionIds: string[];
+    correctQuestionIds: string[];
+  } | null>(null);
 
   const userEmail = user?.email || '';
 
@@ -78,6 +99,32 @@ export const ProfileView: FC<ProfileViewProps> = ({
       loadData();
     }
   }, [userEmail, user]);
+
+  // Load questions for all categories when Chapters tab is opened
+  useEffect(() => {
+    if (activeTab === 'chapters' && Object.keys(categoryQuestionsMap).length === 0) {
+      const loadAllCategoryQuestions = async () => {
+        setLoadingCategoryQuestions(true);
+        try {
+          const catKeys = ['mcq', 'map', 'analogies', 'source', 'illustrations', 'chronology'];
+          const mapResults: Record<string, (QuizQuestion & { chapterId: string })[]> = {};
+          await Promise.all(
+            catKeys.map(async (key) => {
+              const questions = await fetchQuestionsForCategory(key);
+              mapResults[key] = questions;
+            })
+          );
+          setCategoryQuestionsMap(mapResults);
+        } catch (err) {
+          console.error('Error loading category questions for profile:', err);
+        } finally {
+          setLoadingCategoryQuestions(false);
+        }
+      };
+
+      loadAllCategoryQuestions();
+    }
+  }, [activeTab]);
 
   if (!user) {
     return (
@@ -176,6 +223,107 @@ export const ProfileView: FC<ProfileViewProps> = ({
     }
   };
 
+  // Helper to compute category task & question stats for a specific chapter
+  const getCategoryChapterTaskStats = (
+    catKey: string,
+    chapterId: string,
+    questions: (QuizQuestion & { chapterId: string })[]
+  ) => {
+    const targetNum = Number(String(chapterId).replace(/[^0-9]/g, ''));
+    const chQuestions = questions.filter(q => {
+      const qNum = Number(String(q.chapterId).replace(/[^0-9]/g, ''));
+      return qNum === targetNum || q.chapterId === chapterId || q.chapterId === `ch-${chapterId.replace('ch-', '')}`;
+    });
+
+    const statKey = `${catKey}_${chapterId}`;
+    const chapterStat = progress?.statsByChapter[statKey];
+    const correctIds = chapterStat?.correctQuestionIds || [];
+    const incorrectIds = chapterStat?.incorrectQuestionIds || [];
+
+    if (catKey === 'mcq' || catKey === 'chronology') {
+      let correct = 0;
+      let incorrect = 0;
+      chQuestions.forEach(q => {
+        if (incorrectIds.includes(q.id)) {
+          incorrect++;
+        } else if (correctIds.includes(q.id)) {
+          correct++;
+        }
+      });
+      const total = chQuestions.length;
+      const unattempted = Math.max(0, total - (correct + incorrect));
+      return {
+        total,
+        correct,
+        incorrect,
+        unattempted,
+        pct: total > 0 ? Math.round((correct / total) * 100) : 0,
+        questions: chQuestions,
+        incorrectIds,
+        correctIds
+      };
+    }
+
+    // Task Group based (Maps, Analogies, Sources, Illustrations)
+    const groupMap = new Map<string, (QuizQuestion & { chapterId: string })[]>();
+    chQuestions.forEach((q, idx) => {
+      let key = '';
+      if (q.parentItemNumber) {
+        key = `parent-${q.parentItemNumber}`;
+      } else if (catKey === 'map' || catKey === 'illustrations') {
+        key = q.mapImage || (q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`);
+      } else if (catKey === 'source' || catKey === 'analogies') {
+        key = q.sourceContext?.substring(0, 100) || (q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`);
+      } else {
+        key = q.itemNumber ? `item-${q.itemNumber}` : `q-${idx}`;
+      }
+      const existing = groupMap.get(key) || [];
+      existing.push(q);
+      groupMap.set(key, existing);
+    });
+
+    const taskGroups = Array.from(groupMap.values());
+    let correctTasks = 0;
+    let incorrectTasks = 0;
+    let unattemptedTasks = 0;
+
+    taskGroups.forEach(g => {
+      let hasAttempted = false;
+      let isAllCorrect = true;
+
+      g.forEach(q => {
+        if (correctIds.includes(q.id) || incorrectIds.includes(q.id)) {
+          hasAttempted = true;
+        }
+        if (!correctIds.includes(q.id) || incorrectIds.includes(q.id)) {
+          isAllCorrect = false;
+        }
+      });
+
+      if (!hasAttempted) {
+        unattemptedTasks++;
+      } else if (isAllCorrect) {
+        correctTasks++;
+      } else {
+        incorrectTasks++;
+      }
+    });
+
+    const total = taskGroups.length;
+    const pct = total > 0 ? Math.round((correctTasks / total) * 100) : 0;
+
+    return {
+      total,
+      correct: correctTasks,
+      incorrect: incorrectTasks,
+      unattempted: unattemptedTasks,
+      pct,
+      questions: chQuestions,
+      incorrectIds,
+      correctIds
+    };
+  };
+
   return (
     <div className="max-w-[1280px] mx-auto py-6 sm:py-8 px-4 sm:px-6 space-y-8 animate-in fade-in duration-300">
       
@@ -198,25 +346,25 @@ export const ProfileView: FC<ProfileViewProps> = ({
                     type="text"
                     value={profileName}
                     onChange={(e) => setProfileName(e.target.value)}
-                    className="bg-white/10 text-white border border-[#C79B3A] px-3 py-1 rounded-xl text-base font-bold focus:outline-none"
+                    className="px-3 py-1 bg-[#FAF8F3] text-[#0D1B2A] rounded-xl text-lg font-serif font-bold focus:outline-none border-2 border-[#C79B3A]"
                   />
                   <button
                     onClick={handleSaveName}
                     disabled={isSavingName}
-                    className="px-3 py-1 bg-[#C79B3A] text-[#0D1B2A] text-xs font-bold rounded-xl hover:bg-[#E6C86B] transition-all cursor-pointer"
+                    className="p-2 bg-[#C79B3A] text-[#0D1B2A] rounded-xl hover:bg-[#E6C86B] transition-colors cursor-pointer"
                   >
-                    {isSavingName ? '...' : 'შენახვა'}
+                    <Check className="w-4 h-4" />
                   </button>
                 </div>
               ) : (
                 <>
                   <h1 className="font-serif font-bold text-2xl sm:text-3xl text-[#FAF8F3]">
-                    {profileName || user.name}
+                    {profileName}
                   </h1>
                   <button
                     onClick={() => setIsEditingName(true)}
-                    className="p-1 text-[#C79B3A] hover:text-white transition-colors cursor-pointer"
-                    title="სახელის შეცვლა"
+                    className="p-1.5 text-white/60 hover:text-[#C79B3A] transition-colors cursor-pointer"
+                    title="სახელის რედაქტირება"
                   >
                     <Edit2 className="w-4 h-4" />
                   </button>
@@ -224,47 +372,63 @@ export const ProfileView: FC<ProfileViewProps> = ({
               )}
 
               {isAdmin && (
-                <span className="px-3 py-1 bg-[#C79B3A] text-[#0D1B2A] text-[10px] font-bold uppercase tracking-wider rounded-full flex items-center gap-1 shadow-xs">
+                <span className="px-3 py-1 bg-[#C79B3A] text-[#0D1B2A] text-[10px] font-bold uppercase tracking-wider rounded-full shadow-xs flex items-center gap-1">
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>ადმინისტრატორი</span>
+                  Администратор
                 </span>
               )}
             </div>
 
-            <p className="text-xs sm:text-sm text-[#FAF8F3]/70 font-mono">
-              {user.email}
+            <p className="text-xs text-[#FAF8F3]/70 font-mono">
+              {userEmail}
             </p>
           </div>
         </div>
 
-        {/* Top Summary Stats */}
-        <div className="grid grid-cols-3 gap-3 z-10 w-full md:w-auto shrink-0 bg-white/5 p-3 rounded-2xl border border-white/10">
-          <div className="text-center px-3 py-1.5">
-            <span className="text-[10px] text-[#FAF8F3]/60 font-semibold uppercase tracking-wider block">ქვიზები</span>
-            <span className="font-serif font-bold text-xl text-[#C79B3A]">{quizAttempts.length}</span>
+        {/* Overall Profile Accuracy Box */}
+        <div className="z-10 flex items-center gap-4 bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/15 self-stretch md:self-auto justify-around">
+          <div className="text-center">
+            <span className="text-[10px] uppercase tracking-wider text-[#C79B3A] font-bold block">
+              საერთო სიზუსტე
+            </span>
+            <span className="font-serif font-bold text-2xl text-[#FAF8F3]">
+              {overallAccuracy}%
+            </span>
           </div>
 
-          <div className="text-center px-3 py-1.5 border-x border-white/10">
-            <span className="text-[10px] text-[#FAF8F3]/60 font-semibold uppercase tracking-wider block">სულ პასუხი</span>
-            <span className="font-serif font-bold text-xl text-[#FAF8F3]">{totalAttempted}</span>
+          <div className="w-px h-8 bg-white/20" />
+
+          <div className="text-center">
+            <span className="text-[10px] uppercase tracking-wider text-[#C79B3A] font-bold block">
+              სწორი პასუხები
+            </span>
+            <span className="font-serif font-bold text-2xl text-emerald-400">
+              {totalCorrect}
+            </span>
           </div>
 
-          <div className="text-center px-3 py-1.5">
-            <span className="text-[10px] text-[#FAF8F3]/60 font-semibold uppercase tracking-wider block">სიზუსტე</span>
-            <span className="font-serif font-bold text-xl text-emerald-400">{overallAccuracy}%</span>
+          <div className="w-px h-8 bg-white/20" />
+
+          <div className="text-center">
+            <span className="text-[10px] uppercase tracking-wider text-[#C79B3A] font-bold block">
+              არასწორი
+            </span>
+            <span className="font-serif font-bold text-2xl text-rose-400">
+              {totalIncorrect}
+            </span>
           </div>
         </div>
 
       </div>
 
-      {/* Navigation In-Page Tabs */}
-      <div className="flex items-center gap-2 p-1.5 bg-white rounded-2xl border border-[#E6DDCB] shadow-sm w-full max-w-full overflow-x-auto no-scrollbar flex-nowrap">
+      {/* Profile Navigation Tabs */}
+      <div className="flex items-center gap-2 border-b border-[#E6DDCB] pb-2 overflow-x-auto">
         <button
           onClick={() => setActiveTab('quizzes')}
-          className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap ${
+          className={`px-5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
             activeTab === 'quizzes'
-              ? 'bg-[#0D1B2A] text-[#FAF8F3] shadow-md'
-              : 'text-[#666666] hover:bg-[#FAF8F3] hover:text-[#0D1B2A]'
+              ? 'bg-[#0D1B2A] text-white shadow-md'
+              : 'bg-white text-[#0D1B2A] border border-[#E6DDCB] hover:bg-[#FAF8F3]'
           }`}
         >
           <HelpCircle className="w-4 h-4 text-[#C79B3A]" />
@@ -273,30 +437,30 @@ export const ProfileView: FC<ProfileViewProps> = ({
 
         <button
           onClick={() => setActiveTab('chapters')}
-          className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap ${
+          className={`px-5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
             activeTab === 'chapters'
-              ? 'bg-[#0D1B2A] text-[#FAF8F3] shadow-md'
-              : 'text-[#666666] hover:bg-[#FAF8F3] hover:text-[#0D1B2A]'
+              ? 'bg-[#0D1B2A] text-white shadow-md'
+              : 'bg-white text-[#0D1B2A] border border-[#E6DDCB] hover:bg-[#FAF8F3]'
           }`}
         >
           <BookMarked className="w-4 h-4 text-[#C79B3A]" />
-          <span>თავების პროგრესი ({programs.length})</span>
+          <span>11 თავის პროგრესი</span>
         </button>
 
         <button
           onClick={() => setActiveTab('categories')}
-          className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap ${
+          className={`px-5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
             activeTab === 'categories'
-              ? 'bg-[#0D1B2A] text-[#FAF8F3] shadow-md'
-              : 'text-[#666666] hover:bg-[#FAF8F3] hover:text-[#0D1B2A]'
+              ? 'bg-[#0D1B2A] text-white shadow-md'
+              : 'bg-white text-[#0D1B2A] border border-[#E6DDCB] hover:bg-[#FAF8F3]'
           }`}
         >
           <Award className="w-4 h-4 text-[#C79B3A]" />
-          <span>ტიპების პროგრესი</span>
+          <span>დავალების ტიპები</span>
         </button>
       </div>
 
-      {/* Main Tab Content */}
+      {/* Main Tab Views */}
       <div className="space-y-8">
         
         {/* Success Alert Banner */}
@@ -428,59 +592,190 @@ export const ProfileView: FC<ProfileViewProps> = ({
           </div>
         )}
 
-        {/* TAB 2: PROGRAM CHAPTERS */}
+        {/* TAB 2: PROGRAM CHAPTERS ACCORDION WITH DETAILED ERRORS AND TASK BREAKDOWN */}
         {activeTab === 'chapters' && (
           <div className="bg-white rounded-3xl border border-[#E6DDCB] p-6 sm:p-8 space-y-6 shadow-sm">
-            <div className="flex items-center justify-between border-b border-[#E6DDCB] pb-4">
-              <h3 className="font-serif font-bold text-xl text-[#0D1B2A] flex items-center gap-2">
-                <BookMarked className="w-5 h-5 text-[#C79B3A]" />
-                <span>პროგრამის 11 თავის პროგრესი</span>
-              </h3>
-              <span className="text-xs font-mono text-[#666666]">სტატისტიკა თავების მიხედვით</span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#E6DDCB] pb-4 gap-2">
+              <div className="space-y-1">
+                <h3 className="font-serif font-bold text-xl text-[#0D1B2A] flex items-center gap-2">
+                  <BookMarked className="w-5 h-5 text-[#C79B3A]" />
+                  <span>პროგრამის 11 თავის დეტალური პროგრესი</span>
+                </h3>
+                <p className="text-xs text-[#666666]">
+                  დააჭირეთ თავს ჩამოსაშლელად და იხილეთ არჩევითპასუხიანი კითხვების, რუკების, ანალოგიებისა და წყაროების ზუსტი შეცდომები.
+                </p>
+              </div>
+
+              <span className="text-xs font-mono text-[#666666] self-start sm:self-auto">
+                სულ 11 თავი
+              </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {programs.map((prog) => {
-                let chCorrect = 0;
-                let chIncorrect = 0;
+            {loadingCategoryQuestions ? (
+              <div className="py-16 text-center text-xs text-[#666666] space-y-3">
+                <div className="w-7 h-7 border-2 border-[#C79B3A] border-t-transparent rounded-full animate-spin mx-auto" />
+                <span>თავების დეტალური მონაცემების ჩატვირთვა...</span>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {programs.map((prog) => {
+                  const isExpanded = expandedChapterId === prog.id;
 
-                if (progress) {
-                  Object.entries(progress.statsByChapter).forEach(([key, stat]: [string, ChapterProgressStats]) => {
-                    if (key.endsWith(`_${prog.id}`)) {
-                      chCorrect += stat.correctQuestionIds.length;
-                      chIncorrect += stat.incorrectQuestionIds.length;
-                    }
-                  });
-                }
+                  // Overall chapter summary stats
+                  let chCorrect = 0;
+                  let chIncorrect = 0;
 
-                const chAttempted = chCorrect + chIncorrect;
-                const chPct = chAttempted > 0 ? Math.round((chCorrect / chAttempted) * 100) : 0;
+                  if (progress) {
+                    Object.entries(progress.statsByChapter).forEach(([key, stat]: [string, ChapterProgressStats]) => {
+                      if (key.endsWith(`_${prog.id}`)) {
+                        chCorrect += stat.correctQuestionIds.length;
+                        chIncorrect += stat.incorrectQuestionIds.length;
+                      }
+                    });
+                  }
 
-                return (
-                  <div key={prog.id} className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                      <span className="text-xs font-serif font-bold text-[#0D1B2A]">{prog.title}</span>
-                      <div className="flex items-center gap-3 text-[11px] font-semibold">
-                        <span className="text-emerald-700 font-bold">სწორი: {chCorrect}</span>
-                        <span className="text-rose-700">არასწორი: {chIncorrect}</span>
-                        <span className="text-[#C79B3A] font-bold font-mono">{chPct}%</span>
-                      </div>
+                  const chAttempted = chCorrect + chIncorrect;
+                  const chPct = chAttempted > 0 ? Math.round((chCorrect / chAttempted) * 100) : 0;
+
+                  return (
+                    <div 
+                      key={prog.id} 
+                      className={`rounded-2xl border-2 transition-all duration-300 overflow-hidden ${
+                        isExpanded ? 'border-[#C79B3A] bg-white shadow-md' : 'border-[#E6DDCB] bg-[#FAF8F3] hover:border-[#C79B3A]/60'
+                      }`}
+                    >
+                      {/* Chapter Accordion Header */}
+                      <button
+                        onClick={() => setExpandedChapterId(isExpanded ? null : prog.id)}
+                        className="w-full p-4 sm:p-5 text-left flex items-center justify-between gap-4 cursor-pointer"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
+                            isExpanded ? 'bg-[#0D1B2A] text-[#C79B3A]' : 'bg-white border border-[#E6DDCB] text-[#0D1B2A]'
+                          }`}>
+                            {prog.title.match(/\d+/)?.[0] || '1'}
+                          </div>
+                          <h4 className="font-serif font-bold text-sm sm:text-base text-[#0D1B2A] truncate">
+                            {prog.title}
+                          </h4>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="flex items-center gap-2 text-xs font-bold">
+                            <span className="text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                              სწორი: {chCorrect}
+                            </span>
+                            <span className="text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
+                              არასწორი: {chIncorrect}
+                            </span>
+                            <span className="text-[#C79B3A] font-mono bg-white px-2.5 py-1 rounded-lg border border-[#E6DDCB]">
+                              {chPct}%
+                            </span>
+                          </div>
+
+                          {isExpanded ? (
+                            <ChevronUp className="w-5 h-5 text-[#C79B3A]" />
+                          ) : (
+                            <ChevronDown className="w-5 h-5 text-[#666666]" />
+                          )}
+                        </div>
+                      </button>
+
+                      {/* Chapter Accordion Expanded Content */}
+                      {isExpanded && (
+                        <div className="p-4 sm:p-6 bg-white border-t border-[#E6DDCB] space-y-6 animate-in fade-in duration-200">
+                          
+                          <div className="text-xs text-[#666666] bg-[#FAF8F3] p-3.5 rounded-xl border border-[#E6DDCB]">
+                            💡 <strong>წესი:</strong> რუკებში, ანალოგიებში, წყაროებსა და ილუსტრაციებში დავალება სწორად ითვლება მხოლოდ მაშინ, თუ <strong>ყველა კითხვას</strong> სწორად უპასუხეთ. 1 შეცდომაც კი დავალებას თვლის არასწორად.
+                          </div>
+
+                          {/* Categories Grid for this Chapter */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {TEST_CATEGORIES.map((cat) => {
+                              const stats = getCategoryChapterTaskStats(cat.key, prog.id, categoryQuestionsMap[cat.key] || []);
+
+                              const isMcq = cat.key === 'mcq';
+                              const unitText = isMcq ? 'კითხვა' : cat.key === 'map' ? 'რუკა' : cat.key === 'analogies' ? 'ანალოგია' : cat.key === 'source' ? 'წყარო' : cat.key === 'illustrations' ? 'ილუსტრაცია' : 'დავალება';
+
+                              return (
+                                <div 
+                                  key={cat.key}
+                                  className="p-4 bg-[#FAF8F3] rounded-xl border border-[#E6DDCB] space-y-3.5 flex flex-col justify-between"
+                                >
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-7 h-7 rounded-lg bg-white border border-[#E6DDCB] flex items-center justify-center shrink-0">
+                                          {getCategoryIcon(cat.key)}
+                                        </div>
+                                        <span className="font-bold text-xs text-[#0D1B2A]">
+                                          {cat.title}
+                                        </span>
+                                      </div>
+
+                                      <span className="text-[10px] font-mono font-bold text-[#666666] bg-white px-2 py-0.5 rounded border border-[#E6DDCB]">
+                                        სულ: {stats.total} {unitText}
+                                      </span>
+                                    </div>
+
+                                    {/* Stats breakdown row */}
+                                    <div className="grid grid-cols-3 gap-1.5 text-center text-[10px] font-bold">
+                                      <div className="p-1.5 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200">
+                                        სწორი: {stats.correct}
+                                      </div>
+                                      <div className="p-1.5 bg-rose-50 text-rose-800 rounded-lg border border-rose-200">
+                                        არასწორი: {stats.incorrect}
+                                      </div>
+                                      <div className="p-1.5 bg-gray-50 text-gray-700 rounded-lg border border-gray-200">
+                                        დარჩენილი: {stats.unattempted}
+                                      </div>
+                                    </div>
+
+                                    {/* Progress Bar */}
+                                    <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden flex">
+                                      <div 
+                                        style={{ width: `${stats.pct}%` }}
+                                        className="bg-emerald-500 h-full transition-all duration-300"
+                                      />
+                                      <div 
+                                        style={{ width: `${stats.total > 0 ? (stats.incorrect / stats.total) * 100 : 0}%` }}
+                                        className="bg-rose-500 h-full transition-all duration-300"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Error Viewer Trigger Button */}
+                                  <button
+                                    onClick={() => {
+                                      setModalState({
+                                        isOpen: true,
+                                        chapterTitle: prog.title,
+                                        categoryKey: cat.key,
+                                        categoryTitle: cat.title,
+                                        chapterId: prog.id,
+                                        questions: stats.questions,
+                                        incorrectQuestionIds: stats.incorrectIds,
+                                        correctQuestionIds: stats.correctIds
+                                      });
+                                    }}
+                                    className="w-full py-2 bg-white hover:bg-[#0D1B2A] text-[#0D1B2A] hover:text-white border border-[#E6DDCB] text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                                  >
+                                    <Eye className="w-3.5 h-3.5 text-[#C79B3A]" />
+                                    <span>{isMcq ? 'ნახე არასწორი პასუხები' : 'ნახე შეცდომები'} ({stats.incorrect})</span>
+                                  </button>
+
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                        </div>
+                      )}
                     </div>
-
-                    <div className="w-full h-2.5 bg-[#E6DDCB] rounded-full overflow-hidden flex">
-                      <div 
-                        style={{ width: `${chAttempted > 0 ? (chCorrect / chAttempted) * 100 : 0}%` }}
-                        className="bg-emerald-500 h-full transition-all duration-500"
-                      />
-                      <div 
-                        style={{ width: `${chAttempted > 0 ? (chIncorrect / chAttempted) * 100 : 0}%` }}
-                        className="bg-rose-500 h-full transition-all duration-500"
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -584,6 +879,22 @@ export const ProfileView: FC<ProfileViewProps> = ({
             setSelectedReviewAttempt(null);
             onOpenQuiz?.(quizId);
           }}
+        />
+      )}
+
+      {/* Detailed Incorrect Answers & Errors Modal for Chapters & Categories */}
+      {modalState && (
+        <IncorrectAnswersModal
+          isOpen={modalState.isOpen}
+          onClose={() => setModalState(null)}
+          chapterTitle={modalState.chapterTitle}
+          categoryKey={modalState.categoryKey}
+          categoryTitle={modalState.categoryTitle}
+          chapterId={modalState.chapterId}
+          questions={modalState.questions}
+          incorrectQuestionIds={modalState.incorrectQuestionIds}
+          correctQuestionIds={modalState.correctQuestionIds}
+          onGoToTest={onOpenTest}
         />
       )}
 
