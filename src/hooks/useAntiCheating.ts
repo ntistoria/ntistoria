@@ -8,11 +8,17 @@ interface UseAntiCheatingOptions {
 export function useAntiCheating({ isActive, onViolation }: UseAntiCheatingOptions) {
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const switchCountRef = useRef(0);
+  const prevIsActiveRef = useRef(false);
 
   useEffect(() => {
-    if (!isActive) {
+    // When switching from inactive to active (starting a new test/quiz), reset count
+    if (isActive && !prevIsActiveRef.current) {
       switchCountRef.current = 0;
       setTabSwitchCount(0);
+    }
+    prevIsActiveRef.current = isActive;
+
+    if (!isActive) {
       return;
     }
 

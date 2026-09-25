@@ -19,6 +19,7 @@ import {
   resetStudentProgress, 
   StudentProfileProgress 
 } from '../lib/progressService';
+import { useAntiCheating } from '../hooks/useAntiCheating';
 import { 
   BookOpen, 
   MapPin, 
@@ -46,7 +47,8 @@ import {
   Lock,
   UserCheck,
   ShieldAlert,
-  LogIn
+  LogIn,
+  AlertCircle
 } from 'lucide-react';
 
 interface TestsViewProps {
@@ -130,6 +132,11 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
   const [currentQIndex, setCurrentQIndex] = useState<number>(0);
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
   const [isTestFinished, setIsTestFinished] = useState<boolean>(false);
+
+  // Anti-cheating & Tab Switch tracking for Inline Tests in TestsView
+  const { tabSwitchCount, switchCountRef } = useAntiCheating({
+    isActive: Boolean(activeInlineTest) && !isTestFinished
+  });
 
   // Chronology interactive reordering state (current item sequence per question index)
   const [chronologyOrders, setChronologyOrders] = useState<Record<number, string[]>>({});
@@ -672,8 +679,21 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
 
           {!isTestFinished ? (
             /* ACTIVE INLINE QUESTION VIEW */
-            <div className="bg-white rounded-3xl border-2 border-[#E6DDCB] p-6 sm:p-10 space-y-8 shadow-md">
+            <div className="bg-white rounded-3xl border-2 border-[#E6DDCB] p-6 sm:p-10 space-y-8 shadow-md prevent-select select-none">
               
+              {/* Anti-cheating Warning Banner */}
+              {tabSwitchCount > 0 && (
+                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl text-amber-950 text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in duration-200">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>⚠️ გაფრთხილება: ტესტის მიმდინარეობისას გვერდი/ტაბი დატოვეთ {tabSwitchCount}-ჯერ!</span>
+                  </div>
+                  <span className="text-[10px] font-mono uppercase bg-amber-200 text-amber-950 px-2 py-0.5 rounded font-extrabold shrink-0">
+                    დაფიქსირდა
+                  </span>
+                </div>
+              )}
+
               {/* Question Header & Title */}
               <div className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1023,6 +1043,21 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
                           არასწორი: {totalCount - correctCount}
                         </div>
                       </div>
+                    </div>
+
+                    {/* Tab Switch Anti-cheating Status */}
+                    <div className="p-3.5 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] text-xs font-bold shadow-xs">
+                      {switchCountRef.current > 0 ? (
+                        <span className="text-amber-800 flex items-center justify-center gap-2">
+                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>⚠️ ტესტის მიმდინარეობისას {switchCountRef.current}-ჯერ დაფიქსირდა გვერდის/ტაბის დატოვება</span>
+                        </span>
+                      ) : (
+                        <span className="text-emerald-800 flex items-center justify-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                          <span>✓ გვერდის/ტაბის დატოვება არ დაფიქსირებულა</span>
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-center gap-4 pt-4">
