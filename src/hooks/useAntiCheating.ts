@@ -9,11 +9,13 @@ export function useAntiCheating({ isActive, onViolation }: UseAntiCheatingOption
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const switchCountRef = useRef(0);
   const prevIsActiveRef = useRef(false);
+  const lastViolationTimeRef = useRef(0);
 
   useEffect(() => {
     // When switching from inactive to active (starting a new test/quiz), reset count
     if (isActive && !prevIsActiveRef.current) {
       switchCountRef.current = 0;
+      lastViolationTimeRef.current = 0;
       setTabSwitchCount(0);
     }
     prevIsActiveRef.current = isActive;
@@ -28,6 +30,13 @@ export function useAntiCheating({ isActive, onViolation }: UseAntiCheatingOption
     const handleContextMenu = (e: MouseEvent) => e.preventDefault();
 
     const registerViolation = () => {
+      const now = Date.now();
+      // Cooldown check: ignore duplicate events (blur + visibilitychange) occurring within 1.2s
+      if (now - lastViolationTimeRef.current < 1200) {
+        return;
+      }
+      lastViolationTimeRef.current = now;
+
       switchCountRef.current += 1;
       setTabSwitchCount(switchCountRef.current);
       console.warn(`გვერდის დატოვება/ტაბის გადართვა დაფიქსირდა: ${switchCountRef.current}`);
