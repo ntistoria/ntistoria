@@ -211,6 +211,15 @@ BEGIN
     RAISE EXCEPTION 'Quiz has no questions or does not exist';
   END IF;
 
+  -- Delete previous attempt for this quiz and user/guest (keep only latest result per quiz)
+  IF p_user_id IS NOT NULL THEN
+    DELETE FROM public.quiz_attempts
+    WHERE quiz_id = p_quiz_id AND user_id = p_user_id;
+  ELSIF p_guest_name IS NOT NULL AND LENGTH(TRIM(p_guest_name)) > 0 THEN
+    DELETE FROM public.quiz_attempts
+    WHERE quiz_id = p_quiz_id AND LOWER(TRIM(guest_name)) = LOWER(TRIM(p_guest_name));
+  END IF;
+
   -- Iterate submitted user answers array: [{"question_id": "...", "answer_id": "..."}, ...]
   FOR v_item IN SELECT * FROM jsonb_array_elements(p_user_answers)
   LOOP

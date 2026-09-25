@@ -1,4 +1,4 @@
-import { useState, useEffect, type FC } from 'react';
+import React, { useState, useEffect, type FC, type FormEvent } from 'react';
 import {
   HelpCircle, ArrowRight, ArrowLeft, Trophy, CheckCircle2, RotateCcw,
   Share2, Copy, Check, Sparkles, Award, User, Clock, AlertCircle, X, ExternalLink, Link as LinkIcon, Eye
@@ -253,7 +253,7 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
 
     try {
       // Format answers array
-      const userAnswersList = Object.entries(selectedAnswers).map(([question_id, answer_id]) => ({
+      const userAnswersList: { question_id: string; answer_id: string }[] = Object.entries(selectedAnswers).map(([question_id, answer_id]) => ({
         question_id,
         answer_id
       }));

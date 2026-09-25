@@ -317,12 +317,12 @@ export const ProfileView: FC<ProfileViewProps> = ({
                   <span>ნაპასუხები ქვიზების ისტორია</span>
                 </h3>
                 <p className="text-xs text-[#666666]">
-                  აქ ჩანს თქვენ მიერ გავლილი ყველა ქვიზი, მიღებული ქულები და დეტალური პასუხები.
+                  აქ ჩანს თქვენ მიერ გავლილი ქვიზების ბოლო შედეგები, მიღებული ქულები და დეტალური პასუხები.
                 </p>
               </div>
 
               <span className="px-3 py-1 bg-[#FAF8F3] border border-[#E6DDCB] text-[#0D1B2A] text-xs font-mono font-bold rounded-xl">
-                {quizAttempts.length} მცდელობა
+                {quizAttempts.length} შედეგი
               </span>
             </div>
 
