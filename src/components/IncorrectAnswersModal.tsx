@@ -54,14 +54,22 @@ export const IncorrectAnswersModal: FC<IncorrectAnswersModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  // 1. For MCQ / Chronology / Single Question categories: Filter questions that are incorrect
+  const isMcq = categoryKey === 'mcq';
+  const isChronology = categoryKey === 'chronology';
   const isSingleQuestionCategory = isMcq || isChronology;
-  const incorrectMcqQuestions = questions.filter(q => incorrectQuestionIds.includes(q.id));
+
+  const safeQuestions = questions || [];
+  const safeIncorrectIds = incorrectQuestionIds || [];
+  const safeCorrectIds = correctQuestionIds || [];
+
+  // 1. For MCQ / Chronology / Single Question categories: Filter questions that are incorrect
+  const incorrectMcqQuestions = safeQuestions.filter(q => q && safeIncorrectIds.includes(q.id));
 
   // 2. For Task-based categories (Maps, Analogies, Sources, Illustrations): Group questions into tasks
   const taskGroupMap = new Map<string, (QuizQuestion & { chapterId: string })[]>();
 
-  questions.forEach((q, idx) => {
+  safeQuestions.forEach((q, idx) => {
+    if (!q) return;
     let groupKey = '';
     if (q.parentItemNumber) {
       groupKey = `parent-${q.parentItemNumber}`;
@@ -90,7 +98,7 @@ export const IncorrectAnswersModal: FC<IncorrectAnswersModalProps> = ({
 
     let incorrectCount = 0;
     qList.forEach(q => {
-      if (incorrectQuestionIds.includes(q.id)) {
+      if (safeIncorrectIds.includes(q.id)) {
         incorrectCount++;
       }
     });
@@ -186,14 +194,14 @@ export const IncorrectAnswersModal: FC<IncorrectAnswersModalProps> = ({
 
           {/* LIST OF INCORRECT ITEMS */}
 
-          {/* A. MCQ INCORRECT QUESTIONS LIST */}
-          {isMcq && (
+          {/* A. SINGLE QUESTION CATEGORIES (MCQ & CHRONOLOGY) INCORRECT QUESTIONS LIST */}
+          {isSingleQuestionCategory && (
             incorrectMcqQuestions.length === 0 ? (
               <div className="py-12 text-center space-y-3 bg-white rounded-2xl border border-[#E6DDCB] p-6">
                 <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
                 <h4 className="font-serif font-bold text-lg text-[#0D1B2A]">შეცდომები არ არის!</h4>
                 <p className="text-xs text-[#666666]">
-                  ამ თავში ყველა არჩევითპასუხიან კითხვას სწორად უპასუხეთ.
+                  ამ თავში ყველა კითხვას სწორად უპასუხეთ.
                 </p>
               </div>
             ) : (
@@ -215,38 +223,44 @@ export const IncorrectAnswersModal: FC<IncorrectAnswersModalProps> = ({
                     </div>
 
                     {/* Options list showing correct answer */}
-                    <div className="space-y-2 pt-2 border-t border-[#E6DDCB]">
-                      {q.options.map((optText, optIdx) => {
-                        const isCorrect = optIdx === q.correctAnswerIndex;
-                        const optLabels = ['ა', 'ბ', 'გ', 'დ'];
+                    {q.options && q.options.length > 0 ? (
+                      <div className="space-y-2 pt-2 border-t border-[#E6DDCB]">
+                        {q.options.map((optText, optIdx) => {
+                          const isCorrect = optIdx === q.correctAnswerIndex;
+                          const optLabels = ['ა', 'ბ', 'გ', 'დ'];
 
-                        return (
-                          <div
-                            key={optIdx}
-                            className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-3 ${
-                              isCorrect
-                                ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold'
-                                : 'bg-[#FAF8F3] border-[#E6DDCB] text-[#666666] opacity-75'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold ${
-                                isCorrect ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-700'
-                              }`}>
-                                {optLabels[optIdx] || optIdx + 1}
-                              </span>
-                              <span>{optText}</span>
+                          return (
+                            <div
+                              key={optIdx}
+                              className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-3 ${
+                                isCorrect
+                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold'
+                                  : 'bg-[#FAF8F3] border-[#E6DDCB] text-[#666666] opacity-75'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold ${
+                                  isCorrect ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-700'
+                                }`}>
+                                  {optLabels[optIdx] || optIdx + 1}
+                                </span>
+                                <span>{optText}</span>
+                              </div>
+
+                              {isCorrect && (
+                                <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded font-bold">
+                                  სწორი პასუხი
+                                </span>
+                              )}
                             </div>
-
-                            {isCorrect && (
-                              <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded font-bold">
-                                სწორი პასუხი
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    ) : q.correctAnswerText ? (
+                      <div className="pt-2 border-t border-[#E6DDCB] text-xs font-semibold text-[#0D1B2A]">
+                        სწორი პასუხი: <strong className="text-emerald-700">{q.correctAnswerText}</strong>
+                      </div>
+                    ) : null}
 
                     {/* Explanation */}
                     {q.explanation && (
@@ -264,7 +278,7 @@ export const IncorrectAnswersModal: FC<IncorrectAnswersModalProps> = ({
           )}
 
           {/* B. TASK-BASED INCORRECT GROUPS LIST (MAPS, ANALOGIES, SOURCES, ILLUSTRATIONS) */}
-          {!isMcq && (
+          {!isSingleQuestionCategory && (
             incorrectTaskGroups.length === 0 ? (
               <div className="py-12 text-center space-y-3 bg-white rounded-2xl border border-[#E6DDCB] p-6">
                 <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
@@ -316,8 +330,8 @@ export const IncorrectAnswersModal: FC<IncorrectAnswersModalProps> = ({
                     {/* Sub-questions breakdown for this task */}
                     <div className="space-y-3 pt-2">
                       {tg.questions.map((q, qIdx) => {
-                        const isCorrect = correctQuestionIds.includes(q.id);
-                        const isIncorrect = incorrectQuestionIds.includes(q.id);
+                        const isCorrect = safeCorrectIds.includes(q.id);
+                        const isIncorrect = safeIncorrectIds.includes(q.id);
 
                         return (
                           <div 
@@ -382,7 +396,7 @@ export const IncorrectAnswersModal: FC<IncorrectAnswersModalProps> = ({
         {/* Footer */}
         <div className="p-4 bg-[#F5F2EA] border-t border-[#E6DDCB] flex items-center justify-between">
           <span className="text-xs text-[#666666] font-medium">
-            სულ ნაპოვნია შეცდომები: {isMcq ? incorrectMcqQuestions.length : incorrectTaskGroups.length}
+            სულ ნაპოვნია შეცდომები: {isSingleQuestionCategory ? incorrectMcqQuestions.length : incorrectTaskGroups.length}
           </span>
 
           <button

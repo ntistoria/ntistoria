@@ -34,17 +34,37 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
     return () => { isMounted = false; };
   }, [attempt.quiz_id]);
 
-  // Parse user answers into map of question_id -> answer_id
+  // Robust parse of user answers into map of question_id -> answer_id
   const userAnswersMap: Record<string, string> = {};
   if (attempt.user_answers) {
-    if (Array.isArray(attempt.user_answers)) {
-      attempt.user_answers.forEach((item: any) => {
-        if (item.question_id && item.answer_id) {
-          userAnswersMap[item.question_id] = item.answer_id;
+    let raw: any = attempt.user_answers;
+    if (typeof raw === 'string') {
+      try {
+        raw = JSON.parse(raw);
+      } catch (e) {
+        console.error('Failed to parse user_answers string:', e);
+      }
+    }
+    if (Array.isArray(raw)) {
+      raw.forEach((item: any, idx: number) => {
+        if (!item) return;
+        const qId = item.question_id || item.questionId || item.qId || item.q;
+        const aId = item.answer_id || item.answerId || item.aId || item.a;
+        if (qId && aId) {
+          userAnswersMap[String(qId)] = String(aId);
+        } else if (typeof item === 'string') {
+          userAnswersMap[`index_${idx}`] = item;
         }
       });
-    } else if (typeof attempt.user_answers === 'object') {
-      Object.assign(userAnswersMap, attempt.user_answers);
+    } else if (typeof raw === 'object' && raw !== null) {
+      Object.entries(raw).forEach(([k, v]) => {
+        if (v && typeof v === 'object' && ('answer_id' in (v as any) || 'answerId' in (v as any))) {
+          const aId = (v as any).answer_id || (v as any).answerId;
+          userAnswersMap[String(k)] = String(aId);
+        } else if (v) {
+          userAnswersMap[String(k)] = String(v);
+        }
+      });
     }
   }
 
@@ -111,15 +131,15 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
             </div>
           ) : (
             questions.map((q, qIndex) => {
-              const selectedAnsId = userAnswersMap[q.id];
+              const selectedAnsId = userAnswersMap[q.id] || userAnswersMap[String(q.id)] || userAnswersMap[`index_${qIndex}`];
               const correctAnswer = q.answers.find(a => a.is_correct);
-              const isUserCorrect = selectedAnsId && correctAnswer && selectedAnsId === correctAnswer.id;
+              const isUserCorrect = selectedAnsId && correctAnswer && String(selectedAnsId).trim() === String(correctAnswer.id).trim();
 
               return (
                 <div
                   key={q.id}
-                  className={`bg-white rounded-2xl p-5 border shadow-sm space-y-4 ${
-                    isUserCorrect ? 'border-emerald-200 bg-emerald-50/20' : selectedAnsId ? 'border-rose-200 bg-rose-50/20' : 'border-[#E6DDCB]'
+                  className={`bg-white rounded-2xl p-5 border-2 shadow-sm space-y-4 ${
+                    isUserCorrect ? 'border-emerald-300 bg-emerald-50/30' : selectedAnsId ? 'border-rose-300 bg-rose-50/30' : 'border-[#E6DDCB]'
                   }`}
                 >
                   {/* Question Header */}
@@ -134,17 +154,17 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
                     </div>
 
                     {isUserCorrect ? (
-                      <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded-full flex items-center gap-1 shrink-0">
+                      <span className="px-3 py-1 bg-emerald-100 border border-emerald-300 text-emerald-800 text-[11px] font-bold rounded-full flex items-center gap-1 shrink-0">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                         <span>სწორია</span>
                       </span>
                     ) : selectedAnsId ? (
-                      <span className="px-2.5 py-1 bg-rose-100 text-rose-800 text-[11px] font-bold rounded-full flex items-center gap-1 shrink-0">
+                      <span className="px-3 py-1 bg-rose-100 border border-rose-300 text-rose-800 text-[11px] font-bold rounded-full flex items-center gap-1 shrink-0">
                         <XCircle className="w-3.5 h-3.5 text-rose-600" />
                         <span>არასწორია</span>
                       </span>
                     ) : (
-                      <span className="px-2.5 py-1 bg-slate-100 text-slate-700 text-[11px] font-bold rounded-full shrink-0">
+                      <span className="px-3 py-1 bg-slate-100 text-slate-700 text-[11px] font-bold rounded-full shrink-0">
                         უპასუხო
                       </span>
                     )}
@@ -164,32 +184,32 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
                   {/* Options List */}
                   <div className="space-y-2">
                     {q.answers.map((ans, aIdx) => {
-                      const isSelected = selectedAnsId === ans.id;
+                      const isSelected = selectedAnsId && String(selectedAnsId).trim() === String(ans.id).trim();
                       const isCorrect = ans.is_correct;
 
                       let styleClasses = 'bg-[#FAF8F3] border-[#E6DDCB] text-[#0D1B2A]';
                       let badge = null;
 
                       if (isSelected && isCorrect) {
-                        styleClasses = 'bg-emerald-500/15 border-emerald-500 text-emerald-950 font-bold';
+                        styleClasses = 'bg-emerald-100 border-2 border-emerald-500 text-emerald-950 font-bold shadow-xs';
                         badge = (
-                          <span className="text-[11px] text-emerald-700 font-bold flex items-center gap-1 ml-auto shrink-0">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="text-[11px] bg-emerald-600 text-white font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ml-auto shrink-0">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
                             <span>თქვენი სწორი პასუხი</span>
                           </span>
                         );
                       } else if (isSelected && !isCorrect) {
-                        styleClasses = 'bg-rose-500/15 border-rose-500 text-rose-950 font-bold';
+                        styleClasses = 'bg-rose-100 border-2 border-rose-500 text-rose-950 font-bold shadow-xs';
                         badge = (
-                          <span className="text-[11px] text-rose-700 font-bold flex items-center gap-1 ml-auto shrink-0">
-                            <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                            <span>თქვენი პასუხი (არასწორი)</span>
+                          <span className="text-[11px] bg-rose-600 text-white font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ml-auto shrink-0">
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>თქვენი პასუხი (არასწორია)</span>
                           </span>
                         );
                       } else if (isCorrect) {
-                        styleClasses = 'bg-emerald-50 border-emerald-400 text-emerald-900 font-semibold';
+                        styleClasses = 'bg-emerald-50 border-2 border-emerald-400 text-emerald-900 font-semibold';
                         badge = (
-                          <span className="text-[11px] text-emerald-700 font-bold flex items-center gap-1 ml-auto shrink-0">
+                          <span className="text-[11px] bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ml-auto shrink-0">
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                             <span>სწორი პასუხი</span>
                           </span>
