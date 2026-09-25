@@ -43,8 +43,9 @@ export const ProfileView: FC<ProfileViewProps> = ({
   const [isEditingName, setIsEditingName] = useState(false);
   const [isSavingName, setIsSavingName] = useState(false);
 
-  // Accordion & Category Questions State for Chapters Progress
+  // Accordion & Category Questions State for Chapters & Categories Progress
   const [expandedChapterId, setExpandedChapterId] = useState<string | null>(null);
+  const [expandedCategoryKey, setExpandedCategoryKey] = useState<string | null>(null);
   const [categoryQuestionsMap, setCategoryQuestionsMap] = useState<Record<string, (QuizQuestion & { chapterId: string })[]>>({});
   const [loadingCategoryQuestions, setLoadingCategoryQuestions] = useState(false);
 
@@ -100,9 +101,9 @@ export const ProfileView: FC<ProfileViewProps> = ({
     }
   }, [userEmail, user]);
 
-  // Load questions for all categories when Chapters tab is opened
+  // Load questions for all categories when Chapters or Categories tab is opened
   useEffect(() => {
-    if (activeTab === 'chapters' && Object.keys(categoryQuestionsMap).length === 0) {
+    if ((activeTab === 'chapters' || activeTab === 'categories') && Object.keys(categoryQuestionsMap).length === 0) {
       const loadAllCategoryQuestions = async () => {
         setLoadingCategoryQuestions(true);
         try {
@@ -783,68 +784,182 @@ export const ProfileView: FC<ProfileViewProps> = ({
           </div>
         )}
 
-        {/* TAB 3: TASK CATEGORIES */}
+        {/* TAB 3: TASK CATEGORIES ACCORDION WITH 11 CHAPTERS BREAKDOWN */}
         {activeTab === 'categories' && (
           <div className="bg-white rounded-3xl border border-[#E6DDCB] p-6 sm:p-8 space-y-6 shadow-sm">
-            <div className="flex items-center justify-between border-b border-[#E6DDCB] pb-4">
-              <h3 className="font-serif font-bold text-xl text-[#0D1B2A] flex items-center gap-2">
-                <Award className="w-5 h-5 text-[#C79B3A]" />
-                <span>დავალების ტიპები</span>
-              </h3>
-              <span className="text-xs font-mono text-[#666666]">სტატისტიკა ტიპის მიხედვით</span>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#E6DDCB] pb-4 gap-2">
+              <div className="space-y-1">
+                <h3 className="font-serif font-bold text-xl text-[#0D1B2A] flex items-center gap-2">
+                  <Award className="w-5 h-5 text-[#C79B3A]" />
+                  <span>დავალების ტიპები (11 თავის სტატისტიკა)</span>
+                </h3>
+                <p className="text-xs text-[#666666]">
+                  დააჭირეთ სასურველ კატეგორიას ჩამოსაშლელად და იხილეთ 11-ვე თავის მიხედვით სწორი/არასწორი დავალებების დეტალური სტატისტიკა.
+                </p>
+              </div>
+
+              <span className="text-xs font-mono text-[#666666] self-start sm:self-auto">
+                6 კატეგორია
+              </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {TEST_CATEGORIES.map((cat) => {
-                let catCorrect = 0;
-                let catIncorrect = 0;
+            {loadingCategoryQuestions ? (
+              <div className="py-16 text-center text-xs text-[#666666] space-y-3">
+                <div className="w-7 h-7 border-2 border-[#C79B3A] border-t-transparent rounded-full animate-spin mx-auto" />
+                <span>კატეგორიების მონაცემების ჩატვირთვა...</span>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {TEST_CATEGORIES.map((cat) => {
+                  const isCategoryExpanded = expandedCategoryKey === cat.key;
 
-                if (progress) {
-                  Object.entries(progress.statsByChapter).forEach(([key, stat]: [string, ChapterProgressStats]) => {
-                    if (key.startsWith(`${cat.key}_`)) {
-                      catCorrect += stat.correctQuestionIds.length;
-                      catIncorrect += stat.incorrectQuestionIds.length;
-                    }
+                  // Calculate overall task stats for this category across all 11 chapters
+                  let catTotalTasks = 0;
+                  let catCorrectTasks = 0;
+                  let catIncorrectTasks = 0;
+
+                  programs.forEach((prog) => {
+                    const stats = getCategoryChapterTaskStats(cat.key, prog.id, categoryQuestionsMap[cat.key] || []);
+                    catTotalTasks += stats.total;
+                    catCorrectTasks += stats.correct;
+                    catIncorrectTasks += stats.incorrect;
                   });
-                }
 
-                const catAttempted = catCorrect + catIncorrect;
-                const catPct = catAttempted > 0 ? Math.round((catCorrect / catAttempted) * 100) : 0;
+                  const catAttempted = catCorrectTasks + catIncorrectTasks;
+                  const catPct = catTotalTasks > 0 ? Math.round((catCorrectTasks / catTotalTasks) * 100) : 0;
+                  const isMcq = cat.key === 'mcq';
+                  const unitText = isMcq ? 'კითხვა' : cat.key === 'map' ? 'რუკა' : cat.key === 'analogies' ? 'ანალოგია' : cat.key === 'source' ? 'წყარო' : cat.key === 'illustrations' ? 'ილუსტრაცია' : 'დავალება';
 
-                return (
-                  <div key={cat.key} className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-white border border-[#E6DDCB] flex items-center justify-center shrink-0">
-                          {getCategoryIcon(cat.key)}
+                  return (
+                    <div
+                      key={cat.key}
+                      className={`rounded-2xl border-2 transition-all duration-300 overflow-hidden ${
+                        isCategoryExpanded ? 'border-[#C79B3A] bg-white shadow-md' : 'border-[#E6DDCB] bg-[#FAF8F3] hover:border-[#C79B3A]/60'
+                      }`}
+                    >
+                      {/* Category Accordion Header */}
+                      <button
+                        onClick={() => setExpandedCategoryKey(isCategoryExpanded ? null : cat.key)}
+                        className="w-full p-4 sm:p-5 text-left flex items-center justify-between gap-4 cursor-pointer"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold shrink-0 transition-colors ${
+                            isCategoryExpanded ? 'bg-[#0D1B2A] text-[#C79B3A]' : 'bg-white border border-[#E6DDCB]'
+                          }`}>
+                            {getCategoryIcon(cat.key)}
+                          </div>
+                          <div>
+                            <h4 className="font-serif font-bold text-base text-[#0D1B2A]">
+                              {cat.title}
+                            </h4>
+                            <span className="text-xs text-[#666666]">
+                              {cat.subtitle} — სულ: {catTotalTasks} {unitText}
+                            </span>
+                          </div>
                         </div>
-                        <div>
-                          <span className="text-xs font-bold text-[#0D1B2A] block">{cat.title}</span>
-                          <span className="text-[10px] text-[#666666]">{cat.subtitle}</span>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="flex items-center gap-2 text-xs font-bold">
+                            <span className="text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                              სწორი: {catCorrectTasks}
+                            </span>
+                            <span className="text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
+                              არასწორი: {catIncorrectTasks}
+                            </span>
+                            <span className="text-[#C79B3A] font-mono bg-white px-2.5 py-1 rounded-lg border border-[#E6DDCB]">
+                              {catPct}%
+                            </span>
+                          </div>
+
+                          {isCategoryExpanded ? (
+                            <ChevronUp className="w-5 h-5 text-[#C79B3A]" />
+                          ) : (
+                            <ChevronDown className="w-5 h-5 text-[#666666]" />
+                          )}
                         </div>
-                      </div>
+                      </button>
 
-                      <div className="flex items-center gap-3 text-[11px] font-semibold">
-                        <span className="text-emerald-700 font-bold">სწორი: {catCorrect}</span>
-                        <span className="text-rose-700">არასწორი: {catIncorrect}</span>
-                        <span className="text-[#C79B3A] font-bold font-mono">{catPct}%</span>
-                      </div>
-                    </div>
+                      {/* Category Accordion Expanded Content: 11 Chapters Breakdown for this Category */}
+                      {isCategoryExpanded && (
+                        <div className="p-4 sm:p-6 bg-white border-t border-[#E6DDCB] space-y-5 animate-in fade-in duration-200">
+                          
+                          <div className="text-xs text-[#666666] bg-[#FAF8F3] p-3.5 rounded-xl border border-[#E6DDCB]">
+                            💡 <strong>11 თავის სტატისტიკა ({cat.title}):</strong> ქვემოთ მოცემულია თითოეულ თავში ჩატარებული {unitText}ების შედეგები. დააჭირეთ „ნახე შეცდომები“ იმ თავის შეცდომების სანახავად.
+                          </div>
 
-                    <div className="w-full h-2.5 bg-[#E6DDCB] rounded-full overflow-hidden flex">
-                      <div 
-                        style={{ width: `${catAttempted > 0 ? (catCorrect / catAttempted) * 100 : 0}%` }}
-                        className="bg-emerald-500 h-full transition-all duration-500"
-                      />
-                      <div 
-                        style={{ width: `${catAttempted > 0 ? (catIncorrect / catAttempted) * 100 : 0}%` }}
-                        className="bg-rose-500 h-full transition-all duration-500"
-                      />
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {programs.map((prog) => {
+                              const stats = getCategoryChapterTaskStats(cat.key, prog.id, categoryQuestionsMap[cat.key] || []);
+
+                              return (
+                                <div
+                                  key={prog.id}
+                                  className="p-4 bg-[#FAF8F3] rounded-xl border border-[#E6DDCB] space-y-3 flex flex-col justify-between"
+                                >
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-xs font-serif font-bold text-[#0D1B2A] line-clamp-1">
+                                        {prog.title}
+                                      </span>
+                                      <span className="text-[10px] font-mono font-bold text-[#666666] bg-white px-2 py-0.5 rounded border border-[#E6DDCB] shrink-0">
+                                        სულ: {stats.total} {unitText}
+                                      </span>
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-1.5 text-center text-[10px] font-bold">
+                                      <div className="p-1.5 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200">
+                                        სწორი: {stats.correct}
+                                      </div>
+                                      <div className="p-1.5 bg-rose-50 text-rose-800 rounded-lg border border-rose-200">
+                                        არასწორი: {stats.incorrect}
+                                      </div>
+                                      <div className="p-1.5 bg-gray-50 text-gray-700 rounded-lg border border-gray-200">
+                                        დარჩენილი: {stats.unattempted}
+                                      </div>
+                                    </div>
+
+                                    <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden flex">
+                                      <div 
+                                        style={{ width: `${stats.pct}%` }}
+                                        className="bg-emerald-500 h-full transition-all duration-300"
+                                      />
+                                      <div 
+                                        style={{ width: `${stats.total > 0 ? (stats.incorrect / stats.total) * 100 : 0}%` }}
+                                        className="bg-rose-500 h-full transition-all duration-300"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <button
+                                    onClick={() => {
+                                      setModalState({
+                                        isOpen: true,
+                                        chapterTitle: prog.title,
+                                        categoryKey: cat.key,
+                                        categoryTitle: cat.title,
+                                        chapterId: prog.id,
+                                        questions: stats.questions,
+                                        incorrectQuestionIds: stats.incorrectIds,
+                                        correctQuestionIds: stats.correctIds
+                                      });
+                                    }}
+                                    className="w-full py-2 bg-white hover:bg-[#0D1B2A] text-[#0D1B2A] hover:text-white border border-[#E6DDCB] text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
+                                  >
+                                    <Eye className="w-3.5 h-3.5 text-[#C79B3A]" />
+                                    <span>{isMcq ? 'ნახე არასწორი პასუხები' : 'ნახე შეცდომები'} ({stats.incorrect})</span>
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                        </div>
+                      )}
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
