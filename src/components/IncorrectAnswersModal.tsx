@@ -54,10 +54,8 @@ export const IncorrectAnswersModal: FC<IncorrectAnswersModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const isMcq = categoryKey === 'mcq';
-  const isChronology = categoryKey === 'chronology';
-
-  // 1. For MCQ / Single Question categories: Filter questions that are incorrect
+  // 1. For MCQ / Chronology / Single Question categories: Filter questions that are incorrect
+  const isSingleQuestionCategory = isMcq || isChronology;
   const incorrectMcqQuestions = questions.filter(q => incorrectQuestionIds.includes(q.id));
 
   // 2. For Task-based categories (Maps, Analogies, Sources, Illustrations): Group questions into tasks
@@ -91,17 +89,13 @@ export const IncorrectAnswersModal: FC<IncorrectAnswersModalProps> = ({
     else taskTitle = `დავალება N${itemNum}`;
 
     let incorrectCount = 0;
-    let hasError = false;
-
     qList.forEach(q => {
       if (incorrectQuestionIds.includes(q.id)) {
         incorrectCount++;
-        hasError = true;
-      } else if (!correctQuestionIds.includes(q.id)) {
-        // If not completed or partially wrong
-        hasError = true;
       }
     });
+
+    const hasError = incorrectCount > 0;
 
     return {
       id: `task-details-${categoryKey}-${itemNum}-${index}`,
@@ -115,8 +109,8 @@ export const IncorrectAnswersModal: FC<IncorrectAnswersModalProps> = ({
     };
   });
 
-  // Filter task groups that have errors
-  const incorrectTaskGroups = taskGroups.filter(tg => tg.hasError);
+  // Filter task groups that have AT LEAST 1 MISTAKE (incorrectCount > 0)
+  const incorrectTaskGroups = taskGroups.filter(tg => tg.incorrectCount > 0);
 
   const getCategoryIcon = (key: string) => {
     switch (key) {

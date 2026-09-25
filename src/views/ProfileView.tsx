@@ -290,22 +290,26 @@ export const ProfileView: FC<ProfileViewProps> = ({
     taskGroups.forEach(g => {
       let hasAttempted = false;
       let isAllCorrect = true;
+      let hasMistake = false;
 
       g.forEach(q => {
         if (correctIds.includes(q.id) || incorrectIds.includes(q.id)) {
           hasAttempted = true;
         }
-        if (!correctIds.includes(q.id) || incorrectIds.includes(q.id)) {
+        if (incorrectIds.includes(q.id)) {
+          hasMistake = true;
+        }
+        if (!correctIds.includes(q.id)) {
           isAllCorrect = false;
         }
       });
 
-      if (!hasAttempted) {
-        unattemptedTasks++;
-      } else if (isAllCorrect) {
+      if (hasMistake) {
+        incorrectTasks++;
+      } else if (hasAttempted && isAllCorrect) {
         correctTasks++;
       } else {
-        incorrectTasks++;
+        unattemptedTasks++;
       }
     });
 
