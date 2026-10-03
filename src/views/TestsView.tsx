@@ -422,10 +422,7 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
       openTextAnswers: {},
       openTextChecked: {}
     };
-    saveSession(sessionPatch);
-
-    // I10: request fullscreen when test starts
-    requestFullscreen();
+    // Fullscreen removed per user request
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };

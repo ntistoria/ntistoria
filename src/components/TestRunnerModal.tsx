@@ -28,7 +28,12 @@ export const TestRunnerModal: FC<TestRunnerModalProps> = ({
 
   // Anti-cheating & Tab Switch tracking
   const { tabSwitchCount, switchCountRef } = useAntiCheating({
-    isActive: Boolean(test) && !isFinished
+    isActive: Boolean(test) && !isFinished,
+    onViolation: (count: number) => {
+      if (count >= 3 && test && !isFinished) {
+        finishTest();
+      }
+    }
   });
 
   useEffect(() => {

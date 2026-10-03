@@ -56,7 +56,12 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
 
   // Anti-cheating & Tab Switch tracking for Quizzes
   const { tabSwitchCount, switchCountRef } = useAntiCheating({
-    isActive: viewState === 'play'
+    isActive: viewState === 'play',
+    onViolation: (count: number) => {
+      if (count >= 3 && viewState === 'play') {
+        handleFinishAttempt();
+      }
+    }
   });
 
   // Quizzes list state
