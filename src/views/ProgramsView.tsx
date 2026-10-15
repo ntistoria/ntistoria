@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type FC } from 'react';
+import React, { useState, useEffect, useMemo, type FC } from 'react';
 import { ProgramCatalogItem } from '../types';
 import { fetchAllProgramsWithInstitutions } from '../lib/catalogService';
 import { Search, ChevronRight, Award, RotateCcw, BookOpen, MapPin, Users, Coins, Languages, GraduationCap, Building2, ArrowRight, Loader2 } from 'lucide-react';
