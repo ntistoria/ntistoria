@@ -315,7 +315,7 @@ export const fetchCategoryQuestionsCount = async (categoryKey: string): Promise<
     try {
       const { count, error } = await supabase
         .from(tableName)
-        .select('*', { count: 'exact', head: true });
+        .select('id', { count: 'exact', head: true });
 
       if (!error && typeof count === 'number' && count >= 0) {
         return count;
@@ -329,6 +329,18 @@ export const fetchCategoryQuestionsCount = async (categoryKey: string): Promise<
 /**
  * Helper to fetch all rows from a Supabase table using range pagination (bypasses default 1000 limit)
  */
+/**
+ * Tables whose `answer` column is hidden from the public (anon/authenticated) role.
+ * Their open questions are graded server-side by /api/grade-answer, so the browser
+ * must never select `answer` from them (see sql/hide_open_question_answers.sql).
+ */
+export const AI_GRADED_TABLES = ['analogy_questions', 'source_questions'];
+
+const PUBLIC_COLUMNS: Record<string, string> = {
+  analogy_questions: 'id, analogy_number, question_number, question, score',
+  source_questions: 'id, source_number, question_number, question, score'
+};
+
 export const fetchAllRowsFromTable = async (tableName: string): Promise<any[]> => {
   let allRows: any[] = [];
   let from = 0;
@@ -339,7 +351,7 @@ export const fetchAllRowsFromTable = async (tableName: string): Promise<any[]> =
     try {
       const { data, error } = await supabase
         .from(tableName)
-        .select('*')
+        .select(PUBLIC_COLUMNS[tableName] || '*')
         .range(from, from + pageSize - 1);
 
       if (error || !data || data.length === 0) {
@@ -542,6 +554,7 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
           if (categoryKey === 'chronology' || tableName === 'chronology') {
             qType = 'chronology';
           } else if (
+            AI_GRADED_TABLES.includes(tableName) ||
             item.question_type === 'open' || 
             item.question_type === 'open_text' || 
             item.is_open === true || 
@@ -603,7 +616,9 @@ export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(Q
             correctSequence: chronSeq,
             itemNumber: itemNum,
             parentItemNumber: parentItemNum,
-            subProgramNumber: subProgNum
+            subProgramNumber: subProgNum,
+            maxScore: Number(item.score) > 0 ? Number(item.score) : undefined,
+            sourceTable: tableName
           };
         });
       }

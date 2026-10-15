@@ -161,6 +161,10 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
 
   const [openTextAnswers, setOpenTextAnswers] = useState<Record<number, string>>({});
   const [openTextChecked, setOpenTextChecked] = useState<Record<number, boolean>>({});
+  // AI grading results for open questions (analogies / sources): points + feedback
+  const [openTextScores, setOpenTextScores] = useState<Record<number, { score: number; maxScore: number; feedback: string; correctAnswer: string }>>({});
+  const [openTextGrading, setOpenTextGrading] = useState<Record<number, boolean>>({});
+  const [openTextError, setOpenTextError] = useState<Record<number, string>>({});
 
 
 
@@ -724,13 +728,61 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
   };
 
   // OPEN TEXT SUBMIT HANDLER
-  const handleCheckOpenText = () => {
-    if (!activeInlineTest || isTestFinished) return;
-    const currentQ = activeInlineTest.questions[currentQIndex];
-    const typed = openTextAnswers[currentQIndex] || '';
+  const AI_GRADED_TABLES = ['analogy_questions', 'source_questions'];
 
-    const isCorrect = checkOpenAnswerMatch(typed, currentQ.correctAnswerText || '');
-    setOpenTextChecked({ ...openTextChecked, [currentQIndex]: true });
+  const handleCheckOpenText = async () => {
+    if (!activeInlineTest || isTestFinished) return;
+    const qIndex = currentQIndex;
+    if (openTextGrading[qIndex]) return;
+    const currentQ = activeInlineTest.questions[qIndex];
+    const typed = openTextAnswers[qIndex] || '';
+
+    const useAI = !!currentQ.maxScore && !!currentQ.sourceTable && AI_GRADED_TABLES.includes(currentQ.sourceTable);
+    let isCorrect: boolean;
+
+    if (useAI) {
+      if (!user) {
+        setOpenTextError(prev => ({ ...prev, [qIndex]: 'ამ დავალების შესასრულებლად საჭიროა ავტორიზაცია.' }));
+        return;
+      }
+      setOpenTextGrading(prev => ({ ...prev, [qIndex]: true }));
+      setOpenTextError(prev => ({ ...prev, [qIndex]: '' }));
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch('/api/grade-answer', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session?.access_token || ''}`
+          },
+          body: JSON.stringify({ table: currentQ.sourceTable, questionId: currentQ.id, studentAnswer: typed })
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(res.status === 401 ? 'ავტორიზაცია საჭიროა. გთხოვთ ხელახლა შეხვიდეთ ანგარიშში.' : (body?.error || 'შეფასება ვერ მოხერხდა'));
+        }
+        setOpenTextScores(prev => ({
+          ...prev,
+          [qIndex]: {
+            score: Number(body.score),
+            maxScore: Number(body.maxScore),
+            feedback: String(body.feedback || ''),
+            correctAnswer: String(body.correctAnswer || currentQ.correctAnswerText || '')
+          }
+        }));
+        isCorrect = Number(body.score) >= Number(body.maxScore);
+      } catch (err: any) {
+        console.error('AI grading failed:', err);
+        setOpenTextError(prev => ({ ...prev, [qIndex]: err?.message || 'შეფასება ვერ მოხერხდა, სცადეთ თავიდან.' }));
+        setOpenTextGrading(prev => ({ ...prev, [qIndex]: false }));
+        return;
+      }
+      setOpenTextGrading(prev => ({ ...prev, [qIndex]: false }));
+    } else {
+      isCorrect = checkOpenAnswerMatch(typed, currentQ.correctAnswerText || '');
+    }
+
+    setOpenTextChecked(prev => ({ ...prev, [qIndex]: true }));
 
     if (currentQ && selectedCategoryKey) {
       const chId = currentQ.chapterId || selectedChapterId || 'ch-1';
@@ -750,6 +802,9 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
     // Completely clear all open-ended answers and checked states
     setOpenTextAnswers({});
     setOpenTextChecked({});
+    setOpenTextScores({});
+    setOpenTextGrading({});
+    setOpenTextError({});
 
     // Completely reset all chronology orders and checked states
     const initChronOrders: Record<number, string[]> = {};
@@ -782,7 +837,10 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
         isCorrect = checkChronologyItemsMatch(order, q.chronologyItems || [], q.correctSequence || [0, 1, 2]);
       } else if (q.questionType === 'open_text') {
         const typed = openTextAnswers[idx] || '';
-        isCorrect = checkOpenAnswerMatch(typed, q.correctAnswerText || '');
+        const graded = openTextScores[idx];
+        isCorrect = graded
+          ? graded.score >= graded.maxScore
+          : (!q.maxScore && checkOpenAnswerMatch(typed, q.correctAnswerText || ''));
       } else {
         isCorrect = selectedAnswers[idx] === q.correctAnswerIndex;
       }
@@ -1018,7 +1076,12 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
                 if (currentQ.questionType === 'open_text') {
                   const typed = openTextAnswers[currentQIndex] || '';
                   const isChecked = openTextChecked[currentQIndex];
-                  const isCorrect = isChecked && checkOpenAnswerMatch(typed, currentQ.correctAnswerText || '');
+                  const aiResult = openTextScores[currentQIndex];
+                  const isGrading = !!openTextGrading[currentQIndex];
+                  const gradeError = openTextError[currentQIndex];
+                  const isCorrect = isChecked && (aiResult
+                    ? aiResult.score >= aiResult.maxScore
+                    : checkOpenAnswerMatch(typed, currentQ.correctAnswerText || ''));
 
                   return (
                     <div className="space-y-5 pt-4 border-t border-[#E6DDCB]">
@@ -1041,14 +1104,38 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
                       />
 
                       {!isChecked ? (
-                        <button
-                          onClick={handleCheckOpenText}
-                          disabled={!typed.trim()}
-                          className="px-6 py-3 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md cursor-pointer disabled:opacity-40 flex items-center gap-2"
-                        >
-                          <Send className="w-4 h-4" />
-                          <span>პასუხის გაგზავნა</span>
-                        </button>
+                        <div className="space-y-3">
+                          <button
+                            onClick={handleCheckOpenText}
+                            disabled={!typed.trim() || isGrading}
+                            className="px-6 py-3 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md cursor-pointer disabled:opacity-40 flex items-center gap-2"
+                          >
+                            <Send className="w-4 h-4" />
+                            <span>{isGrading ? 'მიმდინარეობს შეფასება...' : 'პასუხის გაგზავნა'}</span>
+                          </button>
+                          {gradeError && (
+                            <div className="p-3 rounded-xl border border-rose-300 bg-rose-50 text-rose-800 text-xs font-semibold">
+                              {gradeError}
+                            </div>
+                          )}
+                        </div>
+                      ) : aiResult ? (
+                        <div className={`p-4 rounded-2xl border text-xs sm:text-sm font-semibold space-y-2 ${
+                          isCorrect ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : (aiResult.score > 0 ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-rose-50 border-rose-300 text-rose-800')
+                        }`}>
+                          <div className="flex items-center gap-2">
+                            {isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" /> : <XCircle className="w-5 h-5 shrink-0" />}
+                            <div className="text-base font-bold">ქულა: {aiResult.score} / {aiResult.maxScore}</div>
+                          </div>
+                          {aiResult.feedback && (
+                            <div className="text-xs font-normal leading-relaxed">{aiResult.feedback}</div>
+                          )}
+                          {aiResult.correctAnswer && (
+                            <div className="text-xs font-normal opacity-90 pt-1 border-t border-black/10">
+                              სწორი პასუხის მაგალითი: <strong>{aiResult.correctAnswer}</strong>
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         <div className={`p-4 rounded-2xl border text-xs sm:text-sm font-semibold flex items-center justify-between gap-3 ${
                           isCorrect ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-rose-50 border-rose-300 text-rose-800'
@@ -1163,19 +1250,29 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
             <div className="bg-white rounded-3xl border-2 border-[#C79B3A] p-8 sm:p-12 text-center space-y-8 shadow-xl animate-fade-in">
               {(() => {
                 let correctCount = 0;
+                let earnedPoints = 0;
+                let totalPoints = 0;
+                const pointsMode = activeInlineTest.questions.length > 0 && activeInlineTest.questions.every(q => !!q.maxScore);
                 activeInlineTest.questions.forEach((q, idx) => {
+                  if (pointsMode) {
+                    totalPoints += q.maxScore || 0;
+                    earnedPoints += openTextScores[idx]?.score || 0;
+                  }
                   if (q.questionType === 'chronology') {
                     const order = chronologyOrders[idx] || q.chronologyItems || [];
                     if (checkChronologyItemsMatch(order, q.chronologyItems || [], q.correctSequence || [0, 1, 2])) correctCount++;
                   } else if (q.questionType === 'open_text') {
                     const typed = openTextAnswers[idx] || '';
-                    if (checkOpenAnswerMatch(typed, q.correctAnswerText || '')) correctCount++;
+                    const graded = openTextScores[idx];
+                    if (graded ? graded.score >= graded.maxScore : (!q.maxScore && checkOpenAnswerMatch(typed, q.correctAnswerText || ''))) correctCount++;
                   } else {
                     if (selectedAnswers[idx] === q.correctAnswerIndex) correctCount++;
                   }
                 });
                 const totalCount = activeInlineTest.questions.length;
-                const scorePct = totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0;
+                const scorePct = pointsMode
+                  ? (totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0)
+                  : (totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0);
 
                 return (
                   <div className="space-y-6 max-w-lg mx-auto">
@@ -1194,8 +1291,11 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
 
                     <div className="p-6 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-4">
                       <div className="text-4xl font-serif font-bold text-[#C79B3A]">
-                        {scorePct}%
+                        {pointsMode ? `${earnedPoints} / ${totalPoints} ქულა` : `${scorePct}%`}
                       </div>
+                      {pointsMode && (
+                        <div className="text-xs font-semibold text-[#666666]">{scorePct}%</div>
+                      )}
                       <div className="grid grid-cols-2 gap-4 text-xs font-semibold pt-2 border-t border-[#E6DDCB]">
                         <div className="text-emerald-700 bg-emerald-50 py-2 rounded-xl border border-emerald-200">
                           სწორი: {correctCount}

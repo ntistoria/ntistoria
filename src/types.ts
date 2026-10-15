@@ -88,6 +88,10 @@ export interface QuizQuestion {
   parentItemNumber?: number;
   subProgramNumber?: number;
   chapterId?: string;
+  /** Max points for this question (DB `score` column) - used for AI-graded open questions */
+  maxScore?: number;
+  /** Supabase table the question came from (needed by /api/grade-answer) */
+  sourceTable?: string;
 }
 
 export interface HistoryTest {
