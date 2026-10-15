@@ -1,6 +1,7 @@
 import { Article } from '../types';
 import { ARTICLES as DEFAULT_ARTICLES } from '../data/historyData';
 import { supabase } from './supabase';
+import DOMPurify from 'dompurify';
 
 const LOCAL_ARTICLES_KEY = 'ntistoria_custom_articles';
 
@@ -351,7 +352,10 @@ export const uploadBlogImage = async (file: File): Promise<string> => {
 };
 
 // Helper function to format article content
-export const formatArticleContent = (content: string): string => {
+export const formatArticleContent = (content: string): string =>
+  DOMPurify.sanitize(formatArticleContentRaw(content), { ADD_ATTR: ['target'] });
+
+const formatArticleContentRaw = (content: string): string => {
   if (!content) return '';
 
   if (/<p\b|<div\b|<section\b/i.test(content)) {

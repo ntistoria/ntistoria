@@ -743,7 +743,7 @@ export async function fetchUserQuizAttempts(userId: string, guestName?: string):
 
     const { data: attempts, error } = await query;
 
-    let dbAttempts = attempts || [];
+    let dbAttempts: QuizAttempt[] = (attempts || []) as QuizAttempt[];
 
     if (error || dbAttempts.length === 0) {
       dbAttempts = getLocalAttempts();

@@ -282,7 +282,7 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
       // Format answers array
       const userAnswersList: { question_id: string; answer_id: string }[] = Object.entries(selectedAnswers).map(([question_id, answer_id]) => ({
         question_id,
-        answer_id
+        answer_id: answer_id as string
       }));
 
       // Get logged-in user session ID if available

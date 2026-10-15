@@ -87,6 +87,7 @@ export interface QuizQuestion {
   itemNumber?: number;
   parentItemNumber?: number;
   subProgramNumber?: number;
+  chapterId?: string;
 }
 
 export interface HistoryTest {

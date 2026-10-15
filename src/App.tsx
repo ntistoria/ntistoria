@@ -743,6 +743,7 @@ export function App() {
         onClose={() => setIsSearchOpen(false)}
         onOpenArticle={handleOpenArticle}
         onOpenTest={handleOpenTest}
+        onOpenVideo={handleOpenVideo}
       />
 
       <AuthModal
