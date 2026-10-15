@@ -44,7 +44,7 @@ async function fetchQuestion(table, id) {
   const r = await fetch(url, {
     headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` }
   });
-  if (!r.ok) throw new Error(`Supabase error ${r.status}`);
+  if (!r.ok) throw new Error(`Supabase ${r.status}: ${(await r.text()).slice(0, 150)}`);
   const rows = await r.json();
   return rows[0] || null;
 }
@@ -91,7 +91,7 @@ async function gradeWithGemini({ question, correctAnswer, studentAnswer, maxScor
       }
     })
   });
-  if (!r.ok) throw new Error(`Gemini error ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  if (!r.ok) throw new Error(`Gemini ${r.status}: ${(await r.text()).slice(0, 150)}`);
   const data = await r.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
   const parsed = JSON.parse(text);
@@ -168,6 +168,6 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error('grade-answer failed:', err);
-    return res.status(502).json({ error: 'Grading failed, please try again' });
+    return res.status(502).json({ error: `Grading failed: ${String(err?.message || err).slice(0, 220)}` });
   }
 }
