@@ -10,7 +10,7 @@ const SUPABASE_KEY =
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 // Fallbacks used if a model is unavailable (404). 'gemini-flash-latest' is an auto-updating alias.
-const GEMINI_MODELS = [...new Set([GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest'])];
+const GEMINI_MODELS = [...new Set([GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-flash-lite-latest'])];
 
 // Whitelist — never let the client choose arbitrary table names.
 const ALLOWED_TABLES = ['analogy_questions', 'source_questions'];
@@ -88,14 +88,19 @@ async function gradeWithGemini({ question, correctAnswer, studentAnswer, maxScor
       }
     }
   });
+  const RETRYABLE = [404, 429, 500, 502, 503, 504];
   let r;
-  for (const model of GEMINI_MODELS) {
-    r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
-      body
-    });
-    if (r.status !== 404) break; // try next model only when model is not found/unavailable
+  outer: for (const model of GEMINI_MODELS) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+        body
+      });
+      if (!RETRYABLE.includes(r.status)) break outer;
+      if (r.status === 404) break; // model unavailable: go to next model immediately
+      await new Promise((res) => setTimeout(res, 700)); // overload: brief wait, retry, then next model
+    }
   }
   if (!r.ok) throw new Error(`Gemini ${r.status}: ${(await r.text()).slice(0, 150)}`);
   const data = await r.json();
