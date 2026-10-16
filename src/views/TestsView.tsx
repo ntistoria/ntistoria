@@ -10,8 +10,10 @@ import {
   fetchCategoryItemDetails,
   CategoryItemDetails,
   getCategoryUnitInfo,
-  buildHistoryTest 
+  buildHistoryTest,
+  AI_GRADED_TABLES
 } from '../lib/testService';
+import { checkOpenAnswerMatch } from '../lib/answerMatching';
 import { supabase } from '../lib/supabase';
 import { 
   getStudentProgress, 
@@ -68,37 +70,7 @@ interface TaskGroup {
   questions: (QuizQuestion & { chapterId: string })[];
 }
 
-// Fuzzy text matching helper for open-ended questions
-// P8 FIX: Raised keyword threshold from 40% to 75% and added minimum keyword
-// count requirement to prevent partial answers being accepted as correct.
-const checkOpenAnswerMatch = (userInput: string, correctAnswer: string): boolean => {
-  if (!userInput || !correctAnswer) return false;
 
-  const normalize = (str: string) => str.toLowerCase()
-    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()"'„“«»]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const normUser = normalize(userInput);
-  const normCorrect = normalize(correctAnswer);
-
-  // Exact match (after normalization)
-  if (normUser === normCorrect) return true;
-  // Substring containment (e.g., user wrote a longer sentence containing the exact answer)
-  if (normUser.includes(normCorrect) || normCorrect.includes(normUser)) return true;
-
-  // Keyword match: only engage if there are enough keywords to be meaningful.
-  // P8 FIX: require at least 2 keywords AND 75% match rate (was 0 keywords, 40%).
-  const keywords = normCorrect.split(' ').filter(w => w.length > 2);
-  if (keywords.length >= 2) {
-    const matchedCount = keywords.filter(w => normUser.includes(w)).length;
-    if (matchedCount / keywords.length >= 0.75) {
-      return true;
-    }
-  }
-
-  return false;
-};
 
 // Chronology sequence matching helper
 const checkChronologyItemsMatch = (
@@ -727,8 +699,7 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
     }
   };
 
-  // OPEN TEXT SUBMIT HANDLER
-  const AI_GRADED_TABLES = ['analogy_questions', 'source_questions'];
+  // OPEN TEXT SUBMIT HANDLER (AI_GRADED_TABLES is imported from testService)
 
   const handleCheckOpenText = async () => {
     if (!activeInlineTest || isTestFinished) return;
@@ -760,6 +731,11 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
         const body = await res.json().catch(() => ({}));
         if (!res.ok) {
           throw new Error(res.status === 401 ? 'ავტორიზაცია საჭიროა. გთხოვთ ხელახლა შეხვიდეთ ანგარიშში.' : (body?.error || 'შეფასება ვერ მოხერხდა'));
+        }
+        const apiScore = Number(body.score);
+        const apiMax = Number(body.maxScore);
+        if (!Number.isFinite(apiScore) || !Number.isFinite(apiMax) || apiMax <= 0 || apiScore < 0 || apiScore > apiMax) {
+          throw new Error('შეფასება ვერ მოხერხდა, სცადეთ თავიდან.');
         }
         setOpenTextScores(prev => ({
           ...prev,

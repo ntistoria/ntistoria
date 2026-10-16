@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "node -e \"fs.rmSync('dist', { recursive: true, force: true })\"",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "node --import tsx --test \"tests/**/*.test.mjs\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",

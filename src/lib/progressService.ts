@@ -19,6 +19,18 @@ const LOCAL_PROGRESS_PREFIX = 'ntistoria_student_progress_';
 const getStorageKey = (email: string) => `${LOCAL_PROGRESS_PREFIX}${email.toLowerCase().trim()}`;
 
 /**
+ * Progress is stored as one JSON blob per user (read -> modify -> write).
+ * Concurrent calls (per-answer saves + finish-test saves) would overwrite each other,
+ * so every write is queued behind the previous one.
+ */
+let progressWriteQueue: Promise<unknown> = Promise.resolve();
+const enqueueProgressWrite = <T>(task: () => Promise<T>): Promise<T> => {
+  const run = progressWriteQueue.then(task, task);
+  progressWriteQueue = run.catch(() => undefined);
+  return run;
+};
+
+/**
  * Load student progress from Supabase & LocalStorage
  */
 export const getStudentProgress = async (userEmail: string): Promise<StudentProfileProgress> => {
@@ -78,7 +90,15 @@ export const getStudentProgress = async (userEmail: string): Promise<StudentProf
 /**
  * Save user answers to progress
  */
-export const recordUserAnswers = async (
+export const recordUserAnswers = (
+  userEmail: string,
+  categoryKey: string,
+  chapterId: string,
+  results: { questionId: string; isCorrect: boolean }[]
+): Promise<StudentProfileProgress> =>
+  enqueueProgressWrite(() => recordUserAnswersUnsafe(userEmail, categoryKey, chapterId, results));
+
+const recordUserAnswersUnsafe = async (
   userEmail: string,
   categoryKey: string,
   chapterId: string,
@@ -158,7 +178,14 @@ export const recordUserAnswers = async (
 /**
  * Reset student progress for a specific chapter or all chapters
  */
-export const resetStudentProgress = async (
+export const resetStudentProgress = (
+  userEmail: string,
+  categoryKey?: string,
+  chapterId?: string
+): Promise<StudentProfileProgress> =>
+  enqueueProgressWrite(() => resetStudentProgressUnsafe(userEmail, categoryKey, chapterId));
+
+const resetStudentProgressUnsafe = async (
   userEmail: string,
   categoryKey?: string,
   chapterId?: string
