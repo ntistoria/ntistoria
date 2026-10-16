@@ -8,7 +8,9 @@ const SUPABASE_KEY =
   process.env.SUPABASE_ANON_KEY ||
   process.env.VITE_SUPABASE_ANON_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+// Fallbacks used if a model is unavailable (404). 'gemini-flash-latest' is an auto-updating alias.
+const GEMINI_MODELS = [...new Set([GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest'])];
 
 // Whitelist — never let the client choose arbitrary table names.
 const ALLOWED_TABLES = ['analogy_questions', 'source_questions'];
@@ -71,26 +73,30 @@ async function gradeWithGemini({ question, correctAnswer, studentAnswer, maxScor
 }
 `;
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.1,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'OBJECT',
-          properties: {
-            score: { type: 'INTEGER' },
-            feedback: { type: 'STRING' }
-          },
-          required: ['score', 'feedback']
-        }
+  const body = JSON.stringify({
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: {
+      temperature: 0.1,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: 'OBJECT',
+        properties: {
+          score: { type: 'INTEGER' },
+          feedback: { type: 'STRING' }
+        },
+        required: ['score', 'feedback']
       }
-    })
+    }
   });
+  let r;
+  for (const model of GEMINI_MODELS) {
+    r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+      body
+    });
+    if (r.status !== 404) break; // try next model only when model is not found/unavailable
+  }
   if (!r.ok) throw new Error(`Gemini ${r.status}: ${(await r.text()).slice(0, 150)}`);
   const data = await r.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
