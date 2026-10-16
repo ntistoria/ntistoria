@@ -8,9 +8,9 @@ const SUPABASE_KEY =
   process.env.SUPABASE_ANON_KEY ||
   process.env.VITE_SUPABASE_ANON_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-// Fallbacks used if a model is unavailable (404). 'gemini-flash-latest' is an auto-updating alias.
-const GEMINI_MODELS = [...new Set([GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest', 'gemini-flash-lite-latest'])];
+// Lightweight Flash-Lite model only (auto-updating alias).
+const GEMINI_MODEL = 'gemini-flash-lite-latest';
+const GEMINI_MODELS = [GEMINI_MODEL];
 
 // Whitelist — never let the client choose arbitrary table names.
 const ALLOWED_TABLES = ['analogy_questions', 'source_questions'];
@@ -91,7 +91,7 @@ async function gradeWithGemini({ question, correctAnswer, studentAnswer, maxScor
   const RETRYABLE = [404, 429, 500, 502, 503, 504];
   let r;
   outer: for (const model of GEMINI_MODELS) {
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
