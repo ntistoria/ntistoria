@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, type FC } from 'react';
+import { useState, useEffect, useRef, useCallback, type FC } from 'react';
 import { MockExam } from '../types';
 import { supabase } from '../lib/supabase';
+import { useAntiCheating } from '../hooks/useAntiCheating';
 import {
   Clock,
   ChevronLeft,
@@ -13,7 +14,8 @@ import {
   MapPin,
   Layers,
   BookOpen,
-  AlertTriangle
+  AlertTriangle,
+  ShieldAlert
 } from 'lucide-react';
 
 interface MockExamStudentViewProps {
@@ -32,6 +34,45 @@ function formatExamTimer(totalSeconds: number): string {
 }
 
 const OPTION_LABELS = ['ა', 'ბ', 'გ', 'დ'];
+const MAX_ALLOWED_VIOLATIONS = 3;
+
+export const OFFICIAL_EXAM_INSTRUCTIONS = {
+  mcq: {
+    title: 'ინსტრუქცია დავალებებისათვის № 1-35:',
+    body: `თითოეულ კითხვაზე მოცემულია ოთხი სავარაუდო პასუხი. მათგან მხოლოდ ერთია სწორი. თქვენ მიერ არჩეული პასუხის მონიშვნის ერთადერთი გზა პასუხების ფურცელზე სათანადო უჯრაში X ნიშნის დასმაა. არც ერთი სხვა აღნიშვნა, ჰორიზონტალური თუ ვერტიკალური ხაზები, შემოხაზვა და ა.შ. ელექტრონული პროგრამის მიერ არ აღიქმება. თუ გსურთ პასუხების ფურცელზე მონიშნული პასუხის გადასწორება, მთლიანად გააფერადეთ უჯრა, რომელშიც დასვით X ნიშანი და შემდეგ მონიშნეთ პასუხის ახალი ვარიანტი (დასვით X ნიშანი ახალ უჯრაში). შეუძლებელია, ხელმეორედ აირჩიოთ ის პასუხი, რომელიც გადაასწორეთ. თითოეული დავალება 1 ქულით ფასდება.`
+  },
+  map: {
+    title: 'ინსტრუქცია დავალებისათვის № 36:',
+    body: `დავალებაში მოცემულია გარკვეული ეპოქის ისტორიული რუკა. უპასუხეთ დასმულ კითხვებს, ხოლო პასუხები ჩაწერეთ პასუხების ფურცლის შესაბამის ადგილას. დავალების მაქსიმალური ქულაა 6.`
+  },
+  analogy: {
+    title: 'ინსტრუქცია დავალებებისათვის № 37:',
+    body: `ყურადღებით წაიკითხეთ დავალება და უპასუხეთ დასმულ კითხვებს. 37.1 კითხვაზე უპასუხეთ კონკრეტულად მოთხოვნილი მიზეზი ან შედეგი. ზოგადი ხასიათის მიზეზისა და შედეგის დასახელება არ შეფასდება. ამასთანავე, პასუხი არ უნდა შეიცავდეს ფაქტობრივ შეცდომას. 
+
+37.2 და 37.3 დავალებები შეფასდება მხოლოდ იმ შემთხვევაში, თუ პასუხებს ახლავს ლოგიკური არგუმენტები, რომლებიც არ შეიცავს ფაქტობრივ შეცდომას. მხოლოდ დასახელება, არგუმენტის გარეშე, არ ფასდება. 
+
+37.4 დავალება არ შეფასდება შემდეგ შემთხვევებში:
+ა) მოტანილია მხოლოდ ანალოგია და არ არის დასასაბუთებლად მოტანილი არგუმენტები;
+ბ) მოტანილია არგუმენტები ანალოგიის დასასაბუთებლად, მაგრამ არ არის დასახელებული თავად ანალოგია;
+გ) დასახელებული ანალოგია და დასასაბუთებლად მოტანილი არგუმენტები ურთიერთშეუსაბამოა.
+დავალების მაქსიმალური ქულაა 5.`
+  },
+  source: {
+    title: 'ინსტრუქცია დავალებისათვის № 38:',
+    body: `ყურადღებით წაიკითხეთ ქვემოთ მოყვანილი ისტორიული დოკუმენტი, გაიაზრეთ ტექსტი და უპასუხეთ კითხვებს. პასუხები ჩაწერეთ პასუხების ფურცლის შესაბამის ადგილას. დავალების მაქსიმალური ქულაა 14.`
+  }
+} as const;
+
+const ExamInstructionCallout: FC<{ title: string; body: string }> = ({ title, body }) => (
+  <div className="bg-[#F5F1E6] border-2 border-[#C79B3A]/50 border-l-4 border-l-[#0D1B2A] rounded-2xl p-5 sm:p-6 space-y-2 shadow-xs">
+    <h3 className="font-serif font-bold text-sm sm:text-base text-[#0D1B2A]">
+      {title}
+    </h3>
+    <div className="text-xs sm:text-sm text-[#13253D] leading-relaxed whitespace-pre-line">
+      {body}
+    </div>
+  </div>
+);
 
 export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
   exam,
@@ -50,12 +91,29 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
   const [remainingSeconds, setRemainingSeconds] = useState<number>(computeRemaining);
   const [isExpiredModalOpen, setIsExpiredModalOpen] = useState<boolean>(false);
 
+  // Anti-Cheat Warning & Termination Modal states
+  const [showViolationWarningModal, setShowViolationWarningModal] = useState<boolean>(false);
+  const [isTerminatedByCheat, setIsTerminatedByCheat] = useState<boolean>(false);
+
   // Map Zoom State (inline & lightbox)
   const [inlineZoom, setInlineZoom] = useState<number>(1);
   const [isMapLightboxOpen, setIsMapLightboxOpen] = useState<boolean>(false);
   const [lightboxZoom, setLightboxZoom] = useState<number>(1.5);
 
   const expiredTriggeredRef = useRef<boolean>(false);
+
+  // Anti-Cheating & Tab Lock Hook (blocks copy, cut, contextmenu, Ctrl+C/P/X/U, F12, Ctrl+Shift+I, and tracks visibilitychange & window.blur)
+  const { tabSwitchCount } = useAntiCheating({
+    isActive: !isExpiredModalOpen && !isTerminatedByCheat,
+    onViolation: useCallback((count: number) => {
+      if (count >= MAX_ALLOWED_VIOLATIONS) {
+        setShowViolationWarningModal(false);
+        setIsTerminatedByCheat(true);
+      } else {
+        setShowViolationWarningModal(true);
+      }
+    }, [])
+  });
 
   // Countdown Timer synchronized with end_time
   useEffect(() => {
@@ -102,14 +160,14 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
     };
   }, [exam.id]);
 
-  // Auto-redirect to home page 3.5 seconds after time expires
+  // Auto-redirect to home page when time expires OR after 3rd anti-cheat violation
   useEffect(() => {
-    if (!isExpiredModalOpen) return;
+    if (!isExpiredModalOpen && !isTerminatedByCheat) return;
     const timeout = setTimeout(() => {
       onTimeExpired();
-    }, 3500);
+    }, 3000);
     return () => clearTimeout(timeout);
-  }, [isExpiredModalOpen, onTimeExpired]);
+  }, [isExpiredModalOpen, isTerminatedByCheat, onTimeExpired]);
 
   const scrollToSection = (sectionId: string) => {
     const el = document.getElementById(sectionId);
@@ -128,8 +186,15 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
   const isLowTime = remainingSeconds > 0 && remainingSeconds <= 300; // last 5 mins
 
   return (
-    <div className="min-h-screen bg-[#FAF8F3] pb-24 prevent-select select-none">
-      {/* STICKY EXAM HEADER WITH COUNTDOWN TIMER */}
+    <div
+      className="min-h-screen bg-[#FAF8F3] pb-24 prevent-select select-none"
+      style={{ userSelect: 'none', WebkitUserSelect: 'none' }}
+      onContextMenu={(e) => e.preventDefault()}
+      onCopy={(e) => e.preventDefault()}
+      onCut={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+    >
+      {/* STICKY EXAM HEADER WITH COUNTDOWN TIMER & ANTI-CHEAT STATUS */}
       <div className="sticky top-20 z-30 bg-[#0D1B2A] text-white border-b-2 border-[#C79B3A] shadow-lg">
         <div className="max-w-[1100px] mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
           {/* Left: Back & Exam Title */}
@@ -189,22 +254,46 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
             )}
           </div>
 
-          {/* Right: Synchronized Countdown Timer */}
-          <div
-            className={`px-4 py-2 rounded-xl border flex items-center gap-2.5 font-mono font-bold text-base sm:text-lg ${
-              isLowTime
-                ? 'bg-rose-600/90 border-rose-300 text-white animate-pulse'
-                : 'bg-[#13253D] border-[#C79B3A]/60 text-[#FAF8F3]'
-            }`}
-          >
-            <Clock className="w-4 h-4 text-[#C79B3A] shrink-0" />
-            <span>{formatExamTimer(remainingSeconds)}</span>
+          {/* Right: Violation Counter & Synchronized Countdown Timer */}
+          <div className="flex items-center gap-2.5">
+            {tabSwitchCount > 0 && (
+              <div className="px-3 py-2 rounded-xl bg-amber-500/20 border border-amber-400 text-amber-200 text-xs font-bold flex items-center gap-1.5">
+                <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>გაფრთხილება: {tabSwitchCount}/{MAX_ALLOWED_VIOLATIONS}</span>
+              </div>
+            )}
+
+            <div
+              className={`px-4 py-2 rounded-xl border flex items-center gap-2.5 font-mono font-bold text-base sm:text-lg ${
+                isLowTime
+                  ? 'bg-rose-600/90 border-rose-300 text-white animate-pulse'
+                  : 'bg-[#13253D] border-[#C79B3A]/60 text-[#FAF8F3]'
+              }`}
+            >
+              <Clock className="w-4 h-4 text-[#C79B3A] shrink-0" />
+              <span>{formatExamTimer(remainingSeconds)}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* MAIN ACADEMIC EXAM PAPER */}
+      {/* MAIN UNIFIED ACADEMIC EXAM PAPER */}
       <div className="max-w-[980px] mx-auto px-4 sm:px-6 pt-8 space-y-12">
+        {/* Persistent Anti-Cheat Warning Banner if student switched tabs */}
+        {tabSwitchCount > 0 && (
+          <div className="p-4 bg-amber-50 border-2 border-amber-400 rounded-2xl text-amber-950 text-xs sm:text-sm font-bold flex items-center justify-between gap-4 shadow-xs">
+            <div className="flex items-center gap-2.5">
+              <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0" />
+              <span>
+                ⚠️ დაფიქსირდა გვერდის/ტაბის დატოვება ({tabSwitchCount} / {MAX_ALLOWED_VIOLATIONS}). მე-3 გადაცდომისას გამოცდა ავტომატურად დაიხურება!
+              </span>
+            </div>
+            <span className="px-2.5 py-1 bg-amber-200 text-amber-950 rounded-lg text-[11px] font-mono uppercase shrink-0">
+              კონტროლი ჩართულია
+            </span>
+          </div>
+        )}
+
         {/* Academic Instruction Notice */}
         <div className="bg-white rounded-2xl border-2 border-[#E6DDCB] p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="space-y-1">
@@ -212,7 +301,7 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
               საგამოცდო ინსტრუქცია (View-Only რეჟიმი)
             </div>
             <p className="text-xs sm:text-sm text-[#13253D] leading-relaxed">
-              ყურადღებით გაეცანით დავალებებს. პასუხები დაწერეთ თქვენს სამუშაო ფურცელზე კითხვის ნომრის მითითებით (N1–N38).
+              ყურადღებით გაეცანით დავალებებს. პასუხები დაწერეთ თქვენს სამუშაო ფურცელზე კითხვის ნომრის მითითებით (N1–N38). გამოცდის მიმდინარეობისას ტაბის ჩაკეცვა ან სხვა პროგრამაზე გადასვლა დაუშვებელია.
             </p>
           </div>
           <div className="px-3.5 py-1.5 bg-[#FAF8F3] border border-[#E6DDCB] rounded-xl text-xs font-bold text-[#0D1B2A] shrink-0">
@@ -236,6 +325,11 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
             </span>
           </div>
 
+          <ExamInstructionCallout
+            title={OFFICIAL_EXAM_INSTRUCTIONS.mcq.title}
+            body={OFFICIAL_EXAM_INSTRUCTIONS.mcq.body}
+          />
+
           <div className="space-y-4">
             {payload.mcqQuestions.map((q, idx) => {
               const qNum = q.number || idx + 1;
@@ -258,7 +352,6 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pl-0 sm:pl-11">
                     {opts.map((optText, optIdx) => {
                       const label = OPTION_LABELS[optIdx] || String(optIdx + 1);
-                      // Avoid double prefix if option text already starts with "ა)" or "ა."
                       const cleanedText = String(optText).replace(/^[აბგდ]\s*[\)\.]\s*/i, '');
                       return (
                         <div
@@ -295,6 +388,11 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
                 N36
               </span>
             </div>
+
+            <ExamInstructionCallout
+              title={OFFICIAL_EXAM_INSTRUCTIONS.map.title}
+              body={OFFICIAL_EXAM_INSTRUCTIONS.map.body}
+            />
 
             <div className="bg-white rounded-3xl border-2 border-[#E6DDCB] p-5 sm:p-8 space-y-6 shadow-xs">
               {/* Map Image Viewer with Zoom Controls */}
@@ -356,6 +454,7 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
                       onClick={() => setIsMapLightboxOpen(true)}
                       className="mx-auto block rounded-xl cursor-zoom-in transition-all duration-150"
                       referrerPolicy="no-referrer"
+                      draggable={false}
                     />
                   </div>
                 </div>
@@ -430,6 +529,11 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
               </span>
             </div>
 
+            <ExamInstructionCallout
+              title={OFFICIAL_EXAM_INSTRUCTIONS.analogy.title}
+              body={OFFICIAL_EXAM_INSTRUCTIONS.analogy.body}
+            />
+
             <div className="bg-white rounded-3xl border-2 border-[#E6DDCB] p-5 sm:p-8 space-y-6 shadow-xs">
               {payload.analogyTask.sourceContext && (
                 <div className="p-5 sm:p-6 bg-[#FAF8F3] rounded-2xl border-l-4 border-[#C79B3A] space-y-2">
@@ -487,6 +591,11 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
                 N38
               </span>
             </div>
+
+            <ExamInstructionCallout
+              title={OFFICIAL_EXAM_INSTRUCTIONS.source.title}
+              body={OFFICIAL_EXAM_INSTRUCTIONS.source.body}
+            />
 
             <div className="bg-white rounded-3xl border-2 border-[#E6DDCB] p-5 sm:p-8 space-y-6 shadow-xs">
               {payload.sourceTask.sourceContext && (
@@ -590,7 +699,77 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
               }}
               className="rounded-xl shadow-2xl transition-all duration-150"
               referrerPolicy="no-referrer"
+              draggable={false}
             />
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          STRICT ANTI-CHEAT TAB SWITCH WARNING MODAL (1/3 and 2/3)
+         ========================================================= */}
+      {showViolationWarningModal && !isTerminatedByCheat && !isExpiredModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border-2 border-amber-500 max-w-md w-full p-8 text-center space-y-6 shadow-2xl">
+            <div className="w-16 h-16 rounded-2xl bg-amber-100 border border-amber-300 text-amber-700 flex items-center justify-center mx-auto">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="px-3 py-1 bg-amber-100 text-amber-800 border border-amber-300 text-xs font-mono font-bold rounded-full inline-block">
+                გაფრთხილება {tabSwitchCount} / {MAX_ALLOWED_VIOLATIONS}
+              </span>
+              <h3 className="font-serif font-bold text-2xl text-[#0D1B2A]">
+                გვერდის დატოვება დაუშვებელია!
+              </h3>
+              <p className="text-xs sm:text-sm text-[#666666] leading-relaxed">
+                იმიტირებული გამოცდის მიმდინარეობისას სხვა ტაბზე გადასვლა, ფანჯრის ჩაკეცვა ან სხვა პროგრამის გააქტიურება აკრძალულია.{' '}
+                <strong className="text-rose-700">
+                  მე-{MAX_ALLOWED_VIOLATIONS} გადაცდომის შემთხვევაში გამოცდა ავტომატურად დაიხურება!
+                </strong>
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowViolationWarningModal(false)}
+              className="w-full py-3.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-xl transition-all cursor-pointer"
+            >
+              გასაგებია, გამოცდის გაგრძელება
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================
+          3rd VIOLATION AUTO-CLOSE MODAL
+         ========================================================= */}
+      {isTerminatedByCheat && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl border-2 border-rose-600 max-w-md w-full p-8 text-center space-y-6 shadow-2xl">
+            <div className="w-16 h-16 rounded-2xl bg-rose-100 border border-rose-300 text-rose-600 flex items-center justify-center mx-auto">
+              <ShieldAlert className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="px-3 py-1 bg-rose-100 text-rose-800 border border-rose-300 text-xs font-mono font-bold rounded-full inline-block">
+                დაფიქსირდა {MAX_ALLOWED_VIOLATIONS} / {MAX_ALLOWED_VIOLATIONS} გადაცდომა
+              </span>
+              <h3 className="font-serif font-bold text-2xl text-[#0D1B2A]">
+                გამოცდა ავტომატურად დაიხურა!
+              </h3>
+              <p className="text-xs sm:text-sm text-[#666666] leading-relaxed">
+                თქვენ {MAX_ALLOWED_VIOLATIONS}-ჯერ დატოვეთ საგამოცდო ფანჯარა/ტაბი. უსაფრთხოების წესების თანახმად, ტესტირება შეწყვეტილია და გადამისამართდებით მთავარ გვერდზე.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onTimeExpired}
+              className="w-full py-3.5 bg-rose-600 hover:bg-rose-700 text-white text-xs uppercase tracking-widest font-bold rounded-xl transition-all cursor-pointer"
+            >
+              მთავარ გვერდზე დაბრუნება
+            </button>
           </div>
         </div>
       )}
@@ -598,7 +777,7 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
       {/* =========================================================
           EXAM TIME EXPIRED MODAL ("გამოცდის დრო ამოიწურა!")
          ========================================================= */}
-      {isExpiredModalOpen && (
+      {isExpiredModalOpen && !isTerminatedByCheat && (
         <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl border-2 border-[#C79B3A] max-w-md w-full p-8 text-center space-y-6 shadow-2xl">
             <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-300 text-amber-600 flex items-center justify-center mx-auto">
@@ -627,4 +806,3 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
     </div>
   );
 };
-

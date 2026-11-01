@@ -31,10 +31,31 @@ export function useAntiCheating({ isActive, onViolation }: UseAntiCheatingOption
       return;
     }
 
-    // 1. Prevent text copying, cut, and right-click context menu
+    // 1. Prevent text copying, cut, right-click context menu, and restricted shortcuts
     const handleCopy = (e: ClipboardEvent) => e.preventDefault();
     const handleCut = (e: ClipboardEvent) => e.preventDefault();
     const handleContextMenu = (e: MouseEvent) => e.preventDefault();
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      const ctrlOrMeta = e.ctrlKey || e.metaKey;
+      // Block F12
+      if (e.key === 'F12') {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      // Block Ctrl+Shift+I / Ctrl+Shift+J / Ctrl+Shift+C
+      if (ctrlOrMeta && e.shiftKey && (key === 'i' || key === 'j' || key === 'c')) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      // Block Ctrl+C, Ctrl+P, Ctrl+X, Ctrl+U
+      if (ctrlOrMeta && (key === 'c' || key === 'p' || key === 'x' || key === 'u')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
 
     const registerViolation = () => {
       const now = Date.now();
@@ -70,6 +91,7 @@ export function useAntiCheating({ isActive, onViolation }: UseAntiCheatingOption
     document.addEventListener('copy', handleCopy);
     document.addEventListener('cut', handleCut);
     document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('blur', handleWindowBlur);
 
@@ -77,6 +99,7 @@ export function useAntiCheating({ isActive, onViolation }: UseAntiCheatingOption
       document.removeEventListener('copy', handleCopy);
       document.removeEventListener('cut', handleCut);
       document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('blur', handleWindowBlur);
     };
