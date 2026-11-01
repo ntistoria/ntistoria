@@ -15,7 +15,8 @@ import {
   Layers,
   BookOpen,
   AlertTriangle,
-  ShieldAlert
+  ShieldAlert,
+  Printer
 } from 'lucide-react';
 
 interface MockExamStudentViewProps {
@@ -23,6 +24,7 @@ interface MockExamStudentViewProps {
   serverTimeOffsetMs?: number;
   onExit: () => void;
   onTimeExpired: () => void;
+  isAdminPreview?: boolean;
 }
 
 function formatExamTimer(totalSeconds: number): string {
@@ -78,7 +80,8 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
   exam,
   serverTimeOffsetMs = 0,
   onExit,
-  onTimeExpired
+  onTimeExpired,
+  isAdminPreview = false
 }) => {
   const endTimeMs = exam.end_time ? new Date(exam.end_time).getTime() : 0;
 
@@ -104,19 +107,22 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
 
   // Anti-Cheating & Tab Lock Hook (blocks copy, cut, contextmenu, Ctrl+C/P/X/U, F12, Ctrl+Shift+I, and tracks visibilitychange & window.blur)
   const { tabSwitchCount } = useAntiCheating({
-    isActive: !isExpiredModalOpen && !isTerminatedByCheat,
+    isActive: !isAdminPreview && !isExpiredModalOpen && !isTerminatedByCheat,
     onViolation: useCallback((count: number) => {
+      if (isAdminPreview) return;
       if (count >= MAX_ALLOWED_VIOLATIONS) {
         setShowViolationWarningModal(false);
         setIsTerminatedByCheat(true);
       } else {
         setShowViolationWarningModal(true);
       }
-    }, [])
+    }, [isAdminPreview])
   });
 
   // Countdown Timer synchronized with end_time
   useEffect(() => {
+    if (isAdminPreview) return;
+
     const tick = () => {
       const rem = computeRemaining();
       setRemainingSeconds(rem);
@@ -131,10 +137,11 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endTimeMs, serverTimeOffsetMs]);
+  }, [endTimeMs, serverTimeOffsetMs, isAdminPreview]);
 
   // Listen for admin deactivation in real-time
   useEffect(() => {
+    if (isAdminPreview) return;
     const channel = supabase
       .channel(`mock-exam-live-${exam.id}`)
       .on(
@@ -195,7 +202,7 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
       onDragStart={(e) => e.preventDefault()}
     >
       {/* STICKY EXAM HEADER WITH COUNTDOWN TIMER & ANTI-CHEAT STATUS */}
-      <div className="sticky top-20 z-30 bg-[#0D1B2A] text-white border-b-2 border-[#C79B3A] shadow-lg">
+      <div className="sticky top-20 z-30 bg-[#0D1B2A] text-white border-b-2 border-[#C79B3A] shadow-lg print:hidden">
         <div className="max-w-[1100px] mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
           {/* Left: Back & Exam Title */}
           <div className="flex items-center gap-3">
@@ -204,11 +211,11 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
               className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-[#FAF8F3] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4 text-[#C79B3A]" />
-              <span>გასვლა</span>
+              <span>{isAdminPreview ? 'უკან დაბრუნება' : 'გასვლა'}</span>
             </button>
             <div>
               <div className="text-[10px] uppercase tracking-widest text-[#C79B3A] font-bold">
-                იმიტირებული ეროვნული გამოცდა
+                {isAdminPreview ? 'ადმინის ხედი — ტესტის ვარიანტი' : 'იმიტირებული ეროვნული გამოცდა'}
               </div>
               <h1 className="font-serif font-bold text-sm sm:text-base text-[#FAF8F3] line-clamp-1">
                 {exam.title}
@@ -254,25 +261,38 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
             )}
           </div>
 
-          {/* Right: Violation Counter & Synchronized Countdown Timer */}
+          {/* Right: Violation Counter & Synchronized Countdown Timer OR Admin Print Button */}
           <div className="flex items-center gap-2.5">
-            {tabSwitchCount > 0 && (
-              <div className="px-3 py-2 rounded-xl bg-amber-500/20 border border-amber-400 text-amber-200 text-xs font-bold flex items-center gap-1.5">
-                <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>გაფრთხილება: {tabSwitchCount}/{MAX_ALLOWED_VIOLATIONS}</span>
-              </div>
-            )}
+            {isAdminPreview ? (
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-4 py-2 rounded-xl bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] text-xs uppercase tracking-wider font-bold flex items-center gap-2 transition-colors cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                <span>ტესტის ბეჭდვა</span>
+              </button>
+            ) : (
+              <>
+                {tabSwitchCount > 0 && (
+                  <div className="px-3 py-2 rounded-xl bg-amber-500/20 border border-amber-400 text-amber-200 text-xs font-bold flex items-center gap-1.5">
+                    <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>გაფრთხილება: {tabSwitchCount}/{MAX_ALLOWED_VIOLATIONS}</span>
+                  </div>
+                )}
 
-            <div
-              className={`px-4 py-2 rounded-xl border flex items-center gap-2.5 font-mono font-bold text-base sm:text-lg ${
-                isLowTime
-                  ? 'bg-rose-600/90 border-rose-300 text-white animate-pulse'
-                  : 'bg-[#13253D] border-[#C79B3A]/60 text-[#FAF8F3]'
-              }`}
-            >
-              <Clock className="w-4 h-4 text-[#C79B3A] shrink-0" />
-              <span>{formatExamTimer(remainingSeconds)}</span>
-            </div>
+                <div
+                  className={`px-4 py-2 rounded-xl border flex items-center gap-2.5 font-mono font-bold text-base sm:text-lg ${
+                    isLowTime
+                      ? 'bg-rose-600/90 border-rose-300 text-white animate-pulse'
+                      : 'bg-[#13253D] border-[#C79B3A]/60 text-[#FAF8F3]'
+                  }`}
+                >
+                  <Clock className="w-4 h-4 text-[#C79B3A] shrink-0" />
+                  <span>{formatExamTimer(remainingSeconds)}</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

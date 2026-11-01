@@ -6,6 +6,8 @@ import {
   generateAndActivateMockExam,
   deactivateMockExam
 } from '../lib/mockExamService';
+import { MockExamStudentView } from './MockExamStudentView';
+import { AdminMockExamAnswerKeyView } from './AdminMockExamAnswerKeyView';
 import {
   Clock,
   CheckSquare,
@@ -20,7 +22,9 @@ import {
   MapPin,
   Layers,
   FileText,
-  History
+  History,
+  Eye,
+  KeyRound
 } from 'lucide-react';
 
 function formatCountdown(remainingSeconds: number): string {
@@ -40,9 +44,15 @@ export const AdminMockExamManager: FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
+  // Admin sub-views for viewing Student Variant or Answer Key
+  const [viewingTestExam, setViewingTestExam] = useState<MockExam | null>(null);
+  const [viewingAnswerKeyExam, setViewingAnswerKeyExam] = useState<MockExam | null>(null);
+
   // Generator Form State
   const [title, setTitle] = useState<string>('იმიტირებული გამოცდა #1');
-  const [selectedChapters, setSelectedChapters] = useState<number[]>([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  const [selectedChapters, setSelectedChapters] = useState<number[]>([
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
+  ]);
   const [durationMinutes, setDurationMinutes] = useState<number>(180);
 
   // Live ticker for remaining time display
@@ -60,7 +70,7 @@ export const AdminMockExamManager: FC = () => {
       }
       setExams(allExams);
 
-      // Suggest next exam number in title if default
+      // Suggest next exam number in title
       const nextNum = allExams.length + 1;
       setTitle(`იმიტირებული გამოცდა #${nextNum}`);
     } catch (err) {
@@ -87,6 +97,32 @@ export const AdminMockExamManager: FC = () => {
     if (!ex.is_active || !ex.end_time) return false;
     return new Date(ex.end_time).getTime() > nowMs;
   });
+
+  // Completed exams: either is_active === false OR end_time <= nowMs
+  const completedExams = exams.filter((ex) => {
+    if (!ex.is_active) return true;
+    if (!ex.end_time) return true;
+    return new Date(ex.end_time).getTime() <= nowMs;
+  });
+
+  // Auto-mark expired active exams as inactive in DB when their time runs out
+  useEffect(() => {
+    const expiredStillMarkedActive = exams.filter(
+      (ex) => ex.is_active && ex.end_time && new Date(ex.end_time).getTime() <= nowMs
+    );
+    if (expiredStillMarkedActive.length > 0) {
+      expiredStillMarkedActive.forEach((ex) => {
+        deactivateMockExam(ex.id).catch(() => {});
+      });
+      setExams((prev) =>
+        prev.map((ex) =>
+          ex.is_active && ex.end_time && new Date(ex.end_time).getTime() <= nowMs
+            ? { ...ex, is_active: false }
+            : ex
+        )
+      );
+    }
+  }, [exams, nowMs]);
 
   const activeRemainingSeconds = activeExam?.end_time
     ? Math.max(0, Math.floor((new Date(activeExam.end_time).getTime() - nowMs) / 1000))
@@ -153,13 +189,49 @@ export const AdminMockExamManager: FC = () => {
       setExams((prev) =>
         prev.map((ex) => (ex.id === examId ? { ...ex, is_active: false } : ex))
       );
-      setSuccessMsg('მიმდინარე იმიტირებული გამოცდა წარმატებით დასრულდა/გაუქმდა.');
+      setSuccessMsg('მიმდინარე იმიტირებული გამოცდა დასრულდა და გადავიდა დასრულებულების სიაში.');
     } catch (err: any) {
       setErrorMsg(err?.message || 'ტესტის გაუქმება ვერ მოხერხდა.');
     } finally {
       setIsStopping(false);
     }
   };
+
+  // Sub-view 1: Admin viewing full Student Exam Variant (N1-N38)
+  if (viewingTestExam) {
+    return (
+      <MockExamStudentView
+        exam={viewingTestExam}
+        isAdminPreview
+        onExit={() => {
+          setViewingTestExam(null);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onTimeExpired={() => {
+          setViewingTestExam(null);
+        }}
+      />
+    );
+  }
+
+  // Sub-view 2: Admin viewing Answer Key Sheet (სწორი პასუხები / შესასწორებელი ფურცელი)
+  if (viewingAnswerKeyExam) {
+    return (
+      <AdminMockExamAnswerKeyView
+        exam={viewingAnswerKeyExam}
+        onBack={() => {
+          setViewingAnswerKeyExam(null);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onViewStudentVariant={() => {
+          const target = viewingAnswerKeyExam;
+          setViewingAnswerKeyExam(null);
+          setViewingTestExam(target);
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
@@ -234,6 +306,31 @@ export const AdminMockExamManager: FC = () => {
                     <FileText className="w-3.5 h-3.5 text-[#C79B3A]" />
                     N38 წყარო: {activeExam.questions_payload?.sourceTask ? '1 დავალება' : 'არ არის'}
                   </span>
+                </div>
+
+                <div className="pt-1 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewingTestExam(activeExam);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="px-3.5 py-2 bg-white hover:bg-[#E6DDCB]/50 border border-[#E6DDCB] text-[#0D1B2A] text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-[#C79B3A]" />
+                    <span>ტესტის ნახვა</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewingAnswerKeyExam(activeExam);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="px-3.5 py-2 bg-white hover:bg-[#E6DDCB]/50 border border-[#E6DDCB] text-[#0D1B2A] text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <KeyRound className="w-3.5 h-3.5 text-[#C79B3A]" />
+                    <span>სწორი პასუხები</span>
+                  </button>
                 </div>
               </div>
 
@@ -395,51 +492,92 @@ export const AdminMockExamManager: FC = () => {
         </div>
       </form>
 
-      {/* 3. RECENT GENERATED EXAMS ARCHIVE */}
-      {exams.length > 0 && (
-        <div className="bg-white rounded-3xl border border-[#E6DDCB] shadow-sm overflow-hidden">
-          <div className="px-6 py-4 bg-[#FAF8F3] border-b border-[#E6DDCB] flex items-center gap-2">
-            <History className="w-4 h-4 text-[#C79B3A]" />
-            <h3 className="font-serif font-bold text-base text-[#0D1B2A]">
-              დაგენერირებული ტესტების ისტორია ({exams.length})
+      {/* 3. COMPLETED MOCK EXAMS ARCHIVE SECTION („დასრულებული იმიტირებული გამოცდები“) */}
+      <div className="bg-white rounded-3xl border-2 border-[#E6DDCB] shadow-sm overflow-hidden">
+        <div className="px-6 py-4 bg-[#FAF8F3] border-b border-[#E6DDCB] flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <History className="w-5 h-5 text-[#C79B3A]" />
+            <h3 className="font-serif font-bold text-lg text-[#0D1B2A]">
+              დასრულებული იმიტირებული გამოცდები ({completedExams.length})
             </h3>
           </div>
+          <span className="text-xs text-[#666666] font-medium">
+            ტესტის ნახვა და სწორი პასუხების (შესასწორებელი ფურცლის) ბეჭდვა
+          </span>
+        </div>
+
+        {completedExams.length === 0 ? (
+          <div className="p-10 text-center text-[#8A8A8A] space-y-2">
+            <History className="w-8 h-8 text-[#C79B3A] mx-auto opacity-60" />
+            <p className="font-serif text-sm font-semibold text-[#0D1B2A]">
+              დასრულებული იმიტირებული გამოცდები ჯერ არ არის
+            </p>
+            <p className="text-xs text-[#666666]">
+              როდესაც იმიტირებული გამოცდის დრო ამოიწურება ან მას დაასრულებთ, იგი ავტომატურად გამოჩნდება ამ სიაში.
+            </p>
+          </div>
+        ) : (
           <div className="divide-y divide-[#E6DDCB]">
-            {exams.slice(0, 8).map((ex) => {
-              const isCurrentlyLive =
-                ex.is_active && ex.end_time && new Date(ex.end_time).getTime() > nowMs;
-              return (
-                <div
-                  key={ex.id}
-                  className="px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-serif font-bold text-sm text-[#0D1B2A]">
-                        {ex.title}
-                      </span>
-                      {isCurrentlyLive ? (
-                        <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold rounded-md">
-                          აქტიური
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 border border-gray-200 text-[10px] font-bold rounded-md">
-                          დასრულებული
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[#666666]">
-                      თავები: [{ex.selected_chapters.join(', ')}] • დრო: {ex.duration_minutes} წთ •{' '}
-                      {new Date(ex.created_at).toLocaleString('ka-GE')}
-                    </div>
+            {completedExams.map((ex) => (
+              <div
+                key={ex.id}
+                className="p-5 sm:p-6 hover:bg-[#FAF8F3]/60 transition-colors flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4"
+              >
+                {/* Left Info: Title, Date/Time, Selected Chapters, Status */}
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <h4 className="font-serif font-bold text-lg text-[#0D1B2A]">
+                      {ex.title}
+                    </h4>
+                    <span className="px-2.5 py-0.5 bg-gray-100 text-gray-700 border border-gray-300 text-[11px] font-bold rounded-full">
+                      დასრულებული
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#666666] font-medium">
+                    <span>
+                      ჩატარების თარიღი: <strong>{new Date(ex.created_at).toLocaleString('ka-GE')}</strong>
+                    </span>
+                    <span>•</span>
+                    <span>
+                      არჩეული თავები: <strong>[{ex.selected_chapters.join(', ')}]</strong>
+                    </span>
+                    <span>•</span>
+                    <span>ხანგრძლივობა: {ex.duration_minutes} წთ</span>
                   </div>
                 </div>
-              );
-            })}
+
+                {/* Right Actions: View Test Variant & View Answer Key */}
+                <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewingTestExam(ex);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="flex-1 lg:flex-initial px-4 py-2.5 bg-[#FAF8F3] hover:bg-[#E6DDCB]/60 border border-[#E6DDCB] text-[#0D1B2A] text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Eye className="w-4 h-4 text-[#C79B3A]" />
+                    <span>ტესტის ნახვა</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewingAnswerKeyExam(ex);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className="flex-1 lg:flex-initial px-4 py-2.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold rounded-xl transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <KeyRound className="w-4 h-4 text-[#C79B3A] group-hover:text-[#0D1B2A]" />
+                    <span>სწორი პასუხები (შესასწორებელი ფურცელი)</span>
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
-

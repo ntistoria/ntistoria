@@ -95,7 +95,7 @@ export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
     <div className="max-w-[1280px] mx-auto py-6 sm:py-8 px-4 sm:px-6 space-y-8 animate-in fade-in duration-300">
 
       {/* Top Banner Header */}
-      <div className="relative bg-[#0D1B2A] text-white rounded-3xl p-6 sm:p-8 overflow-hidden shadow-2xl border-4 border-[#C79B3A]/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+      <div className="relative bg-[#0D1B2A] text-white rounded-3xl p-6 sm:p-8 overflow-hidden shadow-2xl border-4 border-[#C79B3A]/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 print:hidden">
 
         {/* Background Emblem Accent */}
         <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-10 bg-[radial-gradient(#C79B3A_1px,transparent_1px)] bg-[size:16px_16px] pointer-events-none" />
@@ -131,7 +131,7 @@ export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
       </div>
 
       {/* ADMIN TABS NAVIGATION */}
-      <div className="flex items-center gap-2 p-1.5 bg-white rounded-2xl border border-[#E6DDCB] shadow-sm w-full max-w-full overflow-x-auto no-scrollbar flex-nowrap">
+      <div className="flex items-center gap-2 p-1.5 bg-white rounded-2xl border border-[#E6DDCB] shadow-sm w-full max-w-full overflow-x-auto no-scrollbar flex-nowrap print:hidden">
         <button
           onClick={() => setAdminTab('blogs')}
           className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap ${

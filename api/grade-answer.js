@@ -95,7 +95,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Server is not configured (missing environment variables)' });
   }
 
-  const { table, questionId, studentAnswer } = req.body || {};
+  const { table, questionId, studentAnswer, action, analogyIds, sourceIds } = req.body || {};
 
   let authUser;
   try {
@@ -105,6 +105,44 @@ export default async function handler(req, res) {
   }
   if (!authUser) {
     return res.status(401).json({ error: 'Authorization required' });
+  }
+
+  // Admin helper to fetch reference answers for Mock Exam Answer Key
+  if (action === 'admin_get_answers') {
+    const adminEmails = ['ntistoria@gmail.com', 'admin@ntistoria.ge', 'admin@gmail.com'];
+    const callerEmail = String(authUser.email || '').toLowerCase().trim();
+    if (!adminEmails.includes(callerEmail)) {
+      return res.status(403).json({ error: 'Admin privileges required' });
+    }
+
+    const fetchAnswersForTable = async (tbl, ids) => {
+      if (!Array.isArray(ids) || ids.length === 0) return {};
+      const map = {};
+      await Promise.all(
+        ids.slice(0, 30).map(async (id) => {
+          try {
+            const row = await fetchQuestion(tbl, id);
+            if (row) {
+              map[String(id)] = {
+                answer: pick(row, ANSWER_COLUMNS),
+                score: Number(row.score) || undefined
+              };
+            }
+          } catch {}
+        })
+      );
+      return map;
+    };
+
+    const [analogyMap, sourceMap] = await Promise.all([
+      fetchAnswersForTable('analogy_questions', analogyIds),
+      fetchAnswersForTable('source_questions', sourceIds)
+    ]);
+
+    return res.status(200).json({
+      analogy_questions: analogyMap,
+      source_questions: sourceMap
+    });
   }
 
   if (!ALLOWED_TABLES.includes(table)) {

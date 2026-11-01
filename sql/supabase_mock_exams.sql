@@ -116,3 +116,67 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_active_mock_exam_banner() TO anon, authenticated, service_role;
 
+-- 7. Admin Answer Key Helper RPC
+-- Reads the protected `answer` column from `analogy_questions` and `source_questions`
+-- ONLY for authenticated Admin users when generating a mock exam or viewing the Answer Key.
+CREATE OR REPLACE FUNCTION public.get_admin_open_answers(
+  p_analogy_ids TEXT[] DEFAULT '{}'::TEXT[],
+  p_source_ids TEXT[] DEFAULT '{}'::TEXT[]
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_is_admin BOOLEAN := false;
+  v_analogy_answers JSONB := '{}'::jsonb;
+  v_source_answers JSONB := '{}'::jsonb;
+BEGIN
+  SELECT (
+    lower(auth.jwt() ->> 'email') IN ('ntistoria@gmail.com', 'admin@ntistoria.ge', 'admin@gmail.com')
+    OR EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE (
+        profiles.user_id = auth.uid()
+        OR profiles.id = auth.uid()
+        OR lower(profiles.email) = lower(auth.jwt() ->> 'email')
+      )
+      AND profiles.role = 'admin'
+    )
+  ) INTO v_is_admin;
+
+  IF NOT COALESCE(v_is_admin, false) THEN
+    RAISE EXCEPTION 'Access denied: Admin privileges required';
+  END IF;
+
+  IF array_length(p_analogy_ids, 1) > 0 THEN
+    SELECT COALESCE(
+      jsonb_object_agg(id::text, jsonb_build_object('answer', answer, 'score', score)),
+      '{}'::jsonb
+    )
+    INTO v_analogy_answers
+    FROM public.analogy_questions
+    WHERE id::text = ANY(p_analogy_ids);
+  END IF;
+
+  IF array_length(p_source_ids, 1) > 0 THEN
+    SELECT COALESCE(
+      jsonb_object_agg(id::text, jsonb_build_object('answer', answer, 'score', score)),
+      '{}'::jsonb
+    )
+    INTO v_source_answers
+    FROM public.source_questions
+    WHERE id::text = ANY(p_source_ids);
+  END IF;
+
+  RETURN jsonb_build_object(
+    'analogy_questions', v_analogy_answers,
+    'source_questions', v_source_answers
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_admin_open_answers(TEXT[], TEXT[]) TO authenticated, service_role;
+
+

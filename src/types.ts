@@ -229,6 +229,10 @@ export interface MockExamQuestionItem {
   options?: string[];
   maxScore?: number;
   chapterId?: string;
+  correctAnswerIndex?: number;
+  correctAnswerLetter?: string;
+  correctAnswerText?: string;
+  explanation?: string;
 }
 
 export interface MockExamTaskSection {

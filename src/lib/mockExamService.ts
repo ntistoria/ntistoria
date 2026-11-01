@@ -9,6 +9,8 @@ import {
   QuizQuestion
 } from '../types';
 
+const GEORGIAN_LETTERS = ['ა', 'ბ', 'გ', 'დ'];
+
 /**
  * Unbiased Fisher-Yates array shuffle
  */
@@ -28,6 +30,104 @@ function extractChapterNumber(chapterId?: string): number {
   if (!chapterId) return 1;
   const match = String(chapterId).match(/\d+/);
   return match ? parseInt(match[0], 10) : 1;
+}
+
+/**
+ * Fetch reference answers for AI-graded open questions (analogy_questions & source_questions)
+ * for Admin use (generation & Answer Key sheet).
+ */
+export async function fetchAdminOpenAnswersMap(
+  analogyIds: string[],
+  sourceIds: string[]
+): Promise<{
+  analogy_questions: Record<string, { answer: string; score?: number }>;
+  source_questions: Record<string, { answer: string; score?: number }>;
+}> {
+  const result = {
+    analogy_questions: {} as Record<string, { answer: string; score?: number }>,
+    source_questions: {} as Record<string, { answer: string; score?: number }>
+  };
+
+  if (analogyIds.length === 0 && sourceIds.length === 0) {
+    return result;
+  }
+
+  // 1. Try Supabase SECURITY DEFINER RPC `get_admin_open_answers`
+  try {
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('get_admin_open_answers', {
+      p_analogy_ids: analogyIds,
+      p_source_ids: sourceIds
+    });
+    if (!rpcErr && rpcData) {
+      if (rpcData.analogy_questions) result.analogy_questions = rpcData.analogy_questions;
+      if (rpcData.source_questions) result.source_questions = rpcData.source_questions;
+      if (
+        Object.keys(result.analogy_questions).length > 0 ||
+        Object.keys(result.source_questions).length > 0
+      ) {
+        return result;
+      }
+    }
+  } catch {}
+
+  // 2. Fallback: Serverless API `/api/grade-answer` with `action: 'admin_get_answers'`
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      const res = await fetch('/api/grade-answer', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          action: 'admin_get_answers',
+          analogyIds,
+          sourceIds
+        })
+      });
+      if (res.ok) {
+        const body = await res.json();
+        if (body?.analogy_questions) result.analogy_questions = body.analogy_questions;
+        if (body?.source_questions) result.source_questions = body.source_questions;
+        return result;
+      }
+    }
+  } catch {}
+
+  // 3. Fallback: Direct table query if column-level RLS was not applied
+  try {
+    if (analogyIds.length > 0) {
+      const { data } = await supabase
+        .from('analogy_questions')
+        .select('id, answer, score')
+        .in('id', analogyIds);
+      if (data) {
+        data.forEach((row: any) => {
+          result.analogy_questions[String(row.id)] = {
+            answer: String(row.answer || ''),
+            score: Number(row.score) || undefined
+          };
+        });
+      }
+    }
+    if (sourceIds.length > 0) {
+      const { data } = await supabase
+        .from('source_questions')
+        .select('id, answer, score')
+        .in('id', sourceIds);
+      if (data) {
+        data.forEach((row: any) => {
+          result.source_questions[String(row.id)] = {
+            answer: String(row.answer || ''),
+            score: Number(row.score) || undefined
+          };
+        });
+      }
+    }
+  } catch {}
+
+  return result;
 }
 
 /**
@@ -78,14 +178,36 @@ function buildTaskCandidates(
     const firstQ = sortedQuestions[0];
     const parentNum = firstQ.parentItemNumber || index + 1;
 
-    const mappedSubQuestions: MockExamQuestionItem[] = sortedQuestions.map((q, qIdx) => ({
-      id: q.id,
-      number: q.itemNumber || qIdx + 1,
-      prompt: q.prompt,
-      options: q.questionType === 'mcq' && q.options && q.options.length > 1 ? q.options : undefined,
-      maxScore: q.maxScore,
-      chapterId: q.chapterId
-    }));
+    const mappedSubQuestions: MockExamQuestionItem[] = sortedQuestions.map((q, qIdx) => {
+      const isMcq = q.questionType === 'mcq' && q.options && q.options.length > 1;
+      const ansIdx = typeof q.correctAnswerIndex === 'number' ? q.correctAnswerIndex : 0;
+      const ansLetter = isMcq ? GEORGIAN_LETTERS[ansIdx] || 'ა' : undefined;
+      const ansText = isMcq
+        ? q.options?.[ansIdx] || q.correctAnswerText || ''
+        : q.correctAnswerText || '';
+
+      // Default points distribution if DB score is not set:
+      // Map (6 questions -> 1pt each = 6), Analogy (4 questions -> 1,1,1,2 = 5), Source (total 14)
+      let defaultScore = q.maxScore;
+      if (!defaultScore || defaultScore <= 0) {
+        if (categoryKey === 'map') defaultScore = 1;
+        else if (categoryKey === 'analogies') defaultScore = qIdx === 3 ? 2 : 1;
+        else if (categoryKey === 'source') defaultScore = 1;
+      }
+
+      return {
+        id: q.id,
+        number: q.itemNumber || qIdx + 1,
+        prompt: q.prompt,
+        options: isMcq ? q.options : undefined,
+        maxScore: defaultScore,
+        chapterId: q.chapterId,
+        correctAnswerIndex: isMcq ? ansIdx : undefined,
+        correctAnswerLetter: ansLetter,
+        correctAnswerText: ansText || undefined,
+        explanation: q.explanation || undefined
+      };
+    });
 
     sections.push({
       taskNumber,
@@ -103,7 +225,7 @@ function buildTaskCandidates(
 
 /**
  * Generate a new Mock Exam from selected chapters and activate it immediately.
- * Automatically archives/deactivates any previously active mock exam.
+ * Stores both the exam variant and full answer key (letters, answers, points) in `mock_exams`.
  */
 export async function generateAndActivateMockExam(params: {
   title: string;
@@ -131,7 +253,7 @@ export async function generateAndActivateMockExam(params: {
     fetchQuestionsForCategory('source')
   ]);
 
-  // 2. Filter & pick 35 random Multiple Choice Questions (N1-35)
+  // 2. Filter & pick 35 random Multiple Choice Questions (N1-35) with correct answer letters
   const filteredMcq = allMcq.filter((q) =>
     chapterSet.has(extractChapterNumber(q.chapterId))
   );
@@ -142,14 +264,23 @@ export async function generateAndActivateMockExam(params: {
 
   const pickedMcq: MockExamQuestionItem[] = shuffleArray(filteredMcq)
     .slice(0, 35)
-    .map((q, idx) => ({
-      id: q.id,
-      number: idx + 1,
-      prompt: q.prompt,
-      options: q.options && q.options.length > 0 ? q.options : ['ა', 'ბ', 'გ', 'დ'],
-      maxScore: q.maxScore || 1,
-      chapterId: q.chapterId
-    }));
+    .map((q, idx) => {
+      const opts = q.options && q.options.length > 0 ? q.options : ['ა', 'ბ', 'გ', 'დ'];
+      const ansIdx = typeof q.correctAnswerIndex === 'number' ? q.correctAnswerIndex : 0;
+      const ansLetter = GEORGIAN_LETTERS[ansIdx] || 'ა';
+      return {
+        id: q.id,
+        number: idx + 1,
+        prompt: q.prompt,
+        options: opts,
+        maxScore: 1,
+        chapterId: q.chapterId,
+        correctAnswerIndex: ansIdx,
+        correctAnswerLetter: ansLetter,
+        correctAnswerText: opts[ansIdx] || q.correctAnswerText || '',
+        explanation: q.explanation || undefined
+      };
+    });
 
   // 3. Filter & pick 1 random Map task (N36)
   const mapCandidates = buildTaskCandidates(
@@ -181,6 +312,33 @@ export async function generateAndActivateMockExam(params: {
   );
   const pickedSourceTask = sourceCandidates.length > 0 ? shuffleArray(sourceCandidates)[0] : null;
 
+  // 6. Populate open-question reference answers for N37 and N38
+  const analogyQIds = pickedAnalogyTask ? pickedAnalogyTask.questions.map((q) => q.id) : [];
+  const sourceQIds = pickedSourceTask ? pickedSourceTask.questions.map((q) => q.id) : [];
+  const openAnswers = await fetchAdminOpenAnswersMap(analogyQIds, sourceQIds);
+
+  if (pickedAnalogyTask) {
+    pickedAnalogyTask.questions = pickedAnalogyTask.questions.map((q, idx) => {
+      const dbAns = openAnswers.analogy_questions[q.id];
+      return {
+        ...q,
+        maxScore: dbAns?.score || q.maxScore || (idx === 3 ? 2 : 1),
+        correctAnswerText: dbAns?.answer || q.correctAnswerText || q.explanation || ''
+      };
+    });
+  }
+
+  if (pickedSourceTask) {
+    pickedSourceTask.questions = pickedSourceTask.questions.map((q) => {
+      const dbAns = openAnswers.source_questions[q.id];
+      return {
+        ...q,
+        maxScore: dbAns?.score || q.maxScore || 1,
+        correctAnswerText: dbAns?.answer || q.correctAnswerText || q.explanation || ''
+      };
+    });
+  }
+
   const payload: MockExamPayload = {
     mcqQuestions: pickedMcq,
     mapTask: pickedMapTask,
@@ -188,13 +346,13 @@ export async function generateAndActivateMockExam(params: {
     sourceTask: pickedSourceTask
   };
 
-  // 6. Deactivate any previously active mock exam
+  // 7. Deactivate any previously active mock exam
   await supabase
     .from('mock_exams')
     .update({ is_active: false })
     .eq('is_active', true);
 
-  // 7. Compute start_time and end_time
+  // 8. Compute start_time and end_time
   const startTime = new Date();
   const endTime = new Date(startTime.getTime() + durationMinutes * 60 * 1000);
 
@@ -219,6 +377,145 @@ export async function generateAndActivateMockExam(params: {
   }
 
   return data as MockExam;
+}
+
+/**
+ * Strip answer key fields from MockExam before returning to Student Exam View
+ */
+function sanitizeMockExamForStudent(exam: MockExam): MockExam {
+  const stripQ = (q: MockExamQuestionItem): MockExamQuestionItem => ({
+    id: q.id,
+    number: q.number,
+    prompt: q.prompt,
+    options: q.options,
+    maxScore: q.maxScore,
+    chapterId: q.chapterId
+  });
+
+  const p = exam.questions_payload;
+  if (!p) return exam;
+
+  return {
+    ...exam,
+    questions_payload: {
+      mcqQuestions: (p.mcqQuestions || []).map(stripQ),
+      mapTask: p.mapTask ? { ...p.mapTask, questions: p.mapTask.questions.map(stripQ) } : null,
+      analogyTask: p.analogyTask ? { ...p.analogyTask, questions: p.analogyTask.questions.map(stripQ) } : null,
+      sourceTask: p.sourceTask ? { ...p.sourceTask, questions: p.sourceTask.questions.map(stripQ) } : null
+    }
+  };
+}
+
+/**
+ * Enrich a MockExam with Answer Key data for Admin Answer Key View
+ * (Backfills answers if an older exam was generated before answer key fields were stored)
+ */
+export async function enrichMockExamWithAnswerKey(exam: MockExam): Promise<MockExam> {
+  const p = exam.questions_payload;
+  if (!p) return exam;
+
+  const needsMcqBackfill = p.mcqQuestions?.some((q) => !q.correctAnswerLetter);
+  const needsMapBackfill = p.mapTask?.questions?.some(
+    (q) => !q.correctAnswerLetter && !q.correctAnswerText
+  );
+  const needsAnalogyBackfill = p.analogyTask?.questions?.some((q) => !q.correctAnswerText);
+  const needsSourceBackfill = p.sourceTask?.questions?.some((q) => !q.correctAnswerText);
+
+  if (!needsMcqBackfill && !needsMapBackfill && !needsAnalogyBackfill && !needsSourceBackfill) {
+    return exam;
+  }
+
+  const [allMcq, allMap] = await Promise.all([
+    needsMcqBackfill ? fetchQuestionsForCategory('mcq') : Promise.resolve([]),
+    needsMapBackfill ? fetchQuestionsForCategory('map') : Promise.resolve([])
+  ]);
+
+  const mcqById = new Map(allMcq.map((q) => [q.id, q]));
+  const mapById = new Map(allMap.map((q) => [q.id, q]));
+
+  const analogyIds = needsAnalogyBackfill && p.analogyTask
+    ? p.analogyTask.questions.map((q) => q.id)
+    : [];
+  const sourceIds = needsSourceBackfill && p.sourceTask
+    ? p.sourceTask.questions.map((q) => q.id)
+    : [];
+
+  const openAnswers = await fetchAdminOpenAnswersMap(analogyIds, sourceIds);
+
+  const enrichedMcq = (p.mcqQuestions || []).map((q) => {
+    if (q.correctAnswerLetter) return q;
+    const found = mcqById.get(q.id);
+    const ansIdx = found?.correctAnswerIndex ?? q.correctAnswerIndex ?? 0;
+    const opts = q.options || found?.options || ['ა', 'ბ', 'გ', 'დ'];
+    return {
+      ...q,
+      correctAnswerIndex: ansIdx,
+      correctAnswerLetter: GEORGIAN_LETTERS[ansIdx] || 'ა',
+      correctAnswerText: opts[ansIdx] || found?.correctAnswerText || '',
+      explanation: q.explanation || found?.explanation
+    };
+  });
+
+  const enrichedMapTask = p.mapTask
+    ? {
+        ...p.mapTask,
+        questions: p.mapTask.questions.map((q) => {
+          if (q.correctAnswerLetter || q.correctAnswerText) return q;
+          const found = mapById.get(q.id);
+          const isMcq = (q.options && q.options.length > 1) || found?.questionType === 'mcq';
+          const ansIdx = found?.correctAnswerIndex ?? q.correctAnswerIndex ?? 0;
+          const opts = q.options || found?.options || [];
+          return {
+            ...q,
+            maxScore: q.maxScore || found?.maxScore || 1,
+            correctAnswerIndex: isMcq ? ansIdx : undefined,
+            correctAnswerLetter: isMcq ? GEORGIAN_LETTERS[ansIdx] || 'ა' : undefined,
+            correctAnswerText: isMcq
+              ? opts[ansIdx] || found?.correctAnswerText || ''
+              : found?.correctAnswerText || found?.explanation || '',
+            explanation: q.explanation || found?.explanation
+          };
+        })
+      }
+    : null;
+
+  const enrichedAnalogyTask = p.analogyTask
+    ? {
+        ...p.analogyTask,
+        questions: p.analogyTask.questions.map((q, idx) => {
+          const dbAns = openAnswers.analogy_questions[q.id];
+          return {
+            ...q,
+            maxScore: q.maxScore || dbAns?.score || (idx === 3 ? 2 : 1),
+            correctAnswerText: q.correctAnswerText || dbAns?.answer || q.explanation || ''
+          };
+        })
+      }
+    : null;
+
+  const enrichedSourceTask = p.sourceTask
+    ? {
+        ...p.sourceTask,
+        questions: p.sourceTask.questions.map((q) => {
+          const dbAns = openAnswers.source_questions[q.id];
+          return {
+            ...q,
+            maxScore: q.maxScore || dbAns?.score || 1,
+            correctAnswerText: q.correctAnswerText || dbAns?.answer || q.explanation || ''
+          };
+        })
+      }
+    : null;
+
+  return {
+    ...exam,
+    questions_payload: {
+      mcqQuestions: enrichedMcq,
+      mapTask: enrichedMapTask,
+      analogyTask: enrichedAnalogyTask,
+      sourceTask: enrichedSourceTask
+    }
+  };
 }
 
 /**
@@ -272,7 +569,7 @@ export async function fetchActiveMockExamBanner(): Promise<MockExamBannerInfo | 
 }
 
 /**
- * Fetch the full active mock exam (including questions_payload) for authenticated students
+ * Fetch the full active mock exam (with answer keys stripped) for authenticated students
  */
 export async function fetchActiveMockExamForStudent(): Promise<MockExam | null> {
   try {
@@ -287,14 +584,14 @@ export async function fetchActiveMockExamForStudent(): Promise<MockExam | null> 
       .maybeSingle();
 
     if (error || !data) return null;
-    return data as MockExam;
+    return sanitizeMockExamForStudent(data as MockExam);
   } catch {
     return null;
   }
 }
 
 /**
- * Fetch all mock exams for Admin Panel management (active + recent history)
+ * Fetch all mock exams for Admin Panel management (active + completed archive)
  */
 export async function fetchAllMockExamsForAdmin(): Promise<MockExam[]> {
   try {
@@ -302,7 +599,7 @@ export async function fetchAllMockExamsForAdmin(): Promise<MockExam[]> {
       .from('mock_exams')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(50);
 
     if (error || !data) return [];
     return data as MockExam[];
@@ -310,4 +607,3 @@ export async function fetchAllMockExamsForAdmin(): Promise<MockExam[]> {
     return [];
   }
 }
-
