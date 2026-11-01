@@ -1,10 +1,11 @@
 import { useState, useEffect, type FC } from 'react';
-import { Plus, Edit2, Trash2, Search, Filter, FileText, ShieldCheck, RefreshCw, AlertTriangle, Eye, HelpCircle, Video } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Filter, FileText, ShieldCheck, RefreshCw, AlertTriangle, Eye, HelpCircle, Video, Clock } from 'lucide-react';
 import { Article } from '../types';
 import { fetchAllArticles, saveArticle, deleteArticle } from '../lib/blogService';
 import { BlogEditorModal } from '../components/BlogEditorModal';
 import { AdminQuizManager } from '../components/AdminQuizManager';
 import { AdminVideoManager } from '../components/AdminVideoManager';
+import { AdminMockExamManager } from '../components/AdminMockExamManager';
 
 interface AdminViewProps {
   user: { name: string; email: string } | null;
@@ -12,7 +13,7 @@ interface AdminViewProps {
 }
 
 export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
-  const [adminTab, setAdminTab] = useState<'blogs' | 'quizzes' | 'videos'>('blogs');
+  const [adminTab, setAdminTab] = useState<'blogs' | 'quizzes' | 'videos' | 'mock_exams'>('blogs');
 
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
@@ -166,6 +167,18 @@ export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
           <Video className="w-4 h-4 text-[#C79B3A]" />
           <span>ვიდეოების მართვა</span>
         </button>
+
+        <button
+          onClick={() => setAdminTab('mock_exams')}
+          className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shrink-0 whitespace-nowrap ${
+            adminTab === 'mock_exams'
+              ? 'bg-[#0D1B2A] text-[#FAF8F3] shadow-md'
+              : 'text-[#666666] hover:bg-[#FAF8F3] hover:text-[#0D1B2A]'
+          }`}
+        >
+          <Clock className="w-4 h-4 text-[#C79B3A]" />
+          <span>იმიტირებული გამოცდის მართვა</span>
+        </button>
       </div>
 
       {/* TAB CONTENT */}
@@ -173,6 +186,8 @@ export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
         <AdminQuizManager />
       ) : adminTab === 'videos' ? (
         <AdminVideoManager />
+      ) : adminTab === 'mock_exams' ? (
+        <AdminMockExamManager />
       ) : (
 
         <div className="space-y-8">

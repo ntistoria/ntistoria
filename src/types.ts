@@ -218,3 +218,58 @@ export interface QuizResultFeedback {
   badge: string;
 }
 
+// =========================================================
+// Mock Exam Mode (იმიტირებული ეროვნული გამოცდა) Interfaces
+// =========================================================
+
+export interface MockExamQuestionItem {
+  id: string;
+  number: number;
+  prompt: string;
+  options?: string[];
+  maxScore?: number;
+  chapterId?: string;
+}
+
+export interface MockExamTaskSection {
+  taskNumber: number; // 36 (რუკა), 37 (ანალოგიები), 38 (წყარო)
+  title: string;
+  chapterId?: string;
+  parentItemNumber?: number;
+  mapImage?: string;
+  sourceContext?: string;
+  questions: MockExamQuestionItem[];
+}
+
+export interface MockExamPayload {
+  mcqQuestions: MockExamQuestionItem[]; // N1 - N35
+  mapTask: MockExamTaskSection | null; // N36
+  analogyTask: MockExamTaskSection | null; // N37
+  sourceTask: MockExamTaskSection | null; // N38
+}
+
+export interface MockExam {
+  id: string;
+  title: string;
+  selected_chapters: number[];
+  duration_minutes: number;
+  is_active: boolean;
+  start_time: string | null;
+  end_time: string | null;
+  questions_payload: MockExamPayload;
+  created_at: string;
+}
+
+export interface MockExamBannerInfo {
+  id: string;
+  title: string;
+  selected_chapters: number[];
+  duration_minutes: number;
+  is_active: boolean;
+  start_time: string | null;
+  end_time: string | null;
+  created_at: string;
+  server_now?: string;
+}
+
+

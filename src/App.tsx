@@ -674,6 +674,7 @@ export function App() {
                       onOpenTest={handleOpenTest}
                       user={user}
                       onOpenAuth={() => setIsAuthOpen(true)}
+                      onNavigateHome={() => handleTabChange('home')}
                     />
                   </ErrorBoundary>
                 )}

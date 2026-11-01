@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo, type FC } from 'react';
-import { HistoryTest, QuizQuestion } from '../types';
+import { HistoryTest, QuizQuestion, MockExam, MockExamBannerInfo } from '../types';
 
 import { 
   TEST_CATEGORIES, 
@@ -13,6 +13,11 @@ import {
   buildHistoryTest,
   AI_GRADED_TABLES
 } from '../lib/testService';
+import {
+  fetchActiveMockExamBanner,
+  fetchActiveMockExamForStudent
+} from '../lib/mockExamService';
+import { MockExamStudentView } from '../components/MockExamStudentView';
 import { checkOpenAnswerMatch } from '../lib/answerMatching';
 import { supabase } from '../lib/supabase';
 import { 
@@ -58,6 +63,7 @@ interface TestsViewProps {
   user?: { name: string; email: string } | null;
   onOpenAuth?: () => void;
   isLoggedIn?: boolean;
+  onNavigateHome?: () => void;
 }
 
 interface TaskGroup {
@@ -88,7 +94,7 @@ const checkChronologyItemsMatch = (
   return userItemsOrder.every((item, i) => item === expectedOrder[i]);
 };
 
-export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) => {
+export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth, onNavigateHome }) => {
   const isLoggedIn = !!(user && user.email);
   const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(null);
   const [programs, setPrograms] = useState<ProgramChapter[]>([]);
@@ -99,6 +105,65 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
   const [progressData, setProgressData] = useState<StudentProfileProgress | null>(null);
   const [loading, setLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+
+  // MOCK EXAM MODE STATE
+  const [mockBanner, setMockBanner] = useState<MockExamBannerInfo | null>(null);
+  const [activeMockExam, setActiveMockExam] = useState<MockExam | null>(null);
+  const [serverTimeOffsetMs, setServerTimeOffsetMs] = useState<number>(0);
+  const [openingMockExam, setOpeningMockExam] = useState<boolean>(false);
+  const [nowTick, setNowTick] = useState<number>(Date.now());
+
+  const refreshMockBanner = useCallback(async () => {
+    const info = await fetchActiveMockExamBanner();
+    setMockBanner(info);
+    if (info?.server_now) {
+      const serverMs = new Date(info.server_now).getTime();
+      if (!isNaN(serverMs)) {
+        setServerTimeOffsetMs(serverMs - Date.now());
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshMockBanner();
+  }, [refreshMockBanner, isLoggedIn]);
+
+  // 1-second ticker to auto-hide active banner as soon as end_time passes
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowTick(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const isMockExamActive = useMemo(() => {
+    if (!mockBanner || !mockBanner.is_active || !mockBanner.end_time) return false;
+    const endMs = new Date(mockBanner.end_time).getTime();
+    return endMs > nowTick + serverTimeOffsetMs;
+  }, [mockBanner, nowTick, serverTimeOffsetMs]);
+
+  const handleOpenMockExam = async () => {
+    if (!isMockExamActive) return;
+    if (!isLoggedIn) {
+      if (onOpenAuth) onOpenAuth();
+      return;
+    }
+
+    setOpeningMockExam(true);
+    try {
+      const fullExam = await fetchActiveMockExamForStudent();
+      if (fullExam && fullExam.is_active && fullExam.end_time && new Date(fullExam.end_time).getTime() > Date.now() + serverTimeOffsetMs) {
+        setActiveMockExam(fullExam);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        await refreshMockBanner();
+      }
+    } catch (err) {
+      console.error('Error opening mock exam:', err);
+    } finally {
+      setOpeningMockExam(false);
+    }
+  };
 
   // Category Questions & Task Groups for Maps/Analogies/Sources/Illustrations
   const [categoryQuestions, setCategoryQuestions] = useState<(QuizQuestion & { chapterId: string })[]>([]);
@@ -236,6 +301,9 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
             const allQ = await fetchQuestionsForCategory(currentCategoryKey);
             setCategoryQuestions(allQ);
           }
+
+          // Refresh Mock Exam Banner status in real-time
+          refreshMockBanner();
         }
       )
       .subscribe();
@@ -841,6 +909,29 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  if (activeMockExam) {
+    return (
+      <MockExamStudentView
+        exam={activeMockExam}
+        serverTimeOffsetMs={serverTimeOffsetMs}
+        onExit={() => {
+          setActiveMockExam(null);
+          refreshMockBanner();
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onTimeExpired={() => {
+          setActiveMockExam(null);
+          refreshMockBanner();
+          if (onNavigateHome) {
+            onNavigateHome();
+          } else {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <div className="max-w-[1200px] mx-auto space-y-12 pb-24 py-6 px-4 sm:px-6 animate-in fade-in duration-300">
       
@@ -1349,6 +1440,87 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth }) 
                     ეროვნულის ტესტები
                   </h2>
                 </div>
+
+                {/* იმიტირებული ტესტირება (Mock Exam Banner) */}
+                {isMockExamActive && mockBanner ? (
+                  <div
+                    onClick={handleOpenMockExam}
+                    className="relative bg-[#0D1B2A] text-white p-6 sm:p-8 rounded-3xl border-2 border-[#C79B3A] shadow-xl hover:shadow-2xl transition-all duration-300 cursor-pointer group overflow-hidden"
+                  >
+                    <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-10 bg-[radial-gradient(#C79B3A_1px,transparent_1px)] bg-[size:16px_16px] pointer-events-none" />
+
+                    <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                      <div className="flex items-start gap-5">
+                        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#C79B3A] text-[#0D1B2A] flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
+                          <Clock className="w-7 h-7 sm:w-8 sm:h-8" />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="px-3 py-0.5 bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider rounded-full inline-flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+                              <span>აქტიურია</span>
+                            </span>
+                            <span className="px-2.5 py-0.5 bg-white/10 text-[#C79B3A] text-[10px] font-bold uppercase tracking-wider rounded-full border border-[#C79B3A]/40">
+                              N1–N38 სრული ვარიანტი
+                            </span>
+                            <span className="px-2.5 py-0.5 bg-white/10 text-[#FAF8F3] text-[11px] font-medium rounded-full">
+                              დრო: {mockBanner.duration_minutes} წთ
+                            </span>
+                          </div>
+
+                          <h3 className="font-serif font-bold text-2xl sm:text-3xl text-[#FAF8F3] group-hover:text-[#C79B3A] transition-colors">
+                            იმიტირებული ტესტირება — {mockBanner.title}
+                          </h3>
+                          <p className="text-xs sm:text-sm text-[#FAF8F3]/80 max-w-2xl leading-relaxed">
+                            ეროვნული გამოცდის სრული იმიტაცია (35 არჩევითპასუხიანი კითხვა, რუკა N36, ანალოგიები N37, ისტორიული წყარო N38). არჩეული თავები: {mockBanner.selected_chapters.join(', ')}.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="w-full md:w-auto shrink-0">
+                        <button
+                          type="button"
+                          disabled={openingMockExam}
+                          className="w-full md:w-auto px-6 py-3.5 bg-[#C79B3A] group-hover:bg-[#E6C86B] text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          {!isLoggedIn ? (
+                            <>
+                              <LogIn className="w-4 h-4" />
+                              <span>შესვლა და დაწყება</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>{openingMockExam ? 'იხსნება...' : 'გამოცდაზე შესვლა'}</span>
+                              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-[#FAF8F3] p-6 sm:p-7 rounded-2xl border border-[#E6DDCB] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 opacity-80">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-white border border-[#E6DDCB] flex items-center justify-center text-[#8A8A8A] shrink-0">
+                        <Clock className="w-6 h-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-serif font-bold text-lg text-[#0D1B2A]">
+                            იმიტირებული ტესტირება
+                          </h3>
+                          <span className="px-2.5 py-0.5 bg-white border border-[#E6DDCB] text-[#8A8A8A] text-[10px] font-bold uppercase tracking-wider rounded-full">
+                            არააქტიური
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#666666]">
+                          ამჟამად იმიტირებული გამოცდა არ მიმდინარეობს
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {TEST_CATEGORIES.slice(0, 4).map((cat) => {
