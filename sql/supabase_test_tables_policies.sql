@@ -1,6 +1,6 @@
 -- ====================================================================
 -- Supabase policies for all test tables (multiple choice, maps, etc.)
--- Run this script in the Supabase SQL editor after you have created the tables.
+-- Public SELECT (except protected columns on analogy/source), Admin-only write
 -- ====================================================================
 
 DO $$
@@ -23,16 +23,30 @@ DECLARE
   ];
 BEGIN
   FOREACH tbl IN ARRAY tables LOOP
-    -- Enable RLS (required for policies)
-    EXECUTE format('ALTER TABLE IF EXISTS public.%I ENABLE ROW LEVEL SECURITY;', tbl);
-    -- Drop any old policy that might be restrictive
-    EXECUTE format('DROP POLICY IF EXISTS "Enable all access for %I" ON public.%I;', tbl, tbl);
-    -- Create a permissive policy that allows everything for all roles
-    EXECUTE format(
-      'CREATE POLICY "Enable all access for %I" ON public.%I FOR ALL USING (true) WITH CHECK (true);',
-      tbl, tbl
-    );
-    -- Grant full privileges to the three Supabase roles
-    EXECUTE format('GRANT ALL ON TABLE IF EXISTS public.%I TO anon, authenticated, service_role;', tbl);
+    IF EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = tbl
+    ) THEN
+      EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
+      EXECUTE format('DROP POLICY IF EXISTS "Enable all access for %I" ON public.%I;', tbl, tbl);
+      EXECUTE format('DROP POLICY IF EXISTS "Allow public all %I" ON public.%I;', tbl, tbl);
+      EXECUTE format('DROP POLICY IF EXISTS "Public read %I" ON public.%I;', tbl, tbl);
+      EXECUTE format('DROP POLICY IF EXISTS "Admin write %I" ON public.%I;', tbl, tbl);
+
+      EXECUTE format(
+        'CREATE POLICY "Public read %I" ON public.%I FOR SELECT TO anon, authenticated USING (true);',
+        tbl, tbl
+      );
+      EXECUTE format(
+        'CREATE POLICY "Admin write %I" ON public.%I FOR ALL TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());',
+        tbl, tbl
+      );
+
+      EXECUTE format('REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.%I FROM anon;', tbl);
+      EXECUTE format('GRANT INSERT, UPDATE, DELETE ON TABLE public.%I TO authenticated, service_role;', tbl);
+      IF tbl NOT IN ('analogy_questions', 'source_questions') THEN
+        EXECUTE format('GRANT SELECT ON TABLE public.%I TO anon, authenticated;', tbl);
+      END IF;
+    END IF;
   END LOOP;
 END $$;

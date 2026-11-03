@@ -1,7 +1,7 @@
 import { useState, useEffect, type FC } from 'react';
 import { Plus, Edit2, Trash2, Search, Filter, FileText, ShieldCheck, RefreshCw, AlertTriangle, Eye, HelpCircle, Video, Clock } from 'lucide-react';
 import { Article } from '../types';
-import { fetchAllArticles, saveArticle, deleteArticle } from '../lib/blogService';
+import { fetchAllArticles, saveArticle, deleteArticle, isAdminUser } from '../lib/blogService';
 import { BlogEditorModal } from '../components/BlogEditorModal';
 import { AdminQuizManager } from '../components/AdminQuizManager';
 import { AdminVideoManager } from '../components/AdminVideoManager';
@@ -39,9 +39,31 @@ export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
     }
   };
 
+  const isAdmin = isAdminUser(user);
+
   useEffect(() => {
-    loadData();
-  }, []);
+    if (isAdmin) {
+      loadData();
+    } else {
+      setLoading(false);
+    }
+  }, [isAdmin]);
+
+  if (!isAdmin) {
+    return (
+      <div className="max-w-[720px] mx-auto py-20 px-4 text-center space-y-5">
+        <div className="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto">
+          <AlertTriangle className="w-8 h-8" />
+        </div>
+        <h1 className="font-serif font-bold text-2xl sm:text-3xl text-[#0D1B2A]">
+          წვდომა შეზღუდულია
+        </h1>
+        <p className="text-sm text-[#666666] max-w-md mx-auto">
+          ადმინისტრატორის პანელზე წვდომა აქვს მხოლოდ ავტორიზებულ ადმინისტრატორს.
+        </p>
+      </div>
+    );
+  }
 
   const handleCreateNew = () => {
     setEditingArticle(null);

@@ -31,26 +31,16 @@ FOR SELECT
 TO public
 USING (true);
 
--- 5. Insert, Update, Delete Policies for Authenticated Users
-CREATE POLICY "Allow authenticated insert access to videos"
+-- 5. Insert, Update, Delete Policies for Admin Users Only
+DROP POLICY IF EXISTS "Admin write videos" ON public.videos;
+CREATE POLICY "Admin write videos"
 ON public.videos
-FOR INSERT
+FOR ALL
 TO authenticated
-WITH CHECK (true);
-
-CREATE POLICY "Allow authenticated update access to videos"
-ON public.videos
-FOR UPDATE
-TO authenticated
-USING (true)
-WITH CHECK (true);
-
-CREATE POLICY "Allow authenticated delete access to videos"
-ON public.videos
-FOR DELETE
-TO authenticated
-USING (true);
+USING (public.is_admin_user())
+WITH CHECK (public.is_admin_user());
 
 -- 6. Grant permissions
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.videos FROM anon;
 GRANT SELECT ON TABLE public.videos TO anon, authenticated;
 GRANT INSERT, UPDATE, DELETE ON TABLE public.videos TO authenticated, service_role;

@@ -1,31 +1,41 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { NavTab, Article, HistoryTest, VideoLesson, QuizItem } from './types';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { HomeView } from './views/HomeView';
-import { BlogView } from './views/BlogView';
-import { TestsView } from './views/TestsView';
-import { QuizzesView } from './views/QuizzesView';
-import { VideosView } from './views/VideosView';
-import { ContactView } from './views/ContactView';
-import { AdminView } from './views/AdminView';
-import { ArticleDetailView } from './views/ArticleDetailView';
-import { NotFoundView } from './views/NotFoundView';
-import { UniversitiesView } from './views/UniversitiesView';
-import { CollegesView } from './views/CollegesView';
-import { InstitutionProfileView } from './views/InstitutionProfileView';
-import { ProgramsView } from './views/ProgramsView';
-import { TestRunnerModal } from './components/TestRunnerModal';
-import { VideoPlayerModal } from './components/VideoPlayerModal';
-import { SearchModal } from './components/SearchModal';
-import { AuthModal } from './components/AuthModal';
-import { StudentProfileModal } from './components/StudentProfileModal';
-import { ProfileView } from './views/ProfileView';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { supabase } from './lib/supabase';
 import { isAdminUser, fetchAllArticles, getInitialArticles, generateSlug } from './lib/blogService';
 import { fetchUserProfile, syncUserProfile } from './lib/userService';
 import { getQuizImageUrl } from './lib/quizService';
+
+// Lazy-loaded Route Views (Code Splitting)
+const BlogView = lazy(() => import('./views/BlogView').then(m => ({ default: m.BlogView })));
+const TestsView = lazy(() => import('./views/TestsView').then(m => ({ default: m.TestsView })));
+const QuizzesView = lazy(() => import('./views/QuizzesView').then(m => ({ default: m.QuizzesView })));
+const VideosView = lazy(() => import('./views/VideosView').then(m => ({ default: m.VideosView })));
+const ContactView = lazy(() => import('./views/ContactView').then(m => ({ default: m.ContactView })));
+const AdminView = lazy(() => import('./views/AdminView').then(m => ({ default: m.AdminView })));
+const ArticleDetailView = lazy(() => import('./views/ArticleDetailView').then(m => ({ default: m.ArticleDetailView })));
+const NotFoundView = lazy(() => import('./views/NotFoundView').then(m => ({ default: m.NotFoundView })));
+const UniversitiesView = lazy(() => import('./views/UniversitiesView').then(m => ({ default: m.UniversitiesView })));
+const CollegesView = lazy(() => import('./views/CollegesView').then(m => ({ default: m.CollegesView })));
+const InstitutionProfileView = lazy(() => import('./views/InstitutionProfileView').then(m => ({ default: m.InstitutionProfileView })));
+const ProgramsView = lazy(() => import('./views/ProgramsView').then(m => ({ default: m.ProgramsView })));
+const ProfileView = lazy(() => import('./views/ProfileView').then(m => ({ default: m.ProfileView })));
+
+// Lazy-loaded Modals
+const TestRunnerModal = lazy(() => import('./components/TestRunnerModal').then(m => ({ default: m.TestRunnerModal })));
+const VideoPlayerModal = lazy(() => import('./components/VideoPlayerModal').then(m => ({ default: m.VideoPlayerModal })));
+const SearchModal = lazy(() => import('./components/SearchModal').then(m => ({ default: m.SearchModal })));
+const AuthModal = lazy(() => import('./components/AuthModal').then(m => ({ default: m.AuthModal })));
+
+const PageSuspenseFallback = () => (
+  <div className="min-h-[55vh] flex flex-col items-center justify-center py-16 px-4 text-center space-y-3">
+    <div className="w-8 h-8 border-2 border-[#C79B3A] border-t-transparent rounded-full animate-spin" />
+    <span className="text-xs font-semibold text-[#666666] tracking-wider uppercase">იტვირთება...</span>
+  </div>
+);
 
 // Dynamic SEO Meta Manager Helper for SPA
 function updateSeoMetaData(options: {
@@ -98,6 +108,7 @@ export function App() {
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [selectedInstitutionCode, setSelectedInstitutionCode] = useState<string | null>(null);
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
   const [selectedQuiz, setSelectedQuiz] = useState<QuizItem | null>(null);
@@ -517,17 +528,28 @@ export function App() {
     };
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      handleSession(session);
+      handleSession(session).finally(() => setIsAuthReady(true));
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      handleSession(session);
+      handleSession(session).finally(() => setIsAuthReady(true));
     });
 
     return () => {
       subscription.unsubscribe();
     };
   }, []);
+
+  // Client-side route protection for /admin:
+  // Once auth session check finishes, redirect non-admin users away from /admin immediately
+  useEffect(() => {
+    if (isAuthReady && activeTab === 'admin' && !isAdminUser(user)) {
+      setActiveTab('home');
+      if (window.location.pathname === '/admin') {
+        window.history.replaceState({}, document.title, '/');
+      }
+    }
+  }, [isAuthReady, activeTab, user]);
 
   const handleLogout = async () => {
     try {
@@ -567,6 +589,9 @@ export function App() {
   };
 
   const handleTabChange = (tab: NavTab) => {
+    if (tab === 'admin' && !isAdminUser(user)) {
+      return;
+    }
     setSelectedArticle(null);
     setSelectedInstitutionCode(null);
     setSelectedQuizId(null);
@@ -610,154 +635,170 @@ export function App() {
 
       {/* Main Dynamic View Area */}
       <main className="flex-1 pt-20">
-        {selectedArticle ? (
-          <ArticleDetailView 
-            article={selectedArticle}
-            onBack={handleCloseArticle}
-            onSelectRelated={(art) => handleOpenArticle(art)}
-            allArticles={allArticles}
-          />
-        ) : selectedInstitutionCode ? (
-          <InstitutionProfileView
-            code={selectedInstitutionCode}
-            onNavigateHome={() => handleTabChange('home')}
-            onNavigateBack={() => {
-              const backTab = activeTab === 'colleges' ? 'colleges' : 'universities';
-              setSelectedInstitutionCode(null);
-              handleTabChange(backTab);
-            }}
-          />
-        ) : (
-          <>
-            {isNotFound ? (
-              <NotFoundView setActiveTab={handleTabChange} />
-            ) : (
-              <>
-                {activeTab === 'home' && (
-                  <HomeView 
-                    onOpenArticle={handleOpenArticle} 
-                    onOpenTest={handleOpenTest}
-                    setActiveTab={handleTabChange}
-                  />
-                )}
-
-                {activeTab === 'universities' && (
-                  <UniversitiesView
-                    onNavigateHome={() => handleTabChange('home')}
-                    onSelectUniversity={(code) => handleSelectInstitution(code, 'უნივერსიტეტი')}
-                  />
-                )}
-
-                {activeTab === 'colleges' && (
-                  <CollegesView
-                    onNavigateHome={() => handleTabChange('home')}
-                    onSelectCollege={(code) => handleSelectInstitution(code, 'კოლეჯი')}
-                  />
-                )}
-
-                {activeTab === 'programs' && (
-                  <ProgramsView
-                    onNavigateHome={() => handleTabChange('home')}
-                    onSelectInstitution={(code, type) => handleSelectInstitution(code, type)}
-                  />
-                )}
-
-                {activeTab === 'blog' && (
-                  <BlogView
-                    onOpenArticle={handleOpenArticle}
-                  />
-                )}
-
-                {activeTab === 'tests' && (
-                  <ErrorBoundary section="ტესტების გვერდი">
-                    <TestsView
+        <Suspense fallback={<PageSuspenseFallback />}>
+          {selectedArticle ? (
+            <ArticleDetailView 
+              article={selectedArticle}
+              onBack={handleCloseArticle}
+              onSelectRelated={(art) => handleOpenArticle(art)}
+              allArticles={allArticles}
+            />
+          ) : selectedInstitutionCode ? (
+            <InstitutionProfileView
+              code={selectedInstitutionCode}
+              onNavigateHome={() => handleTabChange('home')}
+              onNavigateBack={() => {
+                const backTab = activeTab === 'colleges' ? 'colleges' : 'universities';
+                setSelectedInstitutionCode(null);
+                handleTabChange(backTab);
+              }}
+            />
+          ) : (
+            <>
+              {isNotFound ? (
+                <NotFoundView setActiveTab={handleTabChange} />
+              ) : (
+                <>
+                  {activeTab === 'home' && (
+                    <HomeView 
+                      onOpenArticle={handleOpenArticle} 
                       onOpenTest={handleOpenTest}
-                      user={user}
-                      onOpenAuth={() => setIsAuthOpen(true)}
+                      setActiveTab={handleTabChange}
+                    />
+                  )}
+
+                  {activeTab === 'universities' && (
+                    <UniversitiesView
                       onNavigateHome={() => handleTabChange('home')}
+                      onSelectUniversity={(code) => handleSelectInstitution(code, 'უნივერსიტეტი')}
                     />
-                  </ErrorBoundary>
-                )}
+                  )}
 
-                {activeTab === 'quizzes' && (
-                  <ErrorBoundary section="ქვიზების გვერდი">
-                    <QuizzesView
+                  {activeTab === 'colleges' && (
+                    <CollegesView
+                      onNavigateHome={() => handleTabChange('home')}
+                      onSelectCollege={(code) => handleSelectInstitution(code, 'კოლეჯი')}
+                    />
+                  )}
+
+                  {activeTab === 'programs' && (
+                    <ProgramsView
+                      onNavigateHome={() => handleTabChange('home')}
+                      onSelectInstitution={(code, type) => handleSelectInstitution(code, type)}
+                    />
+                  )}
+
+                  {activeTab === 'blog' && (
+                    <BlogView
+                      onOpenArticle={handleOpenArticle}
+                    />
+                  )}
+
+                  {activeTab === 'tests' && (
+                    <ErrorBoundary section="ტესტების გვერდი">
+                      <TestsView
+                        onOpenTest={handleOpenTest}
+                        user={user}
+                        onOpenAuth={() => setIsAuthOpen(true)}
+                        onNavigateHome={() => handleTabChange('home')}
+                      />
+                    </ErrorBoundary>
+                  )}
+
+                  {activeTab === 'quizzes' && (
+                    <ErrorBoundary section="ქვიზების გვერდი">
+                      <QuizzesView
+                        user={user}
+                        onOpenAuth={() => setIsAuthOpen(true)}
+                        initialQuizId={selectedQuizId}
+                        onActiveQuizChange={(quiz) => setSelectedQuiz(quiz)}
+                      />
+                    </ErrorBoundary>
+                  )}
+
+                  {activeTab === 'videos' && (
+                    <VideosView />
+                  )}
+
+                  {activeTab === 'contact' && (
+                    <ContactView />
+                  )}
+
+                  {activeTab === 'admin' && (
+                    !isAuthReady ? (
+                      <PageSuspenseFallback />
+                    ) : isAdminUser(user) ? (
+                      <AdminView
+                        user={user}
+                        onOpenArticle={handleOpenArticle}
+                      />
+                    ) : null
+                  )}
+
+                  {activeTab === 'profile' && (
+                    <ProfileView
                       user={user}
+                      onOpenQuiz={(quizId) => {
+                        setSelectedQuizId(quizId);
+                        handleTabChange('quizzes');
+                      }}
+                      onOpenTest={(categoryKey, chapterId) => {
+                        handleTabChange('tests');
+                      }}
                       onOpenAuth={() => setIsAuthOpen(true)}
-                      initialQuizId={selectedQuizId}
-                      onActiveQuizChange={(quiz) => setSelectedQuiz(quiz)}
                     />
-                  </ErrorBoundary>
-                )}
-
-                {activeTab === 'videos' && (
-                  <VideosView />
-                )}
-
-                {activeTab === 'contact' && (
-                  <ContactView />
-                )}
-
-                {activeTab === 'admin' && (
-                  <AdminView
-                    user={user}
-                    onOpenArticle={handleOpenArticle}
-                  />
-                )}
-
-                {activeTab === 'profile' && (
-                  <ProfileView
-                    user={user}
-                    onOpenQuiz={(quizId) => {
-                      setSelectedQuizId(quizId);
-                      handleTabChange('quizzes');
-                    }}
-                    onOpenTest={(categoryKey, chapterId) => {
-                      handleTabChange('tests');
-                    }}
-                    onOpenAuth={() => setIsAuthOpen(true)}
-                  />
-                )}
-              </>
-            )}
-          </>
-        )}
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </Suspense>
       </main>
 
       {/* Footer */}
       <Footer setActiveTab={handleTabChange} />
 
-      {/* Interactive Modals */}
-      <TestRunnerModal
-        test={selectedTest}
-        onClose={() => setSelectedTest(null)}
-        userEmail={user?.email}
-      />
+      {/* Interactive Modals (Lazy-loaded on demand) */}
+      <Suspense fallback={null}>
+        {selectedTest && (
+          <TestRunnerModal
+            test={selectedTest}
+            onClose={() => setSelectedTest(null)}
+            userEmail={user?.email}
+          />
+        )}
 
-      <VideoPlayerModal
-        video={selectedVideo}
-        onClose={() => setSelectedVideo(null)}
-      />
+        {selectedVideo && (
+          <VideoPlayerModal
+            video={selectedVideo}
+            onClose={() => setSelectedVideo(null)}
+          />
+        )}
 
-      <SearchModal
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        onOpenArticle={handleOpenArticle}
-        onOpenTest={handleOpenTest}
-        onOpenVideo={handleOpenVideo}
-      />
+        {isSearchOpen && (
+          <SearchModal
+            isOpen={isSearchOpen}
+            onClose={() => setIsSearchOpen(false)}
+            onOpenArticle={handleOpenArticle}
+            onOpenTest={handleOpenTest}
+            onOpenVideo={handleOpenVideo}
+          />
+        )}
 
-      <AuthModal
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-        onSuccessLogin={(userData) => {
-          setUser(userData);
-          if (isAdminUser(userData)) {
-            handleTabChange('admin');
-          }
-          setIsAuthOpen(false);
-        }}
-      />
+        {isAuthOpen && (
+          <AuthModal
+            isOpen={isAuthOpen}
+            onClose={() => setIsAuthOpen(false)}
+            onSuccessLogin={(userData) => {
+              setUser(userData);
+              if (isAdminUser(userData)) {
+                handleTabChange('admin');
+              }
+              setIsAuthOpen(false);
+            }}
+          />
+        )}
+      </Suspense>
 
       {/* Interactive Modals */}
     </div>

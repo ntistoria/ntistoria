@@ -11,7 +11,9 @@ import {
   CategoryItemDetails,
   getCategoryUnitInfo,
   buildHistoryTest,
-  AI_GRADED_TABLES
+  AI_GRADED_TABLES,
+  sanitizeTestForSessionStorage,
+  hydrateTestQuestionsFromVault
 } from '../lib/testService';
 import {
   fetchActiveMockExamBanner,
@@ -267,42 +269,15 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth, on
 
 
 
-  // Real-time Database Subscription: Automatically sync new questions/updates in real time!
-  // P6 FIX: Channel is created ONCE on mount (no dependency on selectedCategoryKey).
-  // The selectedCategoryKeyRef is used inside the callback to always have the latest value.
+  // Real-time Database Subscription: Listen ONLY to `mock_exams` table changes
+  // (Prevents full-database re-fetches whenever other users update `user_progress` or `quiz_attempts`)
   useEffect(() => {
     const channel = supabase
-      .channel('tests-view-db-changes')
+      .channel('tests-view-mock-exams')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public' },
-        async () => {
-          // Re-fetch counts and details
-          const catEntries = await Promise.all(
-            TEST_CATEGORIES.map(async (cat) => {
-              const count = await fetchCategoryQuestionsCount(cat.key);
-              const details = await fetchCategoryItemDetails(cat.key);
-              return { key: cat.key, count, details };
-            })
-          );
-
-          const totalCounts: Record<string, number> = {};
-          const detailsMap: Record<string, CategoryItemDetails> = {};
-          catEntries.forEach(item => {
-            totalCounts[item.key] = item.count;
-            detailsMap[item.key] = item.details;
-          });
-          setCategoryTotalCounts(totalCounts);
-          setCategoryItemDetailsMap(detailsMap);
-
-          // Use ref to get current category key — no channel recreation needed
-          const currentCategoryKey = selectedCategoryKeyRef.current;
-          if (currentCategoryKey) {
-            const allQ = await fetchQuestionsForCategory(currentCategoryKey);
-            setCategoryQuestions(allQ);
-          }
-
-          // Refresh Mock Exam Banner status in real-time
+        { event: '*', schema: 'public', table: 'mock_exams' },
+        () => {
           refreshMockBanner();
         }
       )
@@ -311,9 +286,7 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth, on
     return () => {
       supabase.removeChannel(channel);
     };
-  // Empty dep array: channel is created once and lives for the component lifetime
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [refreshMockBanner]);
 
   // Fetch questions when category changes & calculate chapter counts + Task Groups
   useEffect(() => {
@@ -466,7 +439,7 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth, on
       openTextAnswers: {},
       openTextChecked: {}
     };
-    // Fullscreen removed per user request
+    saveSession(sessionPatch);
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -629,7 +602,11 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth, on
   const saveSession = useCallback((patch: Record<string, unknown>) => {
     try {
       const existing = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}');
-      localStorage.setItem(SESSION_KEY, JSON.stringify({ ...existing, ...patch }));
+      const nextPatch = { ...patch };
+      if (nextPatch.activeInlineTest) {
+        nextPatch.activeInlineTest = sanitizeTestForSessionStorage(nextPatch.activeInlineTest as HistoryTest);
+      }
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ ...existing, ...nextPatch }));
     } catch {}
   }, [SESSION_KEY]);
 
@@ -637,8 +614,9 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth, on
     try { localStorage.removeItem(SESSION_KEY); } catch {}
   }, [SESSION_KEY]);
 
-  // Restore session on mount (once)
+  // Restore session on mount (once) and re-hydrate answer keys in memory
   useEffect(() => {
+    let isMounted = true;
     try {
       const raw = localStorage.getItem(SESSION_KEY);
       if (!raw) return;
@@ -646,7 +624,6 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth, on
       if (s.activeInlineTest && s.selectedCategoryKey) {
         setSelectedCategoryKey(s.selectedCategoryKey);
         setSelectedChapterId(s.selectedChapterId || 'all');
-        setActiveInlineTest(s.activeInlineTest);
         setCurrentQIndex(s.currentQIndex ?? 0);
         setSelectedAnswers(s.selectedAnswers ?? []);
         setIsTestFinished(s.isTestFinished ?? false);
@@ -654,8 +631,17 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth, on
         setChronologyChecked(s.chronologyChecked ?? {});
         setOpenTextAnswers(s.openTextAnswers ?? {});
         setOpenTextChecked(s.openTextChecked ?? {});
+
+        hydrateTestQuestionsFromVault(s.activeInlineTest, s.selectedCategoryKey).then((hydrated) => {
+          if (isMounted) {
+            setActiveInlineTest(hydrated);
+          }
+        });
       }
     } catch {}
+    return () => {
+      isMounted = false;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -179,4 +179,129 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_admin_open_answers(TEXT[], TEXT[]) TO authenticated, service_role;
 
+-- 8. Student Mock Exam Fetch RPC (strips correctAnswerIndex/correctAnswerText/explanation so answers are never visible in Network tab)
+CREATE OR REPLACE FUNCTION public.get_active_mock_exam_student()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_exam RECORD;
+  v_payload JSONB;
+  v_mcq JSONB := '[]'::jsonb;
+  v_map JSONB := 'null'::jsonb;
+  v_analogies JSONB := 'null'::jsonb;
+  v_source JSONB := 'null'::jsonb;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT *
+  INTO v_exam
+  FROM public.mock_exams
+  WHERE is_active = true
+    AND end_time IS NOT NULL
+    AND now() <= end_time
+  ORDER BY created_at DESC
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  v_payload := COALESCE(v_exam.questions_payload, '{}'::jsonb);
+
+  IF jsonb_typeof(v_payload -> 'mcqQuestions') = 'array' THEN
+    SELECT COALESCE(
+      jsonb_agg(
+        elem - 'correctAnswerIndex' - 'correctAnswerLetter' - 'correctAnswerText' - 'correctSequence' - 'explanation'
+      ),
+      '[]'::jsonb
+    )
+    INTO v_mcq
+    FROM jsonb_array_elements(v_payload -> 'mcqQuestions') AS elem;
+  END IF;
+
+  IF jsonb_typeof(v_payload -> 'mapTask') = 'object' AND jsonb_typeof(v_payload #> '{mapTask,questions}') = 'array' THEN
+    SELECT jsonb_set(
+      v_payload -> 'mapTask',
+      '{questions}',
+      COALESCE(
+        (
+          SELECT jsonb_agg(
+            elem - 'correctAnswerIndex' - 'correctAnswerLetter' - 'correctAnswerText' - 'correctSequence' - 'explanation'
+          )
+          FROM jsonb_array_elements(v_payload #> '{mapTask,questions}') AS elem
+        ),
+        '[]'::jsonb
+      )
+    )
+    INTO v_map;
+  ELSE
+    v_map := COALESCE(v_payload -> 'mapTask', 'null'::jsonb);
+  END IF;
+
+  IF jsonb_typeof(v_payload -> 'analogyTask') = 'object' AND jsonb_typeof(v_payload #> '{analogyTask,questions}') = 'array' THEN
+    SELECT jsonb_set(
+      v_payload -> 'analogyTask',
+      '{questions}',
+      COALESCE(
+        (
+          SELECT jsonb_agg(
+            elem - 'correctAnswerIndex' - 'correctAnswerLetter' - 'correctAnswerText' - 'correctSequence' - 'explanation'
+          )
+          FROM jsonb_array_elements(v_payload #> '{analogyTask,questions}') AS elem
+        ),
+        '[]'::jsonb
+      )
+    )
+    INTO v_analogies;
+  ELSE
+    v_analogies := COALESCE(v_payload -> 'analogyTask', 'null'::jsonb);
+  END IF;
+
+  IF jsonb_typeof(v_payload -> 'sourceTask') = 'object' AND jsonb_typeof(v_payload #> '{sourceTask,questions}') = 'array' THEN
+    SELECT jsonb_set(
+      v_payload -> 'sourceTask',
+      '{questions}',
+      COALESCE(
+        (
+          SELECT jsonb_agg(
+            elem - 'correctAnswerIndex' - 'correctAnswerLetter' - 'correctAnswerText' - 'correctSequence' - 'explanation'
+          )
+          FROM jsonb_array_elements(v_payload #> '{sourceTask,questions}') AS elem
+        ),
+        '[]'::jsonb
+      )
+    )
+    INTO v_source;
+  ELSE
+    v_source := COALESCE(v_payload -> 'sourceTask', 'null'::jsonb);
+  END IF;
+
+  RETURN jsonb_build_object(
+    'id', v_exam.id,
+    'title', v_exam.title,
+    'selected_chapters', v_exam.selected_chapters,
+    'duration_minutes', v_exam.duration_minutes,
+    'is_active', v_exam.is_active,
+    'start_time', v_exam.start_time,
+    'end_time', v_exam.end_time,
+    'created_at', v_exam.created_at,
+    'server_now', now(),
+    'questions_payload', jsonb_build_object(
+      'mcqQuestions', v_mcq,
+      'mapTask', v_map,
+      'analogyTask', v_analogies,
+      'sourceTask', v_source
+    )
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_active_mock_exam_student() TO authenticated, service_role;
+
+
 

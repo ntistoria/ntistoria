@@ -164,12 +164,117 @@ export const DEFAULT_PROGRAMS: ProgramChapter[] = [
   }
 ];
 
+// ============================================================================
+// IN-MEMORY CACHES & PRIVATE ANSWER KEY VAULT
+// Prevents repeated full-table (`SELECT *`) downloads and keeps answer keys
+// out of browser storage (`localStorage` / `sessionStorage`).
+// ============================================================================
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+interface CacheEntry<T> {
+  data: T;
+  fetchedAt: number;
+}
+
+let programsCache: CacheEntry<ProgramChapter[]> | null = null;
+const categoryCountCache = new Map<string, CacheEntry<number>>();
+const categoryDetailsCache = new Map<string, CacheEntry<CategoryItemDetails>>();
+const categoryQuestionsCache = new Map<string, CacheEntry<(QuizQuestion & { chapterId: string })[]>>();
+const inFlightCategoryPromises = new Map<string, Promise<(QuizQuestion & { chapterId: string })[]>>();
+
+export interface QuestionAnswerSecret {
+  correctAnswerIndex: number;
+  correctSequence: number[];
+  correctAnswerText: string;
+  explanation: string;
+}
+
+const answerKeyVault = new Map<string, QuestionAnswerSecret>();
+
+export function getQuestionAnswerSecret(
+  questionId: string,
+  fallbackQuestion?: Partial<QuizQuestion>
+): QuestionAnswerSecret {
+  const secret = answerKeyVault.get(questionId);
+  if (secret) return secret;
+  return {
+    correctAnswerIndex:
+      typeof fallbackQuestion?.correctAnswerIndex === 'number' && fallbackQuestion.correctAnswerIndex >= 0
+        ? fallbackQuestion.correctAnswerIndex
+        : 0,
+    correctSequence: fallbackQuestion?.correctSequence || [0, 1, 2],
+    correctAnswerText: fallbackQuestion?.correctAnswerText || '',
+    explanation: fallbackQuestion?.explanation || ''
+  };
+}
+
+/**
+ * Strip answer keys before saving an active test into localStorage / sessionStorage
+ * so students cannot inspect browser storage to see answers for upcoming questions.
+ */
+export function sanitizeTestForSessionStorage(test: HistoryTest | null): HistoryTest | null {
+  if (!test) return null;
+  return {
+    ...test,
+    questions: (test.questions || []).map((q) => {
+      // Ensure secret is backed up in memory vault before stripping
+      if (typeof q.correctAnswerIndex === 'number' && q.correctAnswerIndex >= 0) {
+        answerKeyVault.set(q.id, {
+          correctAnswerIndex: q.correctAnswerIndex,
+          correctSequence: q.correctSequence || [0, 1, 2],
+          correctAnswerText: q.correctAnswerText || '',
+          explanation: q.explanation || ''
+        });
+      }
+      return {
+        ...q,
+        correctAnswerIndex: -1,
+        correctSequence: undefined,
+        correctAnswerText: undefined,
+        explanation: ''
+      };
+    })
+  };
+}
+
+/**
+ * Re-hydrate a restored session test from the in-memory vault (or reload category if cold start)
+ */
+export async function hydrateTestQuestionsFromVault(
+  test: HistoryTest,
+  categoryKey?: string | null
+): Promise<HistoryTest> {
+  if (!test || !test.questions || test.questions.length === 0) return test;
+
+  const missingInVault = test.questions.some((q) => !answerKeyVault.has(q.id) && q.correctAnswerIndex === -1);
+  if (missingInVault && categoryKey) {
+    await fetchQuestionsForCategory(categoryKey);
+  }
+
+  return {
+    ...test,
+    questions: test.questions.map((q) => {
+      const secret = answerKeyVault.get(q.id);
+      if (!secret) return q;
+      return {
+        ...q,
+        correctAnswerIndex: secret.correctAnswerIndex,
+        correctSequence: secret.correctSequence,
+        correctAnswerText: secret.correctAnswerText,
+        explanation: secret.explanation
+      };
+    })
+  };
+}
+
 /**
  * Fetch Program Chapters from Supabase tables (exam_programs & sub_programs)
  */
 export const fetchProgramsAndSubprograms = async (): Promise<ProgramChapter[]> => {
-  // P4 FIX: Reduced from 3+4 trial table names to 2+2, cutting cold-start requests.
-  // The primary name is tried first; only on failure is the fallback attempted.
+  if (programsCache && Date.now() - programsCache.fetchedAt < CACHE_TTL_MS) {
+    return programsCache.data;
+  }
+
   const possibleProgramTables = ['exam_programs', 'programs'];
   const possibleSubprogramTables = ['sub_programs', 'subprograms'];
 
@@ -194,7 +299,7 @@ export const fetchProgramsAndSubprograms = async (): Promise<ProgramChapter[]> =
           }
         }
 
-        return progData.map((p: any) => {
+        const mapped = progData.map((p: any) => {
           const num = Number(p.program_number || p.chapter_number || p.order || 1);
           const pId = `ch-${num}`;
           return {
@@ -210,6 +315,8 @@ export const fetchProgramsAndSubprograms = async (): Promise<ProgramChapter[]> =
               }))
           };
         });
+        programsCache = { data: mapped, fetchedAt: Date.now() };
+        return mapped;
       }
     } catch (e) {}
   }
@@ -277,30 +384,48 @@ const PARENT_TABLE_CONFIG: Record<string, {
  * Fetch total item count and unit label for a category (maps -> "რუკა", sources -> "წყარო", analogies -> "ანალოგია", illustrations -> "ილუსტრაცია", mcq/chronology -> "კითხვა")
  */
 export const fetchCategoryItemDetails = async (categoryKey: string): Promise<CategoryItemDetails> => {
+  const cached = categoryDetailsCache.get(categoryKey);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
   const { qPerItem, unitLabel } = getCategoryUnitInfo(categoryKey);
   const parentConfig = PARENT_TABLE_CONFIG[categoryKey];
 
   if (parentConfig) {
-    // 1. Try fetching count directly from the parent table
+    // 1. Try fetching count directly from the parent table (HEAD request, 0 row payload)
     for (const tableName of parentConfig.tables) {
       try {
-        const { count, error } = await supabase.from(tableName).select('*', { count: 'exact', head: true });
+        const { count, error } = await supabase.from(tableName).select('id', { count: 'exact', head: true });
         if (!error && typeof count === 'number' && count > 0) {
-          return { count, unitLabel };
+          const res = { count, unitLabel };
+          categoryDetailsCache.set(categoryKey, { data: res, fetchedAt: Date.now() });
+          return res;
         }
       } catch (e) {}
     }
 
-    // 2. Fallback: derive count from questions by grouping
+    // 2. Fallback: derive count from total question count divided by qPerItem without downloading all rows
+    const totalQ = await fetchCategoryQuestionsCount(categoryKey);
+    if (totalQ > 0) {
+      const res = { count: Math.max(1, Math.round(totalQ / qPerItem)), unitLabel };
+      categoryDetailsCache.set(categoryKey, { data: res, fetchedAt: Date.now() });
+      return res;
+    }
+
     const questions = await fetchQuestionsForCategory(categoryKey);
     const groupKeys = new Set(questions.map(parentConfig.getGroupKey));
     const c = groupKeys.size > 0 ? groupKeys.size : Math.round(questions.length / qPerItem);
-    return { count: c, unitLabel };
+    const res = { count: c, unitLabel };
+    categoryDetailsCache.set(categoryKey, { data: res, fetchedAt: Date.now() });
+    return res;
   }
 
   // MCQ / Chronology: just count questions directly
   const count = await fetchCategoryQuestionsCount(categoryKey);
-  return { count, unitLabel };
+  const res = { count, unitLabel };
+  categoryDetailsCache.set(categoryKey, { data: res, fetchedAt: Date.now() });
+  return res;
 };
 
 
@@ -308,6 +433,11 @@ export const fetchCategoryItemDetails = async (categoryKey: string): Promise<Cat
  * Fetch Total Question Count for a Category directly from Supabase DB (public schema)
  */
 export const fetchCategoryQuestionsCount = async (categoryKey: string): Promise<number> => {
+  const cached = categoryCountCache.get(categoryKey);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
   const catMeta = TEST_CATEGORIES.find(c => c.key === categoryKey);
   if (!catMeta) return 0;
 
@@ -318,6 +448,7 @@ export const fetchCategoryQuestionsCount = async (categoryKey: string): Promise<
         .select('id', { count: 'exact', head: true });
 
       if (!error && typeof count === 'number' && count >= 0) {
+        categoryCountCache.set(categoryKey, { data: count, fetchedAt: Date.now() });
         return count;
       }
     } catch (err) {}
@@ -326,9 +457,6 @@ export const fetchCategoryQuestionsCount = async (categoryKey: string): Promise<
   return 0;
 };
 
-/**
- * Helper to fetch all rows from a Supabase table using range pagination (bypasses default 1000 limit)
- */
 /**
  * Tables whose `answer` column is hidden from the public (anon/authenticated) role.
  * Their open questions are graded server-side by /api/grade-answer, so the browser
@@ -341,7 +469,10 @@ const PUBLIC_COLUMNS: Record<string, string> = {
   source_questions: 'id, source_number, question_number, question, score'
 };
 
-export const fetchAllRowsFromTable = async (tableName: string): Promise<any[]> => {
+export const fetchAllRowsFromTable = async (
+  tableName: string,
+  chapterNumber?: number
+): Promise<any[]> => {
   let allRows: any[] = [];
   let from = 0;
   const pageSize = 1000;
@@ -349,10 +480,16 @@ export const fetchAllRowsFromTable = async (tableName: string): Promise<any[]> =
 
   while (hasMore) {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from(tableName)
-        .select(PUBLIC_COLUMNS[tableName] || '*')
-        .range(from, from + pageSize - 1);
+        .select(PUBLIC_COLUMNS[tableName] || '*');
+
+      // Server-side chapter filter when chapterNumber is requested on direct chapter tables
+      if (chapterNumber && chapterNumber > 0 && tableName === 'multiple_choice_questions') {
+        query = query.eq('program_number', chapterNumber);
+      }
+
+      const { data, error } = await query.range(from, from + pageSize - 1);
 
       if (error || !data || data.length === 0) {
         hasMore = false;
@@ -373,261 +510,312 @@ export const fetchAllRowsFromTable = async (tableName: string): Promise<any[]> =
 };
 
 /**
- * Fetch Real Test Questions for a category directly from Supabase tables
+ * Fetch Real Test Questions for a category from Supabase with in-memory TTL cache
+ * and in-flight request deduplication (prevents duplicate full-table downloads).
  */
-export const fetchQuestionsForCategory = async (categoryKey: string): Promise<(QuizQuestion & { chapterId: string })[]> => {
-  const catMeta = TEST_CATEGORIES.find(c => c.key === categoryKey);
-  const tablesToQuery = catMeta?.tableNames || [categoryKey];
-
-  for (const tableName of tablesToQuery) {
-    try {
-      let rawQuestions: any[] = await fetchAllRowsFromTable(tableName);
-
-      if (rawQuestions.length > 0) {
-        // Fetch parent lookup tables if not embedded
-        let mapsMap: Record<number, { map_url: string; program_number: number; sub_program_number: number }> = {};
-        let analogyMap: Record<number, { analogy: string; program_number: number; sub_program_number: number }> = {};
-        let sourceMap: Record<number, { source: string; program_number: number; sub_program_number: number }> = {};
-        let illustrationMap: Record<number, { illustration_url: string; program_number: number; sub_program_number: number }> = {};
-
-        // P3 FIX: Fetch ALL parent lookup tables in parallel instead of sequentially.
-        // Each fetch is independent — no reason to await one before starting the next.
-        const [mapsResult, analogyResult, sourceResult, illustrationResult] = await Promise.all([
-          (categoryKey === 'map' && !rawQuestions[0].maps)
-            ? supabase.from('maps').select('*')
-            : Promise.resolve({ data: null }),
-          (categoryKey === 'analogies' && !rawQuestions[0].analogy)
-            ? supabase.from('analogy').select('*')
-            : Promise.resolve({ data: null }),
-          (categoryKey === 'source' && !rawQuestions[0].source)
-            ? supabase.from('source').select('*')
-            : Promise.resolve({ data: null }),
-          (categoryKey === 'illustrations' && !rawQuestions[0].illustrations)
-            ? supabase.from('illustrations').select('*')
-            : Promise.resolve({ data: null }),
-        ]);
-
-        if (mapsResult.data) {
-          mapsResult.data.forEach((m: any) => {
-            mapsMap[m.map_number || m.id] = {
-              map_url: m.map_url || m.image_url || m.url,
-              program_number: Number(m.program_number || 1),
-              sub_program_number: Number(m.sub_program_number || 1)
-            };
-          });
-        }
-        if (analogyResult.data) {
-          analogyResult.data.forEach((a: any) => {
-            analogyMap[a.analogy_number || a.id] = {
-              analogy: a.analogy || a.text,
-              program_number: Number(a.program_number || 1),
-              sub_program_number: Number(a.sub_program_number || 1)
-            };
-          });
-        }
-        if (sourceResult.data) {
-          sourceResult.data.forEach((s: any) => {
-            sourceMap[s.source_number || s.id] = {
-              source: s.source || s.text,
-              program_number: Number(s.program_number || 1),
-              sub_program_number: Number(s.sub_program_number || 1)
-            };
-          });
-        }
-        if (illustrationResult.data) {
-          illustrationResult.data.forEach((i: any) => {
-            illustrationMap[i.illustration_number || i.id] = {
-              illustration_url: i.illustration_url || i.image_url || i.url,
-              program_number: Number(i.program_number || 1),
-              sub_program_number: Number(i.sub_program_number || 1)
-            };
-          });
-        }
-
-        return rawQuestions.map((item: any, idx: number) => {
-          // Options mapping
-          let opts: string[] = [];
-          if (Array.isArray(item.options)) {
-            opts = item.options;
-          } else if (typeof item.options === 'string') {
-            try { opts = JSON.parse(item.options); } catch (e) { opts = [item.options]; }
-          } else if (item.answer_1 || item.answer_2) {
-            opts = [
-              item.answer_1 || item.option_a || 'ა',
-              item.answer_2 || item.option_b || 'ბ',
-              item.answer_3 || item.option_c || 'გ',
-              item.answer_4 || item.option_d || 'დ'
-            ].filter(Boolean);
-          } else if (item.answer || item.correct_answer) {
-            opts = [item.answer || item.correct_answer];
-          } else {
-            opts = ['ა', 'ბ', 'გ', 'დ'];
-          }
-
-          // Program / Chapter Number mapping
-          let rawProg = 
-            item.program_number ??
-            item.chapter_number ??
-            item.chapter_id ??
-            item.chapter ??
-            item.topic_number ??
-            item.program ??
-            item.maps?.program_number ??
-            item.analogy?.program_number ??
-            item.source?.program_number ??
-            item.illustrations?.program_number ??
-            mapsMap[item.map_number]?.program_number ??
-            analogyMap[item.analogy_number]?.program_number ??
-            sourceMap[item.source_number]?.program_number ??
-            illustrationMap[item.illustration_number]?.program_number;
-
-          if (typeof rawProg === 'string') {
-            const numMatch = rawProg.match(/\d+/);
-            if (numMatch) rawProg = parseInt(numMatch[0], 10);
-          }
-
-          let pNum: number = Number(rawProg);
-          if (isNaN(pNum) || pNum <= 0) {
-            pNum = 1;
-          }
-
-          let subProgNum: number = Number(
-            item.sub_program_number ||
-            item.maps?.sub_program_number ||
-            item.analogy?.sub_program_number ||
-            item.source?.sub_program_number ||
-            item.illustrations?.sub_program_number ||
-            mapsMap[item.map_number]?.sub_program_number ||
-            analogyMap[item.analogy_number]?.sub_program_number ||
-            sourceMap[item.source_number]?.sub_program_number ||
-            illustrationMap[item.illustration_number]?.sub_program_number ||
-            1
-          );
-
-          const chapterId = `ch-${pNum}`;
-
-          // Parent Item Number mapping (map_number, source_number, analogy_number, illustration_number)
-          let parentItemNum: number | undefined = undefined;
-          if (item.map_number) parentItemNum = Number(item.map_number);
-          else if (item.source_number) parentItemNum = Number(item.source_number);
-          else if (item.analogy_number) parentItemNum = Number(item.analogy_number);
-          else if (item.illustration_number) parentItemNum = Number(item.illustration_number);
-
-          // Correct Answer Index mapping (1-based integer from DB -> 0-based index for FE)
-          let correctIdx = 0;
-          if (typeof item.correct_answer === 'number') {
-            correctIdx = item.correct_answer > 0 ? item.correct_answer - 1 : 0;
-          } else if (typeof item.correct_answer_index === 'number') {
-            correctIdx = item.correct_answer_index;
-          } else if (typeof item.correct_option === 'number') {
-            correctIdx = item.correct_option - 1;
-          }
-
-          // Image mapping
-          const mapImg = item.map_image ||
-            item.map_url ||
-            item.maps?.map_url ||
-            item.illustrations?.illustration_url ||
-            mapsMap[item.map_number]?.map_url ||
-            illustrationMap[item.illustration_number]?.illustration_url ||
-            undefined;
-
-          // Source / Context text mapping
-          const srcContext = item.source_context ||
-            item.source_text ||
-            item.analogy?.analogy ||
-            item.source?.source ||
-            analogyMap[item.analogy_number]?.analogy ||
-            sourceMap[item.source_number]?.source ||
-            undefined;
-
-          // Explanation
-          let expl = item.explanation || item.description || '';
-          if (!expl && item.answer) {
-            expl = `სწორი პასუხი: ${item.answer}`;
-          } else if (!expl && typeof item.correct_answer === 'string') {
-            expl = `სწორი პასუხი: ${item.correct_answer}`;
-          }
-
-          // Question Type determination
-          let qType: 'mcq' | 'chronology' | 'open_text' = 'mcq';
-          if (categoryKey === 'chronology' || tableName === 'chronology') {
-            qType = 'chronology';
-          } else if (
-            AI_GRADED_TABLES.includes(tableName) ||
-            item.question_type === 'open' || 
-            item.question_type === 'open_text' || 
-            item.is_open === true || 
-            (opts.length <= 1 && typeof (item.answer || item.correct_answer) === 'string')
-          ) {
-            qType = 'open_text';
-          }
-
-          // Chronology items & sequence mapping
-          let chronItems: string[] = [];
-          let chronSeq: number[] = [0, 1, 2];
-          if (qType === 'chronology') {
-            if (opts.length >= 3) {
-              chronItems = opts.slice(0, 3);
-            } else {
-              chronItems = [
-                item.answer_1 || item.option_a || 'მოვლენა 1',
-                item.answer_2 || item.option_b || 'მოვლენა 2',
-                item.answer_3 || item.option_c || 'მოვლენა 3'
-              ];
-            }
-
-            // Correct sequence parsing e.g. "3 1 2" or "3, 1, 2" or [3, 1, 2]
-            const rawSeq = item.correct_sequence || item.sequence || item.correct_answer || item.answer;
-            if (Array.isArray(rawSeq)) {
-              chronSeq = rawSeq.map((n: any) => Number(n));
-            } else if (typeof rawSeq === 'string') {
-              const parsed = rawSeq.replace(/[^0-9\s,]/g, '').split(/[\s,]+/).map(Number).filter(n => n > 0);
-              if (parsed.length >= 3) chronSeq = parsed;
-            }
-          }
-
-          // Correct Answer Text for open-ended questions
-          const corrText = String(item.answer || item.correct_answer || item.correct_text || '').trim();
-
-          // Item Number mapping (question_number, chronology_number, etc.)
-          let itemNum = Number(
-            item.question_number || 
-            item.chronology_number || 
-            item.number ||
-            item.id
-          );
-          if (isNaN(itemNum) || itemNum <= 0) {
-            itemNum = idx + 1;
-          }
-
-          return {
-            id: String(item.id || `${categoryKey}-${idx}`),
-            chapterId,
-            prompt: item.question || item.prompt || item.title || 'კითხვა',
-            options: opts,
-            correctAnswerIndex: correctIdx,
-            explanation: expl,
-            sourceContext: srcContext,
-            mapImage: mapImg,
-            questionType: qType,
-            correctAnswerText: corrText,
-            chronologyItems: chronItems,
-            correctSequence: chronSeq,
-            itemNumber: itemNum,
-            parentItemNumber: parentItemNum,
-            subProgramNumber: subProgNum,
-            maxScore: Number(item.score) > 0 ? Number(item.score) : undefined,
-            sourceTable: tableName
-          };
+export const fetchQuestionsForCategory = async (
+  categoryKey: string,
+  chapterId?: string
+): Promise<(QuizQuestion & { chapterId: string })[]> => {
+  const fullCache = categoryQuestionsCache.get(categoryKey);
+  if (fullCache && Date.now() - fullCache.fetchedAt < CACHE_TTL_MS) {
+    if (chapterId && chapterId !== 'all') {
+      const targetNum = Number(String(chapterId).replace(/[^0-9]/g, ''));
+      if (targetNum > 0) {
+        return fullCache.data.filter((q) => {
+          const qNum = Number(String(q.chapterId).replace(/[^0-9]/g, ''));
+          return qNum === targetNum || q.chapterId === chapterId || q.chapterId === `ch-${targetNum}`;
         });
       }
-    } catch (err) {
-      console.warn(`Error fetching questions for ${categoryKey}:`, err);
     }
+    return fullCache.data;
   }
 
-  return [];
+  // Deduplicate concurrent requests for the same category
+  const existingPromise = inFlightCategoryPromises.get(categoryKey);
+  if (existingPromise) {
+    const allQ = await existingPromise;
+    if (chapterId && chapterId !== 'all') {
+      const targetNum = Number(String(chapterId).replace(/[^0-9]/g, ''));
+      if (targetNum > 0) {
+        return allQ.filter((q) => {
+          const qNum = Number(String(q.chapterId).replace(/[^0-9]/g, ''));
+          return qNum === targetNum || q.chapterId === chapterId || q.chapterId === `ch-${targetNum}`;
+        });
+      }
+    }
+    return allQ;
+  }
+
+  const loadPromise = (async (): Promise<(QuizQuestion & { chapterId: string })[]> => {
+    const catMeta = TEST_CATEGORIES.find(c => c.key === categoryKey);
+    const tablesToQuery = catMeta?.tableNames || [categoryKey];
+
+    for (const tableName of tablesToQuery) {
+      try {
+        const rawQuestions: any[] = await fetchAllRowsFromTable(tableName);
+
+        if (rawQuestions.length > 0) {
+          let mapsMap: Record<number, { map_url: string; program_number: number; sub_program_number: number }> = {};
+          let analogyMap: Record<number, { analogy: string; program_number: number; sub_program_number: number }> = {};
+          let sourceMap: Record<number, { source: string; program_number: number; sub_program_number: number }> = {};
+          let illustrationMap: Record<number, { illustration_url: string; program_number: number; sub_program_number: number }> = {};
+
+          const [mapsResult, analogyResult, sourceResult, illustrationResult] = await Promise.all([
+            (categoryKey === 'map' && !rawQuestions[0].maps)
+              ? supabase.from('maps').select('*')
+              : Promise.resolve({ data: null }),
+            (categoryKey === 'analogies' && !rawQuestions[0].analogy)
+              ? supabase.from('analogy').select('*')
+              : Promise.resolve({ data: null }),
+            (categoryKey === 'source' && !rawQuestions[0].source)
+              ? supabase.from('source').select('*')
+              : Promise.resolve({ data: null }),
+            (categoryKey === 'illustrations' && !rawQuestions[0].illustrations)
+              ? supabase.from('illustrations').select('*')
+              : Promise.resolve({ data: null }),
+          ]);
+
+          if (mapsResult.data) {
+            mapsResult.data.forEach((m: any) => {
+              mapsMap[m.map_number || m.id] = {
+                map_url: m.map_url || m.image_url || m.url,
+                program_number: Number(m.program_number || 1),
+                sub_program_number: Number(m.sub_program_number || 1)
+              };
+            });
+          }
+          if (analogyResult.data) {
+            analogyResult.data.forEach((a: any) => {
+              analogyMap[a.analogy_number || a.id] = {
+                analogy: a.analogy || a.text,
+                program_number: Number(a.program_number || 1),
+                sub_program_number: Number(a.sub_program_number || 1)
+              };
+            });
+          }
+          if (sourceResult.data) {
+            sourceResult.data.forEach((s: any) => {
+              sourceMap[s.source_number || s.id] = {
+                source: s.source || s.text,
+                program_number: Number(s.program_number || 1),
+                sub_program_number: Number(s.sub_program_number || 1)
+              };
+            });
+          }
+          if (illustrationResult.data) {
+            illustrationResult.data.forEach((i: any) => {
+              illustrationMap[i.illustration_number || i.id] = {
+                illustration_url: i.illustration_url || i.image_url || i.url,
+                program_number: Number(i.program_number || 1),
+                sub_program_number: Number(i.sub_program_number || 1)
+              };
+            });
+          }
+
+          const mapped = rawQuestions.map((item: any, idx: number) => {
+            let opts: string[] = [];
+            if (Array.isArray(item.options)) {
+              opts = item.options;
+            } else if (typeof item.options === 'string') {
+              try { opts = JSON.parse(item.options); } catch (e) { opts = [item.options]; }
+            } else if (item.answer_1 || item.answer_2) {
+              opts = [
+                item.answer_1 || item.option_a || 'ა',
+                item.answer_2 || item.option_b || 'ბ',
+                item.answer_3 || item.option_c || 'გ',
+                item.answer_4 || item.option_d || 'დ'
+              ].filter(Boolean);
+            } else if (item.answer || item.correct_answer) {
+              opts = [item.answer || item.correct_answer];
+            } else {
+              opts = ['ა', 'ბ', 'გ', 'დ'];
+            }
+
+            let rawProg = 
+              item.program_number ??
+              item.chapter_number ??
+              item.chapter_id ??
+              item.chapter ??
+              item.topic_number ??
+              item.program ??
+              item.maps?.program_number ??
+              item.analogy?.program_number ??
+              item.source?.program_number ??
+              item.illustrations?.program_number ??
+              mapsMap[item.map_number]?.program_number ??
+              analogyMap[item.analogy_number]?.program_number ??
+              sourceMap[item.source_number]?.program_number ??
+              illustrationMap[item.illustration_number]?.program_number;
+
+            if (typeof rawProg === 'string') {
+              const numMatch = rawProg.match(/\d+/);
+              if (numMatch) rawProg = parseInt(numMatch[0], 10);
+            }
+
+            let pNum: number = Number(rawProg);
+            if (isNaN(pNum) || pNum <= 0) {
+              pNum = 1;
+            }
+
+            const subProgNum: number = Number(
+              item.sub_program_number ||
+              item.maps?.sub_program_number ||
+              item.analogy?.sub_program_number ||
+              item.source?.sub_program_number ||
+              item.illustrations?.sub_program_number ||
+              mapsMap[item.map_number]?.sub_program_number ||
+              analogyMap[item.analogy_number]?.sub_program_number ||
+              sourceMap[item.source_number]?.sub_program_number ||
+              illustrationMap[item.illustration_number]?.sub_program_number ||
+              1
+            );
+
+            const qChapterId = `ch-${pNum}`;
+
+            let parentItemNum: number | undefined = undefined;
+            if (item.map_number) parentItemNum = Number(item.map_number);
+            else if (item.source_number) parentItemNum = Number(item.source_number);
+            else if (item.analogy_number) parentItemNum = Number(item.analogy_number);
+            else if (item.illustration_number) parentItemNum = Number(item.illustration_number);
+
+            let correctIdx = 0;
+            if (typeof item.correct_answer === 'number') {
+              correctIdx = item.correct_answer > 0 ? item.correct_answer - 1 : 0;
+            } else if (typeof item.correct_answer_index === 'number') {
+              correctIdx = item.correct_answer_index;
+            } else if (typeof item.correct_option === 'number') {
+              correctIdx = item.correct_option - 1;
+            }
+
+            const mapImg = item.map_image ||
+              item.map_url ||
+              item.maps?.map_url ||
+              item.illustrations?.illustration_url ||
+              mapsMap[item.map_number]?.map_url ||
+              illustrationMap[item.illustration_number]?.illustration_url ||
+              undefined;
+
+            const srcContext = item.source_context ||
+              item.source_text ||
+              item.analogy?.analogy ||
+              item.source?.source ||
+              analogyMap[item.analogy_number]?.analogy ||
+              sourceMap[item.source_number]?.source ||
+              undefined;
+
+            let expl = item.explanation || item.description || '';
+            if (!expl && item.answer) {
+              expl = `სწორი პასუხი: ${item.answer}`;
+            } else if (!expl && typeof item.correct_answer === 'string') {
+              expl = `სწორი პასუხი: ${item.correct_answer}`;
+            }
+
+            let qType: 'mcq' | 'chronology' | 'open_text' = 'mcq';
+            if (categoryKey === 'chronology' || tableName === 'chronology') {
+              qType = 'chronology';
+            } else if (
+              AI_GRADED_TABLES.includes(tableName) ||
+              item.question_type === 'open' || 
+              item.question_type === 'open_text' || 
+              item.is_open === true || 
+              (opts.length <= 1 && typeof (item.answer || item.correct_answer) === 'string')
+            ) {
+              qType = 'open_text';
+            }
+
+            let chronItems: string[] = [];
+            let chronSeq: number[] = [0, 1, 2];
+            if (qType === 'chronology') {
+              if (opts.length >= 3) {
+                chronItems = opts.slice(0, 3);
+              } else {
+                chronItems = [
+                  item.answer_1 || item.option_a || 'მოვლენა 1',
+                  item.answer_2 || item.option_b || 'მოვლენა 2',
+                  item.answer_3 || item.option_c || 'მოვლენა 3'
+                ];
+              }
+
+              const rawSeq = item.correct_sequence || item.sequence || item.correct_answer || item.answer;
+              if (Array.isArray(rawSeq)) {
+                chronSeq = rawSeq.map((n: any) => Number(n));
+              } else if (typeof rawSeq === 'string') {
+                const parsed = rawSeq.replace(/[^0-9\s,]/g, '').split(/[\s,]+/).map(Number).filter(n => n > 0);
+                if (parsed.length >= 3) chronSeq = parsed;
+              }
+            }
+
+            const corrText = String(item.answer || item.correct_answer || item.correct_text || '').trim();
+
+            let itemNum = Number(
+              item.question_number || 
+              item.chronology_number || 
+              item.number ||
+              item.id
+            );
+            if (isNaN(itemNum) || itemNum <= 0) {
+              itemNum = idx + 1;
+            }
+
+            const qId = String(item.id || `${categoryKey}-${idx}`);
+
+            // Store answer secret in private vault
+            answerKeyVault.set(qId, {
+              correctAnswerIndex: correctIdx,
+              correctSequence: chronSeq,
+              correctAnswerText: corrText,
+              explanation: expl
+            });
+
+            return {
+              id: qId,
+              chapterId: qChapterId,
+              prompt: item.question || item.prompt || item.title || 'კითხვა',
+              options: opts,
+              correctAnswerIndex: correctIdx,
+              explanation: expl,
+              sourceContext: srcContext,
+              mapImage: mapImg,
+              questionType: qType,
+              correctAnswerText: corrText,
+              chronologyItems: chronItems,
+              correctSequence: chronSeq,
+              itemNumber: itemNum,
+              parentItemNumber: parentItemNum,
+              subProgramNumber: subProgNum,
+              maxScore: Number(item.score) > 0 ? Number(item.score) : undefined,
+              sourceTable: tableName
+            };
+          });
+
+          categoryQuestionsCache.set(categoryKey, { data: mapped, fetchedAt: Date.now() });
+          return mapped;
+        }
+      } catch (err) {
+        console.warn(`Error fetching questions for ${categoryKey}:`, err);
+      }
+    }
+
+    return [];
+  })();
+
+  inFlightCategoryPromises.set(categoryKey, loadPromise);
+  try {
+    const allQ = await loadPromise;
+    if (chapterId && chapterId !== 'all') {
+      const targetNum = Number(String(chapterId).replace(/[^0-9]/g, ''));
+      if (targetNum > 0) {
+        return allQ.filter((q) => {
+          const qNum = Number(String(q.chapterId).replace(/[^0-9]/g, ''));
+          return qNum === targetNum || q.chapterId === chapterId || q.chapterId === `ch-${targetNum}`;
+        });
+      }
+    }
+    return allQ;
+  } finally {
+    inFlightCategoryPromises.delete(categoryKey);
+  }
 };
 
 /**
@@ -638,18 +826,10 @@ export const buildHistoryTest = async (
   chapterId?: string
 ): Promise<HistoryTest> => {
   const catMeta = TEST_CATEGORIES.find(c => c.key === categoryKey) || TEST_CATEGORIES[0];
-  const allQuestions = await fetchQuestionsForCategory(categoryKey);
-
-  let filteredQuestions = allQuestions;
-  if (chapterId && chapterId !== 'all' && !catMeta.isIndependent) {
-    const targetNum = Number(String(chapterId).replace(/[^0-9]/g, ''));
-    if (targetNum > 0) {
-      filteredQuestions = allQuestions.filter(q => {
-        const qNum = Number(String(q.chapterId).replace(/[^0-9]/g, ''));
-        return qNum === targetNum || q.chapterId === chapterId || q.chapterId === `ch-${chapterId}`;
-      });
-    }
-  }
+  const filteredQuestions = await fetchQuestionsForCategory(
+    categoryKey,
+    !catMeta.isIndependent ? chapterId : undefined
+  );
 
   const finalQuestions = (categoryKey === 'chronology' || catMeta.isIndependent)
     ? [...filteredQuestions].sort((a, b) => (a.itemNumber || 0) - (b.itemNumber || 0))
@@ -662,8 +842,6 @@ export const buildHistoryTest = async (
     : catMeta.title;
 
   return {
-    // P14 FIX: ID is now human-readable for debugging (category+chapter as prefix).
-    // Date.now() is kept only as a uniqueness suffix for rapid consecutive starts.
     id: `test-${categoryKey}-${(chapterId || 'all').replace(/[^a-z0-9-]/gi, '')}-${Date.now()}`,
     title: testTitle,
     category: 'ეროვნული გამოცდები' as HistoricalCategory,

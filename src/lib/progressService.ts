@@ -53,35 +53,37 @@ export const getStudentProgress = async (userEmail: string): Promise<StudentProf
     console.warn('Local storage progress read error:', err);
   }
 
-  // 2. Try fetching from Supabase 'user_progress' table
-  try {
-    const { data, error } = await supabase
-      .from('user_progress')
-      .select('*')
-      .eq('user_email', userEmail.toLowerCase().trim())
-      .maybeSingle();
+  // 2. Try fetching from Supabase 'user_progress' table (only for logged-in users)
+  if (userEmail !== 'guest_user') {
+    try {
+      const { data, error } = await supabase
+        .from('user_progress')
+        .select('*')
+        .eq('user_email', userEmail.toLowerCase().trim())
+        .maybeSingle();
 
-    if (!error && data && data.progress_json) {
-      const dbProgress: StudentProfileProgress = typeof data.progress_json === 'string'
-        ? JSON.parse(data.progress_json)
-        : data.progress_json;
+      if (!error && data && data.progress_json) {
+        const dbProgress: StudentProfileProgress = typeof data.progress_json === 'string'
+          ? JSON.parse(data.progress_json)
+          : data.progress_json;
 
-      // Merge local and DB (DB priority if newer)
-      const merged: StudentProfileProgress = {
-        userEmail,
-        statsByChapter: {
-          ...(localData?.statsByChapter || {}),
-          ...(dbProgress.statsByChapter || {})
-        },
-        lastUpdated: new Date().toISOString()
-      };
+        // Merge local and DB (DB priority if newer)
+        const merged: StudentProfileProgress = {
+          userEmail,
+          statsByChapter: {
+            ...(localData?.statsByChapter || {}),
+            ...(dbProgress.statsByChapter || {})
+          },
+          lastUpdated: new Date().toISOString()
+        };
 
-      // Save back to local storage
-      localStorage.setItem(getStorageKey(userEmail), JSON.stringify(merged));
-      return merged;
+        // Save back to local storage
+        localStorage.setItem(getStorageKey(userEmail), JSON.stringify(merged));
+        return merged;
+      }
+    } catch (err) {
+      console.warn('Supabase progress fetch notice (using local progress):', err);
     }
-  } catch (err) {
-    console.warn('Supabase progress fetch notice (using local progress):', err);
   }
 
   return localData || defaultProgress;

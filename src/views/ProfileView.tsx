@@ -101,9 +101,13 @@ export const ProfileView: FC<ProfileViewProps> = ({
     }
   }, [userEmail, user]);
 
-  // Load questions for all categories when Chapters or Categories tab is opened
+  // Lazily load category questions only when user expands a chapter or opens Categories tab
   useEffect(() => {
-    if ((activeTab === 'chapters' || activeTab === 'categories') && Object.keys(categoryQuestionsMap).length === 0) {
+    const needsCategoryQuestions =
+      (activeTab === 'chapters' && expandedChapterId !== null) ||
+      activeTab === 'categories';
+
+    if (needsCategoryQuestions && Object.keys(categoryQuestionsMap).length === 0) {
       const loadAllCategoryQuestions = async () => {
         setLoadingCategoryQuestions(true);
         try {
@@ -125,7 +129,7 @@ export const ProfileView: FC<ProfileViewProps> = ({
 
       loadAllCategoryQuestions();
     }
-  }, [activeTab]);
+  }, [activeTab, expandedChapterId, categoryQuestionsMap]);
 
   if (!user) {
     return (

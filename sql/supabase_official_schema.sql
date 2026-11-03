@@ -43,64 +43,91 @@ CREATE TABLE IF NOT EXISTS public.user_progress (
 );
 
 -- =========================================================
--- RLS POLICIES & GRANTS (სრული წვდომის უფლებები)
+-- RLS POLICIES & GRANTS (დაცული წვდომის უფლებები)
 -- =========================================================
 
--- RLS-ის ჩართვა
+CREATE OR REPLACE FUNCTION public.is_admin_user()
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT (
+    lower(coalesce(auth.jwt() ->> 'email', '')) IN (
+      'ntistoria@gmail.com',
+      'admin@ntistoria.ge',
+      'admin@gmail.com',
+      't.totadze@gmail.com',
+      'nodar.totadze@gmail.com'
+    )
+    OR EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE (
+        profiles.user_id = auth.uid()
+        OR profiles.id = auth.uid()
+        OR lower(profiles.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
+      )
+      AND profiles.role = 'admin'
+    )
+  );
+$$;
+
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.articles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_progress ENABLE ROW LEVEL SECURITY;
 
--- პოლიტიკების განახლება
 DROP POLICY IF EXISTS "Public read profiles" ON public.profiles;
 DROP POLICY IF EXISTS "Enable full access for profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Public read articles" ON public.articles;
 DROP POLICY IF EXISTS "Enable full access for articles" ON public.articles;
+DROP POLICY IF EXISTS "Admin write articles" ON public.articles;
 DROP POLICY IF EXISTS "Public read progress" ON public.user_progress;
 DROP POLICY IF EXISTS "Enable full access for progress" ON public.user_progress;
+DROP POLICY IF EXISTS "Users can read own progress" ON public.user_progress;
+DROP POLICY IF EXISTS "Users can insert own progress" ON public.user_progress;
+DROP POLICY IF EXISTS "Users can update own progress" ON public.user_progress;
+DROP POLICY IF EXISTS "Users can delete own progress" ON public.user_progress;
 
-CREATE POLICY "Enable full access for profiles" ON public.profiles FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Enable full access for articles" ON public.articles FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Enable full access for progress" ON public.user_progress FOR ALL USING (true) WITH CHECK (true);
+-- Profiles: საჯარო წაკითხვა, საკუთარი პროფილის განახლება
+CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Users can insert own profile" ON public.profiles FOR INSERT TO authenticated WITH CHECK (lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')) OR user_id = auth.uid() OR public.is_admin_user());
+CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE TO authenticated USING (lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')) OR user_id = auth.uid() OR public.is_admin_user()) WITH CHECK (((lower(email) = lower(coalesce(auth.jwt() ->> 'email', '')) OR user_id = auth.uid()) AND COALESCE(role, 'student') = 'student') OR public.is_admin_user());
 
--- ავტომატური წვდომის პოლიტიკები public სქემის ყველა ცხრილისთვის
-DO $$ 
-DECLARE
-    tbl text;
-BEGIN
-    FOR tbl IN 
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = 'public'
-    LOOP
-        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
-        EXECUTE format('DROP POLICY IF EXISTS "Allow public all %I" ON public.%I;', tbl, tbl);
-        EXECUTE format('CREATE POLICY "Allow public all %I" ON public.%I FOR ALL USING (true) WITH CHECK (true);', tbl, tbl);
-    END LOOP;
-END $$;
+-- Articles: საჯარო წაკითხვა, მხოლოდ ადმინის ჩაწერა/წაშლა
+CREATE POLICY "Public read articles" ON public.articles FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY "Admin write articles" ON public.articles FOR ALL TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
 
--- უფლებების მინიჭება anon, authenticated და service_role-ისთვის
+-- User Progress: მხოლოდ საკუთარ პროგრესზე წვდომა
+CREATE POLICY "Users can read own progress" ON public.user_progress FOR SELECT TO authenticated USING (lower(user_email) = lower(coalesce(auth.jwt() ->> 'email', '')) OR public.is_admin_user());
+CREATE POLICY "Users can insert own progress" ON public.user_progress FOR INSERT TO authenticated WITH CHECK (lower(user_email) = lower(coalesce(auth.jwt() ->> 'email', '')) OR public.is_admin_user());
+CREATE POLICY "Users can update own progress" ON public.user_progress FOR UPDATE TO authenticated USING (lower(user_email) = lower(coalesce(auth.jwt() ->> 'email', '')) OR public.is_admin_user()) WITH CHECK (lower(user_email) = lower(coalesce(auth.jwt() ->> 'email', '')) OR public.is_admin_user());
+CREATE POLICY "Users can delete own progress" ON public.user_progress FOR DELETE TO authenticated USING (lower(user_email) = lower(coalesce(auth.jwt() ->> 'email', '')) OR public.is_admin_user());
+
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL ROUTINES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT SELECT ON public.profiles, public.articles TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.profiles, public.articles, public.user_progress TO authenticated, service_role;
+GRANT SELECT ON public.user_progress TO authenticated, service_role;
 
 -- =========================================================
 -- STORAGE 'photos' BUCKET RLS POLICIES (ფოტოების ატვირთვის უფლებები)
 -- =========================================================
 
--- photos ბაკეტის შექმნა (თუ არ არსებობს) და Public წვდომის მიცემა
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('photos', 'photos', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
 
--- Storage RLS პოლიტიკები storage.objects-ზე
 DROP POLICY IF EXISTS "Public Select photos" ON storage.objects;
 DROP POLICY IF EXISTS "Public Insert photos" ON storage.objects;
 DROP POLICY IF EXISTS "Public Update photos" ON storage.objects;
 DROP POLICY IF EXISTS "Public Delete photos" ON storage.objects;
+DROP POLICY IF EXISTS "Admin Insert photos" ON storage.objects;
+DROP POLICY IF EXISTS "Admin Update photos" ON storage.objects;
+DROP POLICY IF EXISTS "Admin Delete photos" ON storage.objects;
 
 CREATE POLICY "Public Select photos" ON storage.objects FOR SELECT USING (bucket_id = 'photos');
-CREATE POLICY "Public Insert photos" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'photos');
-CREATE POLICY "Public Update photos" ON storage.objects FOR UPDATE USING (bucket_id = 'photos') WITH CHECK (bucket_id = 'photos');
-CREATE POLICY "Public Delete photos" ON storage.objects FOR DELETE USING (bucket_id = 'photos');
+CREATE POLICY "Admin Insert photos" ON storage.objects FOR INSERT TO authenticated WITH CHECK (bucket_id = 'photos' AND public.is_admin_user());
+CREATE POLICY "Admin Update photos" ON storage.objects FOR UPDATE TO authenticated USING (bucket_id = 'photos' AND public.is_admin_user()) WITH CHECK (bucket_id = 'photos' AND public.is_admin_user());
+CREATE POLICY "Admin Delete photos" ON storage.objects FOR DELETE TO authenticated USING (bucket_id = 'photos' AND public.is_admin_user());

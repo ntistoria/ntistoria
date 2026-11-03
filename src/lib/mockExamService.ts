@@ -573,6 +573,13 @@ export async function fetchActiveMockExamBanner(): Promise<MockExamBannerInfo | 
  */
 export async function fetchActiveMockExamForStudent(): Promise<MockExam | null> {
   try {
+    // 1. Try server-side sanitized RPC first so answer keys never even cross the wire
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('get_active_mock_exam_student');
+    if (!rpcErr && rpcData && rpcData.id) {
+      return sanitizeMockExamForStudent(rpcData as MockExam);
+    }
+
+    // 2. Fallback: direct query + client sanitization
     const nowIso = new Date().toISOString();
     const { data, error } = await supabase
       .from('mock_exams')
