@@ -1,11 +1,10 @@
-import { useState, useEffect, useCallback, useRef, useMemo, type FC } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense, type FC } from 'react';
 import { HistoryTest, QuizQuestion, MockExam, MockExamBannerInfo } from '../types';
-
-import { 
-  TEST_CATEGORIES, 
-  ProgramChapter, 
-  fetchProgramsAndSubprograms, 
-  fetchQuestionsForCategory, 
+import {
+  TEST_CATEGORIES,
+  ProgramChapter,
+  fetchProgramsAndSubprograms,
+  fetchQuestionsForCategory,
   fetchChapterCountsForCategory,
   fetchCategoryQuestionsCount,
   fetchCategoryItemDetails,
@@ -18,52 +17,30 @@ import {
 } from '../lib/testService';
 import {
   fetchActiveMockExamBanner,
-  fetchActiveMockExamForStudent
+  fetchActiveMockExamForStudent,
+  getServerClockOffsetMs,
+  getSyncedServerNowMs
 } from '../lib/mockExamService';
-import { MockExamStudentView } from '../components/MockExamStudentView';
 import { checkOpenAnswerMatch } from '../lib/answerMatching';
 import { supabase } from '../lib/supabase';
-import { 
-  getStudentProgress, 
+import {
+  getStudentProgress,
   recordUserAnswers,
-  resetStudentProgress, 
-  StudentProfileProgress 
+  resetStudentProgress,
+  StudentProfileProgress
 } from '../lib/progressService';
 import { useAntiCheating } from '../hooks/useAntiCheating';
-import { 
-  BookOpen, 
-  MapPin, 
-  Layers, 
-  FileText, 
-  Clock, 
-  Image as ImageIcon, 
-  ArrowRight, 
-  Shuffle, 
-  BookMarked, 
-  RotateCcw, 
-  CheckCircle2, 
-  XCircle, 
-  HelpCircle, 
-  ChevronLeft, 
-  Sparkles,
-  Database,
-  Award,
-  Check,
-  X,
-  Play,
-  ArrowUp,
-  ArrowDown,
-  Send,
-  Lock,
-  UserCheck,
-  ShieldAlert,
-  LogIn,
-  AlertCircle,
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-  Keyboard
-} from 'lucide-react';
+import { ChevronLeft } from 'lucide-react';
+import { TestCategoryGrid } from '../components/tests/TestCategoryGrid';
+import { TestChapterSelector, TaskGroup } from '../components/tests/TestChapterSelector';
+import { InlineTestRunner, checkChronologyItemsMatch } from '../components/tests/InlineTestRunner';
+import { InlineTestSummary } from '../components/tests/InlineTestSummary';
+import { QuestionImageLightbox } from '../components/tests/QuestionImageLightbox';
+
+// 4.1 Code-Splitting: Lazy-load MockExamStudentView
+const MockExamStudentView = lazy(() =>
+  import('../components/MockExamStudentView').then(m => ({ default: m.MockExamStudentView }))
+);
 
 interface TestsViewProps {
   onOpenTest?: (test: HistoryTest) => void;
@@ -76,36 +53,7 @@ interface TestsViewProps {
   onClearInitialTarget?: () => void;
 }
 
-interface TaskGroup {
-  id: string;
-  title: string;
-  subtitle?: string;
-  image?: string;
-  sourceContext?: string;
-  itemNumber?: number;
-  questions: (QuizQuestion & { chapterId: string })[];
-}
-
-
-
-// Chronology sequence matching helper
-const checkChronologyItemsMatch = (
-  userItemsOrder: string[], 
-  originalItems: string[], 
-  correctSeq: number[]
-): boolean => {
-  if (!userItemsOrder || !originalItems || !correctSeq) return false;
-
-  const expectedOrder = correctSeq.map(seqIdx => {
-    const idx = seqIdx > 0 && seqIdx <= originalItems.length ? seqIdx - 1 : seqIdx;
-    return originalItems[idx] || '';
-  });
-
-  return userItemsOrder.every((item, i) => item === expectedOrder[i]);
-};
-
 export const TestsView: FC<TestsViewProps> = ({
-  onOpenTest,
   user,
   onOpenAuth,
   onNavigateHome,
@@ -114,9 +62,27 @@ export const TestsView: FC<TestsViewProps> = ({
   onClearInitialTarget
 }) => {
   const isLoggedIn = !!(user && user.email);
-  const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(initialCategoryKey || null);
+
+  // Read initial URL query parameters (?category=map&chapter=ch-2) if present
+  const initialUrlParams = useMemo(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      return {
+        category: sp.get('category'),
+        chapter: sp.get('chapter')
+      };
+    } catch {
+      return { category: null, chapter: null };
+    }
+  }, []);
+
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(
+    initialCategoryKey || initialUrlParams.category || null
+  );
   const [programs, setPrograms] = useState<ProgramChapter[]>([]);
-  const [selectedChapterId, setSelectedChapterId] = useState<string>(initialChapterId || 'all');
+  const [selectedChapterId, setSelectedChapterId] = useState<string>(
+    initialChapterId || initialUrlParams.chapter || 'all'
+  );
   const [questionsCountMap, setQuestionsCountMap] = useState<Record<string, number>>({});
   const [categoryTotalCounts, setCategoryTotalCounts] = useState<Record<string, number>>({});
   const [categoryItemDetailsMap, setCategoryItemDetailsMap] = useState<Record<string, CategoryItemDetails>>({});
@@ -126,14 +92,12 @@ export const TestsView: FC<TestsViewProps> = ({
 
   // Lightbox for Map / Illustration inside Inline Test Runner
   const [inlineLightboxUrl, setInlineLightboxUrl] = useState<string | null>(null);
-  const [inlineLightboxZoom, setInlineLightboxZoom] = useState<number>(1.5);
-  // Summary review filter ('mistakes' vs 'all')
-  const [reviewFilter, setReviewFilter] = useState<'mistakes' | 'all'>('mistakes');
+  const [inlineLightboxZoom, setInlineLightboxZoom] = useState<number>(1);
 
   // MOCK EXAM MODE STATE
   const [mockBanner, setMockBanner] = useState<MockExamBannerInfo | null>(null);
   const [activeMockExam, setActiveMockExam] = useState<MockExam | null>(null);
-  const [serverTimeOffsetMs, setServerTimeOffsetMs] = useState<number>(0);
+  const [serverTimeOffsetMs, setServerTimeOffsetMs] = useState<number>(() => getServerClockOffsetMs());
   const [openingMockExam, setOpeningMockExam] = useState<boolean>(false);
   const [nowTick, setNowTick] = useState<number>(Date.now());
 
@@ -144,15 +108,16 @@ export const TestsView: FC<TestsViewProps> = ({
       const serverMs = new Date(info.server_now).getTime();
       if (!isNaN(serverMs)) {
         setServerTimeOffsetMs(serverMs - Date.now());
+        return;
       }
     }
+    setServerTimeOffsetMs(getServerClockOffsetMs());
   }, []);
 
   useEffect(() => {
     refreshMockBanner();
-  }, [refreshMockBanner, isLoggedIn]);
+  }, [refreshMockBanner, isLoggedIn, user?.email]);
 
-  // 1-second ticker to auto-hide active banner as soon as end_time passes
   useEffect(() => {
     const timer = setInterval(() => {
       setNowTick(Date.now());
@@ -163,11 +128,11 @@ export const TestsView: FC<TestsViewProps> = ({
   const isMockExamActive = useMemo(() => {
     if (!mockBanner || !mockBanner.is_active || !mockBanner.end_time) return false;
     const endMs = new Date(mockBanner.end_time).getTime();
-    return endMs > nowTick + serverTimeOffsetMs;
+    const effectiveOffset = serverTimeOffsetMs || getServerClockOffsetMs();
+    return endMs > nowTick + effectiveOffset;
   }, [mockBanner, nowTick, serverTimeOffsetMs]);
 
-  const handleOpenMockExam = async () => {
-    if (!isMockExamActive) return;
+  const handleOpenMockExam = useCallback(async () => {
     if (!isLoggedIn) {
       if (onOpenAuth) onOpenAuth();
       return;
@@ -176,7 +141,7 @@ export const TestsView: FC<TestsViewProps> = ({
     setOpeningMockExam(true);
     try {
       const fullExam = await fetchActiveMockExamForStudent();
-      if (fullExam && fullExam.is_active && fullExam.end_time && new Date(fullExam.end_time).getTime() > Date.now() + serverTimeOffsetMs) {
+      if (fullExam && fullExam.is_active && fullExam.end_time && new Date(fullExam.end_time).getTime() > getSyncedServerNowMs()) {
         setActiveMockExam(fullExam);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
@@ -187,13 +152,22 @@ export const TestsView: FC<TestsViewProps> = ({
     } finally {
       setOpeningMockExam(false);
     }
-  };
+  }, [isLoggedIn, onOpenAuth, refreshMockBanner]);
 
-  // Category Questions & Task Groups for Maps/Analogies/Sources/Illustrations
+  // Auto-open Mock Exam when navigated via Home page "შეუერთდი" button
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem('nt_auto_open_mock_exam') === '1') {
+        sessionStorage.removeItem('nt_auto_open_mock_exam');
+        handleOpenMockExam();
+      }
+    } catch {}
+  }, [handleOpenMockExam]);
+
+  // Category Questions & Task Groups
   const [categoryQuestions, setCategoryQuestions] = useState<(QuizQuestion & { chapterId: string })[]>([]);
   const [taskGroups, setTaskGroups] = useState<TaskGroup[]>([]);
 
-  // I4: Lazy pagination for large category chapter lists (e.g. MCQ has many chapters)
   const CHAPTERS_PER_PAGE = 12;
   const [visibleChapterCount, setVisibleChapterCount] = useState(CHAPTERS_PER_PAGE);
 
@@ -203,39 +177,72 @@ export const TestsView: FC<TestsViewProps> = ({
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
   const [isTestFinished, setIsTestFinished] = useState<boolean>(false);
 
-  // Anti-cheating & Tab Switch tracking for Inline Tests in TestsView
-  // I10: onViolation auto-submits after 3 tab switches
+  // Anti-cheating & Tab Switch tracking
   const { tabSwitchCount, switchCountRef } = useAntiCheating({
     isActive: Boolean(activeInlineTest) && !isTestFinished,
     onViolation: useCallback((count: number) => {
       if (count >= 3 && activeInlineTest && !isTestFinished) {
-        // Auto-finish test after 3 violations
         handleFinishInlineTest();
       }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeInlineTest, isTestFinished])
   });
 
-  // Chronology interactive reordering state (current item sequence per question index)
+  // Chronology & Open Text state
   const [chronologyOrders, setChronologyOrders] = useState<Record<number, string[]>>({});
   const [chronologyChecked, setChronologyChecked] = useState<Record<number, boolean>>({});
-
   const [openTextAnswers, setOpenTextAnswers] = useState<Record<number, string>>({});
   const [openTextChecked, setOpenTextChecked] = useState<Record<number, boolean>>({});
-  // AI grading results for open questions (analogies / sources): points + feedback
   const [openTextScores, setOpenTextScores] = useState<Record<number, { score: number; maxScore: number; feedback: string; correctAnswer: string }>>({});
   const [openTextGrading, setOpenTextGrading] = useState<Record<number, boolean>>({});
   const [openTextError, setOpenTextError] = useState<Record<number, string>>({});
 
-
-
   const userEmail = user?.email || 'guest_user';
-  // P6 FIX: stable ref so the realtime callback can read the latest value
-  // without the channel needing to be recreated on every category change.
-  const selectedCategoryKeyRef = useRef(selectedCategoryKey);
+
+  // =========================================================================
+  // 4.3 Routing & Browser History (Back/Forward) Sync for /tests
+  // =========================================================================
+  const syncTestsUrl = useCallback(
+    (catKey: string | null, chId: string, isRunning: boolean, replace = false) => {
+      try {
+        if (window.location.pathname !== '/tests') return;
+        const params = new URLSearchParams();
+        if (catKey) params.set('category', catKey);
+        if (catKey && chId) params.set('chapter', chId);
+        if (isRunning) params.set('running', '1');
+        const qs = params.toString();
+        const nextUrl = qs ? `/tests?${qs}` : '/tests';
+        const currentUrl = `${window.location.pathname}${window.location.search}`;
+        if (currentUrl !== nextUrl) {
+          if (replace) {
+            window.history.replaceState({ tab: 'tests', catKey, chId, isRunning }, '', nextUrl);
+          } else {
+            window.history.pushState({ tab: 'tests', catKey, chId, isRunning }, '', nextUrl);
+          }
+        }
+      } catch {}
+    },
+    []
+  );
+
   useEffect(() => {
-    selectedCategoryKeyRef.current = selectedCategoryKey;
-  }, [selectedCategoryKey]);
+    const handlePopState = () => {
+      if (window.location.pathname !== '/tests') return;
+      const sp = new URLSearchParams(window.location.search);
+      const urlCat = sp.get('category');
+      const urlCh = sp.get('chapter') || (urlCat === 'mcq' ? 'ch-1' : 'all');
+      const urlRunning = sp.get('running') === '1';
+
+      if (!urlRunning && activeInlineTest) {
+        setActiveInlineTest(null);
+      }
+      setSelectedCategoryKey(urlCat);
+      setSelectedChapterId(urlCh);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeInlineTest]);
 
   // Load programs, total question counts per category, item details, and student progress
   useEffect(() => {
@@ -289,10 +296,7 @@ export const TestsView: FC<TestsViewProps> = ({
     };
   }, [userEmail]);
 
-
-
   // Real-time Database Subscription: Listen ONLY to `mock_exams` table changes
-  // (Prevents full-database re-fetches whenever other users update `user_progress` or `quiz_attempts`)
   useEffect(() => {
     const channel = supabase
       .channel('tests-view-mock-exams')
@@ -310,7 +314,7 @@ export const TestsView: FC<TestsViewProps> = ({
     };
   }, [refreshMockBanner]);
 
-  // Fetch questions when category changes & calculate chapter counts + Task Groups
+  // Fetch questions when category changes & calculate chapter counts
   useEffect(() => {
     if (!selectedCategoryKey) {
       setCategoryQuestions([]);
@@ -322,7 +326,6 @@ export const TestsView: FC<TestsViewProps> = ({
       setLoading(true);
       try {
         if (selectedCategoryKey === 'mcq') {
-          // For MCQ, only fetch lightweight chapter counts; full questions are fetched per-chapter on start
           const counts = await fetchChapterCountsForCategory('mcq');
           setCategoryQuestions([]);
           setQuestionsCountMap(counts);
@@ -365,24 +368,17 @@ export const TestsView: FC<TestsViewProps> = ({
       return;
     }
 
-    // P9 FIX: Group questions by parentItemNumber first (stable numeric DB ID).
-    // Only fall back to text content for categories that don't have a numeric parent ID.
-    // This eliminates the collision risk from sources/analogies sharing identical opening text.
     const groupMap = new Map<string, (QuizQuestion & { chapterId: string })[]>();
-    
+
     chapterQuestions.forEach((q, idx) => {
       let groupKey = '';
       if (q.parentItemNumber) {
-        // Primary key: stable numeric parent item ID (map_number, source_number, etc.)
         groupKey = `parent-${q.parentItemNumber}`;
       } else if (q.itemNumber) {
-        // Secondary key: own item number
         groupKey = `item-${q.itemNumber}`;
       } else if (selectedCategoryKey === 'map' || selectedCategoryKey === 'illustrations') {
-        // Tertiary: image URL (unique per visual)
         groupKey = q.mapImage || `q-${idx}`;
       } else if (selectedCategoryKey === 'source' || selectedCategoryKey === 'analogies') {
-        // Tertiary: text content (last resort — P9 only reached if no itemNumber/parentItemNumber)
         groupKey = q.sourceContext?.substring(0, 100) || `q-${idx}`;
       } else {
         groupKey = `q-${idx}`;
@@ -397,7 +393,7 @@ export const TestsView: FC<TestsViewProps> = ({
       groupMap.set(groupKey, existing);
     });
 
-    const groups: TaskGroup[] = Array.from(groupMap.entries()).map(([key, qList], index) => {
+    const groups: TaskGroup[] = Array.from(groupMap.entries()).map(([, qList], index) => {
       const firstQ = qList[0];
       const itemNum = firstQ.parentItemNumber || firstQ.itemNumber || (index + 1);
       let taskTitle = '';
@@ -422,17 +418,87 @@ export const TestsView: FC<TestsViewProps> = ({
     setTaskGroups(groups);
   }, [selectedCategoryKey, selectedChapterId, categoryQuestions]);
 
+  // ============================================================
+  // Session Auto-Save
+  // ============================================================
+  const SESSION_KEY = `nt_test_session_${userEmail}`;
+
+  const saveSession = useCallback((patch: Record<string, unknown>) => {
+    try {
+      const existing = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}');
+      const nextPatch = { ...patch };
+      if (nextPatch.activeInlineTest) {
+        nextPatch.activeInlineTest = sanitizeTestForSessionStorage(nextPatch.activeInlineTest as HistoryTest);
+      }
+      localStorage.setItem(SESSION_KEY, JSON.stringify({ ...existing, ...nextPatch }));
+    } catch {}
+  }, [SESSION_KEY]);
+
+  const clearSession = useCallback(() => {
+    try { localStorage.removeItem(SESSION_KEY); } catch {}
+  }, [SESSION_KEY]);
+
+  // Restore session on mount (once) and re-hydrate answer keys in memory
+  useEffect(() => {
+    let isMounted = true;
+    try {
+      const raw = localStorage.getItem(SESSION_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (s.activeInlineTest && s.selectedCategoryKey) {
+        setSelectedCategoryKey(s.selectedCategoryKey);
+        setSelectedChapterId(s.selectedChapterId || 'all');
+        setCurrentQIndex(s.currentQIndex ?? 0);
+        setSelectedAnswers(s.selectedAnswers ?? []);
+        setIsTestFinished(s.isTestFinished ?? false);
+        setChronologyOrders(s.chronologyOrders ?? {});
+        setChronologyChecked(s.chronologyChecked ?? {});
+        setOpenTextAnswers(s.openTextAnswers ?? {});
+        setOpenTextChecked(s.openTextChecked ?? {});
+
+        hydrateTestQuestionsFromVault(s.activeInlineTest, s.selectedCategoryKey).then((hydrated) => {
+          if (isMounted) {
+            setActiveInlineTest(hydrated);
+            syncTestsUrl(s.selectedCategoryKey, s.selectedChapterId || 'all', true, true);
+          }
+        });
+      }
+    } catch {}
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const exitFullscreen = () => {
+    try {
+      const doc = document as any;
+      (doc.exitFullscreen ?? doc.webkitExitFullscreen ?? doc.mozCancelFullScreen)?.call(doc);
+    } catch {}
+  };
+
   const handleSelectCategory = (key: string) => {
+    const defaultCh = key === 'mcq' ? 'ch-1' : (!isLoggedIn ? 'ch-1' : 'all');
     setSelectedCategoryKey(key);
-    if (key === 'mcq') {
-      setSelectedChapterId('ch-1');
-    } else {
-      setSelectedChapterId(!isLoggedIn ? 'ch-1' : 'all');
-    }
+    setSelectedChapterId(defaultCh);
     setActiveInlineTest(null);
-    setVisibleChapterCount(CHAPTERS_PER_PAGE); // I4: reset pagination on category change
-    clearSession(); // I6: clear saved session when switching category
+    setVisibleChapterCount(CHAPTERS_PER_PAGE);
+    clearSession();
+    syncTestsUrl(key, defaultCh, false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleBackToCategories = () => {
+    setSelectedCategoryKey(null);
+    setActiveInlineTest(null);
+    clearSession();
+    syncTestsUrl(null, 'all', false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSelectChapterId = (chId: string) => {
+    setSelectedChapterId(chId);
+    syncTestsUrl(selectedCategoryKey, chId, false, true);
   };
 
   // Start an Inline Test
@@ -443,7 +509,6 @@ export const TestsView: FC<TestsViewProps> = ({
     setSelectedAnswers(initAnswers);
     setIsTestFinished(false);
 
-    // Initialize chronology order arrays for questions
     const initChronOrders: Record<number, string[]> = {};
     testObj.questions.forEach((q, idx) => {
       if (q.questionType === 'chronology' && q.chronologyItems && q.chronologyItems.length > 0) {
@@ -455,8 +520,7 @@ export const TestsView: FC<TestsViewProps> = ({
     setOpenTextAnswers({});
     setOpenTextChecked({});
 
-    // I6: persist session so browser refresh restores progress
-    const sessionPatch = {
+    saveSession({
       activeInlineTest: testObj,
       selectedCategoryKey,
       selectedChapterId,
@@ -467,9 +531,16 @@ export const TestsView: FC<TestsViewProps> = ({
       chronologyChecked: {},
       openTextAnswers: {},
       openTextChecked: {}
-    };
-    saveSession(sessionPatch);
+    });
 
+    syncTestsUrl(selectedCategoryKey, selectedChapterId, true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleExitInlineTest = () => {
+    setActiveInlineTest(null);
+    clearSession();
+    syncTestsUrl(selectedCategoryKey, selectedChapterId, false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -539,26 +610,11 @@ export const TestsView: FC<TestsViewProps> = ({
     }
   };
 
-  const getCategoryIcon = (key: string) => {
-    const iconClass = "w-6 h-6 text-[#C79B3A] group-hover:text-white transition-colors duration-300";
-    switch (key) {
-      case 'mcq': return <BookOpen className={iconClass} />;
-      case 'map': return <MapPin className={iconClass} />;
-      case 'analogies': return <Layers className={iconClass} />;
-      case 'source': return <FileText className={iconClass} />;
-      case 'chronology': return <Clock className={iconClass} />;
-      case 'illustrations': return <ImageIcon className={iconClass} />;
-      default: return <BookOpen className={iconClass} />;
-    }
-  };
-
-  // I2: memoize so it doesn't recompute on every render
   const activeCategoryMeta = useMemo(
     () => TEST_CATEGORIES.find(c => c.key === selectedCategoryKey),
     [selectedCategoryKey]
   );
 
-  // Helper to compute stats for a specific chapter
   const getChapterStats = (catKey: string, chId: string, totalQ: number) => {
     if (!progressData) return { correct: 0, incorrect: 0, unattempted: totalQ, total: totalQ, pct: 0 };
     const statKey = `${catKey}_${chId}`;
@@ -572,10 +628,6 @@ export const TestsView: FC<TestsViewProps> = ({
     return { correct, incorrect, unattempted, total: totalQ, pct };
   };
 
-  // P10 FIX: Pre-compute chapter item display strings once when the underlying
-  // data changes, instead of running O(n) grouping on every render per chapter.
-  // Previously getChapterItemDisplay() was called inline in JSX, causing repeated
-  // computation for every chapter card on every render.
   const chapterItemDisplayMap = useMemo(() => {
     const result: Record<string, string> = {};
     const { qPerItem, unitLabel } = getCategoryUnitInfo(selectedCategoryKey);
@@ -620,81 +672,12 @@ export const TestsView: FC<TestsViewProps> = ({
     return result;
   }, [categoryQuestions, questionsCountMap, selectedCategoryKey]);
 
-  // Legacy wrapper kept for any remaining call-sites (now reads from memo map)
-  const getChapterItemDisplay = (chId: string) => chapterItemDisplayMap[chId] ?? `0 ${getCategoryUnitInfo(selectedCategoryKey).unitLabel}`;
-
-  // ============================================================
-  // I6 — Session Auto-Save
-  // ============================================================
-  const SESSION_KEY = `nt_test_session_${userEmail}`;
-
-  const saveSession = useCallback((patch: Record<string, unknown>) => {
-    try {
-      const existing = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}');
-      const nextPatch = { ...patch };
-      if (nextPatch.activeInlineTest) {
-        nextPatch.activeInlineTest = sanitizeTestForSessionStorage(nextPatch.activeInlineTest as HistoryTest);
-      }
-      localStorage.setItem(SESSION_KEY, JSON.stringify({ ...existing, ...nextPatch }));
-    } catch {}
-  }, [SESSION_KEY]);
-
-  const clearSession = useCallback(() => {
-    try { localStorage.removeItem(SESSION_KEY); } catch {}
-  }, [SESSION_KEY]);
-
-  // Restore session on mount (once) and re-hydrate answer keys in memory
-  useEffect(() => {
-    let isMounted = true;
-    try {
-      const raw = localStorage.getItem(SESSION_KEY);
-      if (!raw) return;
-      const s = JSON.parse(raw);
-      if (s.activeInlineTest && s.selectedCategoryKey) {
-        setSelectedCategoryKey(s.selectedCategoryKey);
-        setSelectedChapterId(s.selectedChapterId || 'all');
-        setCurrentQIndex(s.currentQIndex ?? 0);
-        setSelectedAnswers(s.selectedAnswers ?? []);
-        setIsTestFinished(s.isTestFinished ?? false);
-        setChronologyOrders(s.chronologyOrders ?? {});
-        setChronologyChecked(s.chronologyChecked ?? {});
-        setOpenTextAnswers(s.openTextAnswers ?? {});
-        setOpenTextChecked(s.openTextChecked ?? {});
-
-        hydrateTestQuestionsFromVault(s.activeInlineTest, s.selectedCategoryKey).then((hydrated) => {
-          if (isMounted) {
-            setActiveInlineTest(hydrated);
-          }
-        });
-      }
-    } catch {}
-    return () => {
-      isMounted = false;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ============================================================
-  // I10 — Fullscreen helpers
-  // ============================================================
-  const requestFullscreen = () => {
-    try {
-      const el = document.documentElement as any;
-      (el.requestFullscreen ?? el.webkitRequestFullscreen ?? el.mozRequestFullScreen)?.call(el);
-    } catch {}
-  };
-
-  const exitFullscreen = () => {
-    try {
-      const doc = document as any;
-      (doc.exitFullscreen ?? doc.webkitExitFullscreen ?? doc.mozCancelFullScreen)?.call(doc);
-    } catch {}
-  };
+  const getChapterItemDisplay = (chId: string) =>
+    chapterItemDisplayMap[chId] ?? `0 ${getCategoryUnitInfo(selectedCategoryKey).unitLabel}`;
 
   // INLINE TEST RUNNER HANDLERS
   const handleSelectOptionInline = (optIndex: number) => {
     if (!activeInlineTest || isTestFinished) return;
-    // Lock answer: once selected, student cannot change their answer
     if (selectedAnswers[currentQIndex] !== -1) return;
 
     const updated = [...selectedAnswers];
@@ -706,7 +689,6 @@ export const TestsView: FC<TestsViewProps> = ({
       const isCorrect = optIndex === currentQ.correctAnswerIndex;
       const chId = currentQ.chapterId || selectedChapterId || 'ch-1';
 
-      // I3: Optimistic update — update progressData immediately before the async call
       const optimisticUpdate = (prev: typeof progressData) => {
         if (!prev) return prev;
         const statKey = `${selectedCategoryKey}_${chId}`;
@@ -729,32 +711,30 @@ export const TestsView: FC<TestsViewProps> = ({
       };
       setProgressData(optimisticUpdate as any);
 
-      // Persist to server; roll back on error
       recordUserAnswers(userEmail, selectedCategoryKey, chId, [
         { questionId: currentQ.id, isCorrect }
       ]).then(setProgressData).catch(err => {
-        console.error('recordUserAnswers failed, rolling back optimistic update:', err);
-        setProgressData(prev => prev); // keep current on error (re-fetch not critical here)
+        console.error('recordUserAnswers failed:', err);
       });
     }
 
-    // I6: save session after every answer
     saveSession({ selectedAnswers: updated, currentQIndex });
   };
 
   // Support deep-linking from ProfileView ("გაიმეორე ეს თემა")
   useEffect(() => {
     if (initialCategoryKey) {
+      const ch = initialChapterId || 'ch-1';
       setSelectedCategoryKey(initialCategoryKey);
-      setSelectedChapterId(initialChapterId || 'ch-1');
+      setSelectedChapterId(ch);
       setActiveInlineTest(null);
+      syncTestsUrl(initialCategoryKey, ch, false);
       window.scrollTo({ top: 0, behavior: 'smooth' });
       if (onClearInitialTarget) onClearInitialTarget();
     }
-  }, [initialCategoryKey, initialChapterId, onClearInitialTarget]);
+  }, [initialCategoryKey, initialChapterId, onClearInitialTarget, syncTestsUrl]);
 
-  // 3.2 Keyboard Shortcuts for Inline Test Runner:
-  // 1-4 / ა-დ / a-d to select MCQ options, ArrowLeft / ArrowRight to navigate questions
+  // 3.2 Keyboard Shortcuts for Inline Test Runner
   useEffect(() => {
     if (!activeInlineTest || isTestFinished || inlineLightboxUrl) return;
 
@@ -799,15 +779,14 @@ export const TestsView: FC<TestsViewProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeInlineTest, isTestFinished, currentQIndex, selectedAnswers, inlineLightboxUrl]);
 
-  // CHRONOLOGY MOVE HANDLERS (Mouse move up / move down 3 items)
   const handleMoveChronologyItem = (fromIdx: number, toIdx: number) => {
     if (!activeInlineTest || isTestFinished) return;
     const currentQ = activeInlineTest.questions[currentQIndex];
     const currentOrder = chronologyOrders[currentQIndex] || currentQ.chronologyItems || [];
-    
+
     if (toIdx < 0 || toIdx >= currentOrder.length) return;
 
     const newOrder = [...currentOrder];
@@ -825,10 +804,10 @@ export const TestsView: FC<TestsViewProps> = ({
     if (!activeInlineTest || isTestFinished) return;
     const currentQ = activeInlineTest.questions[currentQIndex];
     const currentOrder = chronologyOrders[currentQIndex] || currentQ.chronologyItems || [];
-    
+
     const isCorrect = checkChronologyItemsMatch(
-      currentOrder, 
-      currentQ.chronologyItems || [], 
+      currentOrder,
+      currentQ.chronologyItems || [],
       currentQ.correctSequence || [0, 1, 2]
     );
 
@@ -841,8 +820,6 @@ export const TestsView: FC<TestsViewProps> = ({
       ]).then(setProgressData).catch(console.error);
     }
   };
-
-  // OPEN TEXT SUBMIT HANDLER (AI_GRADED_TABLES is imported from testService)
 
   const handleCheckOpenText = async () => {
     if (!activeInlineTest || isTestFinished) return;
@@ -911,21 +888,17 @@ export const TestsView: FC<TestsViewProps> = ({
     }
   };
 
-  // Restart active inline test completely (clears typed open answers, chronology orders, and choices)
   const handleRestartInlineTest = () => {
     if (!activeInlineTest) return;
     setCurrentQIndex(0);
     setSelectedAnswers(new Array(activeInlineTest.questions.length).fill(-1));
     setIsTestFinished(false);
-
-    // Completely clear all open-ended answers and checked states
     setOpenTextAnswers({});
     setOpenTextChecked({});
     setOpenTextScores({});
     setOpenTextGrading({});
     setOpenTextError({});
 
-    // Completely reset all chronology orders and checked states
     const initChronOrders: Record<number, string[]> = {};
     activeInlineTest.questions.forEach((q, idx) => {
       if (q.questionType === 'chronology' && q.chronologyItems && q.chronologyItems.length > 0) {
@@ -934,17 +907,15 @@ export const TestsView: FC<TestsViewProps> = ({
     });
     setChronologyOrders(initChronOrders);
     setChronologyChecked({});
-
-    clearSession(); // I6: clear saved session on restart
-
+    clearSession();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleFinishInlineTest = () => {
     if (!activeInlineTest) return;
     setIsTestFinished(true);
-    clearSession(); // I6: clear saved session on finish
-    exitFullscreen(); // I10: exit fullscreen on finish
+    clearSession();
+    exitFullscreen();
 
     const resultsByChapter: Record<string, { questionId: string; isCorrect: boolean }[]> = {};
 
@@ -986,30 +957,37 @@ export const TestsView: FC<TestsViewProps> = ({
 
   if (activeMockExam) {
     return (
-      <MockExamStudentView
-        exam={activeMockExam}
-        serverTimeOffsetMs={serverTimeOffsetMs}
-        onExit={() => {
-          setActiveMockExam(null);
-          refreshMockBanner();
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
-        onTimeExpired={() => {
-          setActiveMockExam(null);
-          refreshMockBanner();
-          if (onNavigateHome) {
-            onNavigateHome();
-          } else {
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center py-20">
+            <div className="w-7 h-7 border-2 border-[#C79B3A] border-t-transparent rounded-full animate-spin" />
+          </div>
+        }
+      >
+        <MockExamStudentView
+          exam={activeMockExam}
+          serverTimeOffsetMs={serverTimeOffsetMs}
+          onExit={() => {
+            setActiveMockExam(null);
+            refreshMockBanner();
             window.scrollTo({ top: 0, behavior: 'smooth' });
-          }
-        }}
-      />
+          }}
+          onTimeExpired={() => {
+            setActiveMockExam(null);
+            refreshMockBanner();
+            if (onNavigateHome) {
+              onNavigateHome();
+            } else {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }}
+        />
+      </Suspense>
     );
   }
 
   return (
     <div className="max-w-[1200px] mx-auto space-y-12 pb-24 py-6 px-4 sm:px-6 animate-in fade-in duration-300">
-      
       {/* Loading indicator */}
       {loading && (
         <div className="flex items-center justify-center py-12">
@@ -1022,11 +1000,10 @@ export const TestsView: FC<TestsViewProps> = ({
 
       {activeInlineTest ? (
         <div className="space-y-8 animate-fade-in">
-          
           {/* Top Test Header Bar */}
           <div className="flex items-center justify-between border-b border-[#E6DDCB] pb-4">
             <button
-              onClick={() => setActiveInlineTest(null)}
+              onClick={handleExitInlineTest}
               className="inline-flex items-center gap-2 px-4 py-2 bg-[#FAF8F3] hover:bg-[#E6DDCB]/60 border border-[#E6DDCB] text-[#13253D] text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
             >
               <ChevronLeft className="w-4 h-4 text-[#C79B3A]" />
@@ -1038,1539 +1015,94 @@ export const TestsView: FC<TestsViewProps> = ({
             </span>
           </div>
 
-          {/* 3.2 Question Navigator / Palette */}
-          {!isTestFinished && activeInlineTest.questions.length > 1 && (
-            <div className="bg-white rounded-2xl border border-[#E6DDCB] p-4 shadow-xs space-y-2.5">
-              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold text-[#666666]">
-                <span className="uppercase tracking-wider text-[#0D1B2A]">
-                  კითხვების ნავიგატორი
-                </span>
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="inline-flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                    <span>სწორი</span>
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-                    <span>შეცდომა</span>
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#E6DDCB]" />
-                    <span>პასუხგაუცემელი</span>
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
-                {activeInlineTest.questions.map((q, idx) => {
-                  const isCurrent = idx === currentQIndex;
-                  let isAnswered = false;
-                  let isCorrect = false;
-
-                  if (q.questionType === 'chronology') {
-                    isAnswered = !!chronologyChecked[idx];
-                    if (isAnswered) {
-                      const order = chronologyOrders[idx] || q.chronologyItems || [];
-                      isCorrect = checkChronologyItemsMatch(order, q.chronologyItems || [], q.correctSequence || [0, 1, 2]);
-                    }
-                  } else if (q.questionType === 'open_text') {
-                    isAnswered = !!openTextChecked[idx];
-                    if (isAnswered) {
-                      const graded = openTextScores[idx];
-                      const typed = openTextAnswers[idx] || '';
-                      isCorrect = graded
-                        ? graded.score >= graded.maxScore
-                        : checkOpenAnswerMatch(typed, q.correctAnswerText || '');
-                    }
-                  } else {
-                    isAnswered = selectedAnswers[idx] !== undefined && selectedAnswers[idx] !== -1;
-                    if (isAnswered) {
-                      isCorrect = selectedAnswers[idx] === q.correctAnswerIndex;
-                    }
-                  }
-
-                  let btnClass = 'bg-[#FAF8F3] border-[#E6DDCB] text-[#0D1B2A] hover:border-[#C79B3A]';
-                  if (isAnswered) {
-                    btnClass = isCorrect
-                      ? 'bg-emerald-50 border-emerald-400 text-emerald-800'
-                      : 'bg-rose-50 border-rose-400 text-rose-800';
-                  }
-                  if (isCurrent) {
-                    btnClass += ' ring-2 ring-[#C79B3A] font-extrabold scale-105';
-                  }
-
-                  return (
-                    <button
-                      key={q.id || idx}
-                      type="button"
-                      onClick={() => setCurrentQIndex(idx)}
-                      className={`w-8 h-8 rounded-lg border text-xs font-mono font-bold transition-all flex items-center justify-center cursor-pointer ${btnClass}`}
-                      title={`კითხვა #${idx + 1}`}
-                    >
-                      {idx + 1}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           {!isTestFinished ? (
-            /* ACTIVE INLINE QUESTION VIEW */
-            <div className="bg-white rounded-3xl border-2 border-[#E6DDCB] p-6 sm:p-10 space-y-8 shadow-md prevent-select select-none">
-              
-              {/* Anti-cheating Warning Banner */}
-              {tabSwitchCount > 0 && (
-                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl text-amber-950 text-xs font-bold flex items-center justify-between shadow-xs animate-in fade-in duration-200">
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span>⚠️ გაფრთხილება: ტესტის მიმდინარეობისას გვერდი/ტაბი დატოვეთ {tabSwitchCount}-ჯერ!</span>
-                  </div>
-                  <span className="text-[10px] font-mono uppercase bg-amber-200 text-amber-950 px-2 py-0.5 rounded font-extrabold shrink-0">
-                    დაფიქსირდა
-                  </span>
-                </div>
-              )}
-
-              {/* Question Header & Title */}
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="px-3 py-1 bg-[#FAF8F3] border border-[#C79B3A]/40 text-[#C79B3A] text-[10px] font-bold uppercase tracking-widest rounded-full">
-                    {activeInlineTest.title}
-                  </span>
-
-                  {/* Question Badge displaying parent/item number e.g. რუკა N4.1 */}
-                  {(() => {
-                    const q = activeInlineTest.questions[currentQIndex];
-                    if (!q) return null;
-                    const num = q.itemNumber || (currentQIndex + 1);
-                    const displayNum = q.parentItemNumber ? `${q.parentItemNumber}.${num}` : `${num}`;
-                    let label = `კითხვა N${displayNum}`;
-                    if (q.questionType === 'chronology') label = `ქრონოლოგია N${num}`;
-                    else if (selectedCategoryKey === 'map') label = `რუკა N${displayNum}`;
-                    else if (selectedCategoryKey === 'analogies') label = `ანალოგია N${displayNum}`;
-                    else if (selectedCategoryKey === 'source') label = `წყარო N${displayNum}`;
-                    else if (selectedCategoryKey === 'illustrations') label = `ილუსტრაცია N${displayNum}`;
-
-                    return (
-                      <span className="px-3.5 py-1 bg-[#0D1B2A] text-[#C79B3A] text-xs font-mono font-bold rounded-full border border-[#C79B3A]/40 shadow-xs">
-                        {label}
-                      </span>
-                    );
-                  })()}
-                </div>
-
-                <h2 className="font-serif font-bold text-2xl sm:text-3xl text-[#0D1B2A] leading-snug">
-                  {activeInlineTest.questions[currentQIndex]?.prompt}
-                </h2>
-              </div>
-
-              {/* Source Context Text if present */}
-              {activeInlineTest.questions[currentQIndex]?.sourceContext && (
-                <div className="p-6 bg-[#FAF8F3] rounded-2xl border-l-4 border-[#C79B3A] space-y-2 shadow-inner">
-                  <span className="text-xs uppercase tracking-wider font-bold text-[#C79B3A] flex items-center gap-1.5">
-                    <FileText className="w-4 h-4" /> ტექსტური წყარო / კონტექსტი:
-                  </span>
-                  <p className="font-serif italic text-sm sm:text-base text-[#0D1B2A] leading-relaxed whitespace-pre-line">
-                    {activeInlineTest.questions[currentQIndex]?.sourceContext}
-                  </p>
-                </div>
-              )}
-
-              {/* Map / Illustration Image if present */}
-              {activeInlineTest.questions[currentQIndex]?.mapImage && (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between px-3 py-2 bg-[#FAF8F3] rounded-xl border border-[#E6DDCB]">
-                    <span className="text-xs font-bold text-[#0D1B2A]">
-                      სურათი / რუკა (დააჭირეთ გასადიდებლად)
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setInlineLightboxZoom(1.5);
-                        setInlineLightboxUrl(activeInlineTest.questions[currentQIndex]?.mapImage || null);
-                      }}
-                      className="px-3 py-1 rounded-lg bg-[#0D1B2A] text-[#FAF8F3] hover:bg-[#C79B3A] hover:text-[#0D1B2A] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-                    >
-                      <Maximize2 className="w-3.5 h-3.5" />
-                      <span>სრულ ეკრანზე</span>
-                    </button>
-                  </div>
-                  <div className="rounded-2xl overflow-hidden border border-[#E6DDCB] shadow-md bg-[#0D1B2A] max-h-[480px]">
-                    <img 
-                      src={activeInlineTest.questions[currentQIndex]?.mapImage} 
-                      alt="დავალების სურათი/რუკა" 
-                      onClick={() => {
-                        setInlineLightboxZoom(1.5);
-                        setInlineLightboxUrl(activeInlineTest.questions[currentQIndex]?.mapImage || null);
-                      }}
-                      className="w-full h-full object-contain max-h-[480px] mx-auto cursor-zoom-in"
-                      referrerPolicy="no-referrer"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* QUESTION TYPE RENDERERS */}
-              {(() => {
-                const currentQ = activeInlineTest.questions[currentQIndex];
-                if (!currentQ) return null;
-
-                /* 1. CHRONOLOGY ORDERING QUESTION TYPE (Mouse Reorder 3 Items) */
-                if (currentQ.questionType === 'chronology') {
-                  const currentItems = chronologyOrders[currentQIndex] || currentQ.chronologyItems || [];
-                  const isChecked = chronologyChecked[currentQIndex];
-                  const isCorrect = isChecked && checkChronologyItemsMatch(
-                    currentItems, 
-                    currentQ.chronologyItems || [], 
-                    currentQ.correctSequence || [0, 1, 2]
-                  );
-
-                  return (
-                    <div className="space-y-6 pt-4 border-t border-[#E6DDCB]">
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-bold text-[#C79B3A] uppercase tracking-wider block">
-                            დაალაგეთ ქრონოლოგიური თანმიმდევრობა:
-                          </span>
-
-                          {/* Explicit Chronology Number Display (chronology_number) */}
-                          <span className="px-3 py-1 bg-[#FAF8F3] text-[#0D1B2A] text-xs font-mono font-bold rounded-lg border border-[#C79B3A]/40 shadow-xs">
-                            ქრონოლოგია N{currentQ.itemNumber || (currentQIndex + 1)}
-                          </span>
-                        </div>
-                        <p className="text-xs text-[#666666]">
-                          ისრებით (▲ / ▼) გადააადგილეთ 3 მოვლენა სწორი თანმიმდევრობით (1-ლიდან 3-მდე).
-                        </p>
-                      </div>
-
-                      <div className="space-y-3">
-                        {currentItems.map((itemText, idx) => (
-                          <div
-                            key={idx}
-                            className={`p-4 sm:p-5 rounded-2xl border-2 transition-all flex items-center justify-between gap-4 bg-white shadow-xs ${
-                              isChecked
-                                ? isCorrect
-                                  ? 'border-emerald-500 bg-emerald-50'
-                                  : 'border-rose-400 bg-rose-50'
-                                : 'border-[#E6DDCB] hover:border-[#C79B3A]'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3 flex-1">
-                              <span className="w-8 h-8 rounded-xl bg-[#0D1B2A] text-[#C79B3A] text-xs font-bold flex items-center justify-center shrink-0">
-                                #{idx + 1}
-                              </span>
-                              <span className="text-sm sm:text-base text-[#0D1B2A] font-medium leading-relaxed">
-                                {itemText}
-                              </span>
-                            </div>
-
-                            {!isChecked && (
-                              <div className="flex items-center gap-1 shrink-0">
-                                <button
-                                  onClick={() => handleMoveChronologyItem(idx, idx - 1)}
-                                  disabled={idx === 0}
-                                  className="p-2 rounded-xl bg-[#FAF8F3] hover:bg-[#C79B3A] text-[#0D1B2A] hover:text-white border border-[#E6DDCB] transition-colors disabled:opacity-30 cursor-pointer"
-                                  title="ზემოთ გადაადგილება"
-                                >
-                                  <ArrowUp className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleMoveChronologyItem(idx, idx + 1)}
-                                  disabled={idx === currentItems.length - 1}
-                                  className="p-2 rounded-xl bg-[#FAF8F3] hover:bg-[#C79B3A] text-[#0D1B2A] hover:text-white border border-[#E6DDCB] transition-colors disabled:opacity-30 cursor-pointer"
-                                  title="ქვემოთ გადაადგილება"
-                                >
-                                  <ArrowDown className="w-4 h-4" />
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-
-                      {!isChecked ? (
-                        <button
-                          onClick={handleCheckChronology}
-                          className="px-6 py-3 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md cursor-pointer flex items-center gap-2"
-                        >
-                          <Check className="w-4 h-4" />
-                          <span>თანმიმდევრობის შემოწმება</span>
-                        </button>
-                      ) : (
-                        <div className={`p-4 rounded-2xl border text-xs sm:text-sm font-semibold flex items-center gap-2 ${
-                          isCorrect ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-rose-50 border-rose-300 text-rose-800'
-                        }`}>
-                          {isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" /> : <XCircle className="w-5 h-5 text-rose-600 shrink-0" />}
-                          <span>
-                            {isCorrect 
-                              ? 'სწორია! თანმიმდევრობა ზუსტად არის დალაგებული.' 
-                              : `არასწორია. სწორი თანმიმდევრობა: ${(currentQ.correctSequence || [1, 2, 3]).join(' ➔ ')}`}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-
-                /* 2. OPEN-ENDED TYPED TEXT QUESTION TYPE */
-                if (currentQ.questionType === 'open_text') {
-                  const typed = openTextAnswers[currentQIndex] || '';
-                  const isChecked = openTextChecked[currentQIndex];
-                  const aiResult = openTextScores[currentQIndex];
-                  const isGrading = !!openTextGrading[currentQIndex];
-                  const gradeError = openTextError[currentQIndex];
-                  const isCorrect = isChecked && (aiResult
-                    ? aiResult.score >= aiResult.maxScore
-                    : checkOpenAnswerMatch(typed, currentQ.correctAnswerText || ''));
-
-                  return (
-                    <div className="space-y-5 pt-4 border-t border-[#E6DDCB]">
-                      <div className="space-y-1">
-                        <label className="text-xs font-bold text-[#C79B3A] uppercase tracking-wider block">
-                          ჩაწერეთ ღია პასუხი:
-                        </label>
-                        <p className="text-xs text-[#666666]">
-                          შეიყვანეთ პასუხი ტექსტურად. ბაზის სწორ პასუხთან დაახლოებითი დამთხვევაც ჩაითვლება სწორად.
-                        </p>
-                      </div>
-
-                      <textarea
-                        value={typed}
-                        disabled={isChecked}
-                        onChange={(e) => setOpenTextAnswers({ ...openTextAnswers, [currentQIndex]: e.target.value })}
-                        placeholder="ჩაწერეთ თქვენი პასუხი აქ..."
-                        rows={3}
-                        className="w-full bg-[#FAF8F3] border-2 border-[#E6DDCB] focus:border-[#C79B3A] rounded-2xl p-4 text-sm sm:text-base text-[#0D1B2A] focus:outline-none focus:ring-2 focus:ring-[#C79B3A]/30 resize-none disabled:opacity-80"
-                      />
-
-                      {!isChecked ? (
-                        <div className="space-y-3">
-                          <button
-                            onClick={handleCheckOpenText}
-                            disabled={!typed.trim() || isGrading}
-                            className="px-6 py-3 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md cursor-pointer disabled:opacity-40 flex items-center gap-2"
-                          >
-                            <Send className="w-4 h-4" />
-                            <span>{isGrading ? 'მიმდინარეობს შეფასება...' : 'პასუხის გაგზავნა'}</span>
-                          </button>
-                          {gradeError && (
-                            <div className="p-3 rounded-xl border border-rose-300 bg-rose-50 text-rose-800 text-xs font-semibold">
-                              {gradeError}
-                            </div>
-                          )}
-                        </div>
-                      ) : aiResult ? (
-                        <div className={`p-4 rounded-2xl border text-xs sm:text-sm font-semibold space-y-2 ${
-                          isCorrect ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : (aiResult.score > 0 ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-rose-50 border-rose-300 text-rose-800')
-                        }`}>
-                          <div className="flex items-center gap-2">
-                            {isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" /> : <XCircle className="w-5 h-5 shrink-0" />}
-                            <div className="text-base font-bold">ქულა: {aiResult.score} / {aiResult.maxScore}</div>
-                          </div>
-                          {aiResult.feedback && (
-                            <div className="text-xs font-normal leading-relaxed">{aiResult.feedback}</div>
-                          )}
-                          {aiResult.correctAnswer && (
-                            <div className="text-xs font-normal opacity-90 pt-1 border-t border-black/10">
-                              სწორი პასუხის მაგალითი: <strong>{aiResult.correctAnswer}</strong>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className={`p-4 rounded-2xl border text-xs sm:text-sm font-semibold flex items-center justify-between gap-3 ${
-                          isCorrect ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-rose-50 border-rose-300 text-rose-800'
-                        }`}>
-                          <div className="flex items-center gap-2">
-                            {isCorrect ? <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" /> : <XCircle className="w-5 h-5 text-rose-600 shrink-0" />}
-                            <div>
-                              <div>{isCorrect ? 'სწორია! თქვენი პასუხი ემთხვევა სწორ პასუხს.' : 'არასწორია.'}</div>
-                              {currentQ.correctAnswerText && (
-                                <div className="text-xs font-normal opacity-90 mt-0.5">
-                                  ბაზის სწორი პასუხი: <strong>{currentQ.correctAnswerText}</strong>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-
-                /* 3. MULTIPLE CHOICE QUESTION TYPE (MCQ) */
-                return (
-                  <div className="space-y-3 pt-4 border-t border-[#E6DDCB]">
-                    {currentQ.options.map((optText, optIdx) => {
-                      const isSelected = selectedAnswers[currentQIndex] === optIdx;
-                      const isCorrect = currentQ.correctAnswerIndex === optIdx;
-                      const isAnswered = selectedAnswers[currentQIndex] !== -1;
-
-                      let borderClass = 'border-[#E6DDCB] bg-white hover:border-[#C79B3A] hover:bg-[#FAF8F3]';
-                      let badgeClass = 'bg-[#F5F2EA] text-[#0D1B2A]';
-
-                      if (isAnswered) {
-                        if (isCorrect) {
-                          borderClass = 'border-emerald-500 bg-emerald-50 text-emerald-900 font-bold';
-                          badgeClass = 'bg-emerald-600 text-white';
-                        } else if (isSelected) {
-                          borderClass = 'border-rose-500 bg-rose-50 text-rose-900 font-bold';
-                          badgeClass = 'bg-rose-600 text-white';
-                        }
-                      } else if (isSelected) {
-                        borderClass = 'border-[#C79B3A] bg-[#FAF8F3] ring-2 ring-[#C79B3A]/30 font-bold';
-                        badgeClass = 'bg-[#C79B3A] text-white';
-                      }
-
-                      const optLabels = ['ა', 'ბ', 'გ', 'დ'];
-
-                      return (
-                        <button
-                          key={optIdx}
-                          onClick={() => handleSelectOptionInline(optIdx)}
-                          disabled={isAnswered}
-                          className={`w-full p-4 sm:p-5 rounded-2xl border-2 text-left transition-all flex items-center gap-4 ${
-                            isAnswered ? 'cursor-default' : 'cursor-pointer'
-                          } ${borderClass}`}
-                        >
-                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-bold shrink-0 transition-colors ${badgeClass}`}>
-                            {optLabels[optIdx] || optIdx + 1}
-                          </div>
-                          <span className="text-sm sm:text-base leading-relaxed flex-1">
-                            {optText}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
-
-              {/* Instant Explanation when answered */}
-              {selectedAnswers[currentQIndex] !== -1 && activeInlineTest.questions[currentQIndex]?.explanation && (
-                <div className="p-5 bg-[#FAF8F3] rounded-2xl border border-[#C79B3A]/40 space-y-1.5 animate-fade-in">
-                  <span className="text-xs font-bold text-[#C79B3A] uppercase tracking-wider block">
-                    განმარტება:
-                  </span>
-                  <p className="text-xs sm:text-sm text-[#0D1B2A] leading-relaxed">
-                    {activeInlineTest.questions[currentQIndex]?.explanation}
-                  </p>
-                </div>
-              )}
-
-              {/* Navigation Controls: Previous, Next, Finish */}
-              <div className="space-y-3 pt-6 border-t border-[#E6DDCB]">
-                <div className="flex items-center justify-between">
-                  <button
-                    onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))}
-                    disabled={currentQIndex === 0}
-                    className="px-5 py-2.5 bg-[#FAF8F3] hover:bg-[#E6DDCB] border border-[#E6DDCB] text-[#0D1B2A] text-xs font-bold rounded-xl transition-all disabled:opacity-40 cursor-pointer"
-                  >
-                    წინა შეკითხვა
-                  </button>
-
-                  {currentQIndex < activeInlineTest.questions.length - 1 ? (
-                    <button
-                      onClick={() => setCurrentQIndex(prev => Math.min(activeInlineTest.questions.length - 1, prev + 1))}
-                      className="px-6 py-3 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md cursor-pointer"
-                    >
-                      შემდეგი შეკითხვა
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleFinishInlineTest}
-                      className="px-6 py-3 bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md cursor-pointer"
-                    >
-                      ტესტის დასრულება
-                    </button>
-                  )}
-                </div>
-
-                {/* Keyboard Shortcuts Hint */}
-                <div className="hidden sm:flex items-center justify-center gap-2 text-[11px] text-[#8A8A8A] pt-1">
-                  <Keyboard className="w-3.5 h-3.5 text-[#C79B3A]" />
-                  <span>
-                    კლავიატურა: <strong className="text-[#0D1B2A]">1–4</strong> ან <strong className="text-[#0D1B2A]">ა–დ</strong> პასუხის ასარჩევად • <strong className="text-[#0D1B2A]">← / →</strong> გადასასვლელად
-                  </span>
-                </div>
-              </div>
-
-            </div>
+            <InlineTestRunner
+              activeInlineTest={activeInlineTest}
+              selectedCategoryKey={selectedCategoryKey}
+              currentQIndex={currentQIndex}
+              selectedAnswers={selectedAnswers}
+              tabSwitchCount={tabSwitchCount}
+              chronologyOrders={chronologyOrders}
+              chronologyChecked={chronologyChecked}
+              openTextAnswers={openTextAnswers}
+              openTextChecked={openTextChecked}
+              openTextScores={openTextScores}
+              openTextGrading={openTextGrading}
+              openTextError={openTextError}
+              onSelectQuestionIndex={setCurrentQIndex}
+              onSelectOptionInline={handleSelectOptionInline}
+              onMoveChronologyItem={handleMoveChronologyItem}
+              onCheckChronology={handleCheckChronology}
+              onChangeOpenTextAnswer={(qIdx, val) => setOpenTextAnswers({ ...openTextAnswers, [qIdx]: val })}
+              onCheckOpenText={handleCheckOpenText}
+              onFinishTest={handleFinishInlineTest}
+              onOpenLightbox={(url) => {
+                setInlineLightboxZoom(1);
+                setInlineLightboxUrl(url);
+              }}
+            />
           ) : (
-            /* FINISHED TEST SUMMARY SCREEN */
-            <div className="bg-white rounded-3xl border-2 border-[#C79B3A] p-6 sm:p-12 text-center space-y-8 shadow-xl animate-fade-in">
-              {(() => {
-                let correctCount = 0;
-                let earnedPoints = 0;
-                let totalPoints = 0;
-                const pointsMode = activeInlineTest.questions.length > 0 && activeInlineTest.questions.every(q => !!q.maxScore);
-                const questionOutcomes = activeInlineTest.questions.map((q, idx) => {
-                  if (pointsMode) {
-                    totalPoints += q.maxScore || 0;
-                    earnedPoints += openTextScores[idx]?.score || 0;
-                  }
-                  let isCorrect = false;
-                  if (q.questionType === 'chronology') {
-                    const order = chronologyOrders[idx] || q.chronologyItems || [];
-                    isCorrect = checkChronologyItemsMatch(order, q.chronologyItems || [], q.correctSequence || [0, 1, 2]);
-                  } else if (q.questionType === 'open_text') {
-                    const typed = openTextAnswers[idx] || '';
-                    const graded = openTextScores[idx];
-                    isCorrect = graded ? graded.score >= graded.maxScore : (!q.maxScore && checkOpenAnswerMatch(typed, q.correctAnswerText || ''));
-                  } else {
-                    isCorrect = selectedAnswers[idx] === q.correctAnswerIndex;
-                  }
-                  if (isCorrect) correctCount++;
-                  return { q, idx, isCorrect };
-                });
-
-                const totalCount = activeInlineTest.questions.length;
-                const mistakeCount = totalCount - correctCount;
-                const scorePct = pointsMode
-                  ? (totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0)
-                  : (totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0);
-
-                const displayedOutcomes = reviewFilter === 'mistakes' && mistakeCount > 0
-                  ? questionOutcomes.filter(item => !item.isCorrect)
-                  : questionOutcomes;
-
-                const optLabels = ['ა', 'ბ', 'გ', 'დ'];
-
-                return (
-                  <div className="space-y-8">
-                    <div className="space-y-6 max-w-lg mx-auto">
-                      <div className="w-20 h-20 mx-auto rounded-3xl bg-[#FAF8F3] border-2 border-[#C79B3A] flex items-center justify-center shadow-md">
-                        <Award className="w-10 h-10 text-[#C79B3A]" />
-                      </div>
-
-                      <div className="space-y-2">
-                        <h2 className="font-serif font-bold text-3xl text-[#0D1B2A]">
-                          ტესტი დასრულებულია!
-                        </h2>
-                        <p className="text-sm text-[#666666]">
-                          {activeInlineTest.title}
-                        </p>
-                      </div>
-
-                      <div className="p-6 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-4">
-                        <div className="text-4xl font-serif font-bold text-[#C79B3A]">
-                          {pointsMode ? `${earnedPoints} / ${totalPoints} ქულა` : `${scorePct}%`}
-                        </div>
-                        {pointsMode && (
-                          <div className="text-xs font-semibold text-[#666666]">{scorePct}%</div>
-                        )}
-                        <div className="grid grid-cols-2 gap-4 text-xs font-semibold pt-2 border-t border-[#E6DDCB]">
-                          <div className="text-emerald-700 bg-emerald-50 py-2 rounded-xl border border-emerald-200">
-                            სწორი: {correctCount}
-                          </div>
-                          <div className="text-rose-700 bg-rose-50 py-2 rounded-xl border border-rose-200">
-                            არასწორი: {mistakeCount}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Tab Switch Anti-cheating Status */}
-                      <div className="p-3.5 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] text-xs font-bold shadow-xs">
-                        {switchCountRef.current > 0 ? (
-                          <span className="text-amber-800 flex items-center justify-center gap-2">
-                            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                            <span>⚠️ ტესტის მიმდინარეობისას {switchCountRef.current}-ჯერ დაფიქსირდა გვერდის/ტაბის დატოვება</span>
-                          </span>
-                        ) : (
-                          <span className="text-emerald-800 flex items-center justify-center gap-2">
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                            <span>✓ გვერდის/ტაბის დატოვება არ დაფიქსირებულა</span>
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
-                        <button
-                          onClick={handleRestartInlineTest}
-                          className="w-full py-3.5 bg-[#FAF8F3] hover:bg-[#E6DDCB] border border-[#E6DDCB] text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
-                        >
-                          <RotateCcw className="w-4 h-4 text-[#C79B3A]" />
-                          <span>თავიდან გაკეთება</span>
-                        </button>
-
-                        <button
-                          onClick={() => setActiveInlineTest(null)}
-                          className="w-full py-3.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
-                        >
-                          <BookOpen className="w-4 h-4" />
-                          <span>ტესტებში დაბრუნება</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* 3.3 Detailed Mistake & Question Review */}
-                    <div className="border-t-2 border-[#E6DDCB] pt-8 text-left space-y-5 max-w-3xl mx-auto">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div>
-                          <h3 className="font-serif font-bold text-xl text-[#0D1B2A]">
-                            შედეგების დეტალური გარჩევა
-                          </h3>
-                          <p className="text-xs text-[#666666]">
-                            გადახედეთ თქვენს პასუხებს, სწორ ვარიანტებსა და განმარტებებს
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setReviewFilter('mistakes')}
-                            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                              reviewFilter === 'mistakes' && mistakeCount > 0
-                                ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
-                                : 'bg-[#FAF8F3] text-[#0D1B2A] border-[#E6DDCB] hover:border-[#C79B3A]'
-                            }`}
-                          >
-                            შეცდომები ({mistakeCount})
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setReviewFilter('all')}
-                            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                              reviewFilter === 'all' || mistakeCount === 0
-                                ? 'bg-[#0D1B2A] text-white border-[#0D1B2A] shadow-xs'
-                                : 'bg-[#FAF8F3] text-[#0D1B2A] border-[#E6DDCB] hover:border-[#C79B3A]'
-                            }`}
-                          >
-                            ყველა კითხვა ({totalCount})
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4">
-                        {displayedOutcomes.map(({ q, idx, isCorrect }) => {
-                          const userAnsIdx = selectedAnswers[idx];
-                          const userAnsText =
-                            q.questionType === 'chronology'
-                              ? (chronologyOrders[idx] || q.chronologyItems || []).join(' ➔ ')
-                              : q.questionType === 'open_text'
-                              ? openTextAnswers[idx] || 'პასუხი არ გაცემულა'
-                              : userAnsIdx !== undefined && userAnsIdx >= 0 && q.options[userAnsIdx]
-                              ? `${optLabels[userAnsIdx] || userAnsIdx + 1}) ${q.options[userAnsIdx]}`
-                              : 'პასუხი არ გაცემულა';
-
-                          const correctAnsText =
-                            q.questionType === 'chronology'
-                              ? (q.correctSequence || [1, 2, 3])
-                                  .map(seqIdx => {
-                                    const orig = q.chronologyItems || [];
-                                    const i = seqIdx > 0 && seqIdx <= orig.length ? seqIdx - 1 : seqIdx;
-                                    return orig[i] || '';
-                                  })
-                                  .join(' ➔ ')
-                              : q.questionType === 'open_text'
-                              ? openTextScores[idx]?.correctAnswer || q.correctAnswerText || ''
-                              : q.options[q.correctAnswerIndex]
-                              ? `${optLabels[q.correctAnswerIndex] || q.correctAnswerIndex + 1}) ${q.options[q.correctAnswerIndex]}`
-                              : '';
-
-                          return (
-                            <div
-                              key={q.id || idx}
-                              className={`p-5 rounded-2xl border-2 space-y-3 ${
-                                isCorrect
-                                  ? 'bg-emerald-50/40 border-emerald-200'
-                                  : 'bg-rose-50/40 border-rose-200'
-                              }`}
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="flex items-start gap-2.5">
-                                  <span className="px-2.5 py-0.5 bg-[#0D1B2A] text-[#C79B3A] font-mono font-bold text-xs rounded-md shrink-0 mt-0.5">
-                                    #{idx + 1}
-                                  </span>
-                                  <p className="font-serif font-bold text-base text-[#0D1B2A] leading-snug">
-                                    {q.prompt}
-                                  </p>
-                                </div>
-                                <span
-                                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold shrink-0 inline-flex items-center gap-1 ${
-                                    isCorrect
-                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                      : 'bg-rose-100 text-rose-800 border border-rose-300'
-                                  }`}
-                                >
-                                  {isCorrect ? (
-                                    <>
-                                      <CheckCircle2 className="w-3.5 h-3.5" />
-                                      <span>სწორია</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <XCircle className="w-3.5 h-3.5" />
-                                      <span>შეცდომა</span>
-                                    </>
-                                  )}
-                                </span>
-                              </div>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
-                                <div
-                                  className={`p-3 rounded-xl border ${
-                                    isCorrect
-                                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                                      : 'bg-rose-50 border-rose-200 text-rose-900'
-                                  }`}
-                                >
-                                  <span className="block font-bold uppercase tracking-wider text-[10px] opacity-75 mb-1">
-                                    თქვენი პასუხი:
-                                  </span>
-                                  <span className="font-semibold">{userAnsText}</span>
-                                </div>
-
-                                {!isCorrect && correctAnsText && (
-                                  <div className="p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-900">
-                                    <span className="block font-bold uppercase tracking-wider text-[10px] opacity-75 mb-1">
-                                      სწორი პასუხი:
-                                    </span>
-                                    <span className="font-semibold">{correctAnsText}</span>
-                                  </div>
-                                )}
-                              </div>
-
-                              {(q.explanation || openTextScores[idx]?.feedback) && (
-                                <div className="p-3.5 bg-white rounded-xl border border-[#E6DDCB] text-xs text-[#0D1B2A] space-y-1">
-                                  <span className="font-bold text-[#C79B3A] uppercase tracking-wider text-[10px] block">
-                                    განმარტება:
-                                  </span>
-                                  <p className="leading-relaxed">
-                                    {openTextScores[idx]?.feedback || q.explanation}
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
+            <InlineTestSummary
+              activeInlineTest={activeInlineTest}
+              selectedAnswers={selectedAnswers}
+              chronologyOrders={chronologyOrders}
+              openTextAnswers={openTextAnswers}
+              openTextScores={openTextScores}
+              switchCount={switchCountRef.current}
+              onRestartTest={handleRestartInlineTest}
+              onExitToTests={handleExitInlineTest}
+            />
           )}
 
-          {/* FULLSCREEN LIGHTBOX MODAL FOR INLINE TEST MAPS / ILLUSTRATIONS */}
-          {inlineLightboxUrl && (
-            <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xs flex flex-col">
-              <div className="px-6 py-4 bg-[#0D1B2A] border-b border-white/15 flex items-center justify-between text-white">
-                <div className="flex items-center gap-3">
-                  <MapPin className="w-5 h-5 text-[#C79B3A]" />
-                  <span className="font-serif font-bold text-base">
-                    მასშტაბი {Math.round(inlineLightboxZoom * 100)}%
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setInlineLightboxZoom(z => Math.max(0.75, +(z - 0.25).toFixed(2)))}
-                    className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
-                    title="დაპატარავება"
-                  >
-                    <ZoomOut className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInlineLightboxZoom(z => Math.min(3.5, +(z + 0.25).toFixed(2)))}
-                    className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
-                    title="გადიდება"
-                  >
-                    <ZoomIn className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInlineLightboxZoom(1)}
-                    className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
-                    title="100%"
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setInlineLightboxUrl(null)}
-                    className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                    <span>დახურვა</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-auto p-6 flex items-start justify-center">
-                <img
-                  src={inlineLightboxUrl}
-                  alt="სურათი სრულ ეკრანზე"
-                  style={{
-                    width: `${inlineLightboxZoom * 100}%`,
-                    maxWidth: 'none'
-                  }}
-                  className="rounded-xl shadow-2xl transition-all duration-150"
-                  referrerPolicy="no-referrer"
-                  draggable={false}
-                />
-              </div>
-            </div>
-          )}
-
+          <QuestionImageLightbox
+            imageUrl={inlineLightboxUrl}
+            zoom={inlineLightboxZoom}
+            onZoomChange={setInlineLightboxZoom}
+            onResetZoom={() => setInlineLightboxZoom(1)}
+            onClose={() => setInlineLightboxUrl(null)}
+          />
         </div>
       ) : (
-        /* STANDARD CATEGORIES & TESTS SELECTION VIEW */
         <>
-          {/* Header */}
           {!loading && !selectedCategoryKey ? (
-            <>
-              <div className="text-center max-w-3xl mx-auto space-y-4 pt-4">
-                <span className="px-3.5 py-1 bg-[#FAF8F3] border border-[#C79B3A]/40 text-[#C79B3A] text-[11px] font-bold uppercase tracking-[0.25em] rounded-full inline-flex items-center gap-1.5 shadow-sm">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>აკადემიური ტესტირება</span>
-                </span>
-                <h1 className="font-serif font-bold text-3xl sm:text-5xl text-[#0D1B2A] leading-tight">
-                  ისტორიის ტესტები და გამოცდები
-                </h1>
-                <p className="text-sm sm:text-base text-[#666666] max-w-2xl mx-auto">
-                  აირჩიეთ სასურველი კატეგორია. ბაზაში დამატებულია 11-ვე თავის რეალური კითხვები, რუკები, წყაროები და ილუსტრაციები.
-                </p>
-              </div>
-
-
-
-              {/* 1. ეროვნული გამოცდების კატეგორიები */}
-              <div className="space-y-6">
-                <div className="border-b border-[#E6DDCB] pb-3 flex items-center justify-between">
-                  <h2 className="font-serif font-bold text-2xl text-[#0D1B2A]">
-                    ეროვნულის ტესტები
-                  </h2>
-                </div>
-
-                {/* იმიტირებული ტესტირება (Mock Exam Banner) */}
-                {isMockExamActive && mockBanner ? (
-                  <div
-                    onClick={handleOpenMockExam}
-                    className="relative bg-[#0D1B2A] text-white p-6 sm:p-8 rounded-3xl border-2 border-[#C79B3A] shadow-xl hover:shadow-2xl transition-all duration-300 cursor-pointer group overflow-hidden"
-                  >
-                    <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-10 bg-[radial-gradient(#C79B3A_1px,transparent_1px)] bg-[size:16px_16px] pointer-events-none" />
-
-                    <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-                      <div className="flex items-start gap-5">
-                        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#C79B3A] text-[#0D1B2A] flex items-center justify-center shrink-0 shadow-md group-hover:scale-105 transition-transform">
-                          <Clock className="w-7 h-7 sm:w-8 sm:h-8" />
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="px-3 py-0.5 bg-emerald-500 text-white text-[10px] font-bold uppercase tracking-wider rounded-full inline-flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                              <span>აქტიურია</span>
-                            </span>
-                            <span className="px-2.5 py-0.5 bg-white/10 text-[#C79B3A] text-[10px] font-bold uppercase tracking-wider rounded-full border border-[#C79B3A]/40">
-                              N1–N38 სრული ვარიანტი
-                            </span>
-                            <span className="px-2.5 py-0.5 bg-white/10 text-[#FAF8F3] text-[11px] font-medium rounded-full">
-                              დრო: {mockBanner.duration_minutes} წთ
-                            </span>
-                          </div>
-
-                          <h3 className="font-serif font-bold text-2xl sm:text-3xl text-[#FAF8F3] group-hover:text-[#C79B3A] transition-colors">
-                            იმიტირებული ტესტირება — {mockBanner.title}
-                          </h3>
-                          <p className="text-xs sm:text-sm text-[#FAF8F3]/80 max-w-2xl leading-relaxed">
-                            ეროვნული გამოცდის სრული იმიტაცია (35 არჩევითპასუხიანი კითხვა, რუკა N36, ანალოგიები N37, ისტორიული წყარო N38). არჩეული თავები: {mockBanner.selected_chapters.join(', ')}.
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="w-full md:w-auto shrink-0">
-                        <button
-                          type="button"
-                          disabled={openingMockExam}
-                          className="w-full md:w-auto px-6 py-3.5 bg-[#C79B3A] group-hover:bg-[#E6C86B] text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                          {!isLoggedIn ? (
-                            <>
-                              <LogIn className="w-4 h-4" />
-                              <span>შესვლა და დაწყება</span>
-                            </>
-                          ) : (
-                            <>
-                              <span>{openingMockExam ? 'იხსნება...' : 'გამოცდაზე შესვლა'}</span>
-                              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-[#FAF8F3] p-6 sm:p-7 rounded-2xl border border-[#E6DDCB] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 opacity-80">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-white border border-[#E6DDCB] flex items-center justify-center text-[#8A8A8A] shrink-0">
-                        <Clock className="w-6 h-6" />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-serif font-bold text-lg text-[#0D1B2A]">
-                            იმიტირებული ტესტირება
-                          </h3>
-                          <span className="px-2.5 py-0.5 bg-white border border-[#E6DDCB] text-[#8A8A8A] text-[10px] font-bold uppercase tracking-wider rounded-full">
-                            არააქტიური
-                          </span>
-                        </div>
-                        <p className="text-xs text-[#666666]">
-                          ამჟამად იმიტირებული გამოცდა არ მიმდინარეობს
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {TEST_CATEGORIES.slice(0, 4).map((cat) => {
-                    const details = categoryItemDetailsMap[cat.key];
-                    return (
-                      <div
-                        key={cat.key}
-                        onClick={() => handleSelectCategory(cat.key)}
-                        className="bg-white p-6 sm:p-7 rounded-2xl border border-[#E6DDCB] shadow-sm hover:border-[#C79B3A] hover:bg-[#FAF8F3]/40 hover:shadow-md transition-all duration-300 cursor-pointer group flex items-start gap-5 relative overflow-hidden"
-                      >
-                        <div className="w-14 h-14 rounded-xl bg-[#F5F2EA] border border-[#E6DDCB] flex items-center justify-center shrink-0 group-hover:bg-[#C79B3A] group-hover:border-[#C79B3A] transition-all duration-300 shadow-xs">
-                          {getCategoryIcon(cat.key)}
-                        </div>
-
-                        <div className="space-y-2 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="px-2 py-0.5 bg-[#FAF8F3] text-[#C79B3A] text-[10px] font-bold rounded uppercase tracking-wider border border-[#E6DDCB]">
-                              {cat.badge}
-                            </span>
-                            
-                            <span className="px-2.5 py-0.5 bg-[#FAF8F3] text-[#13253D] text-[11px] font-bold rounded-full border border-[#E6DDCB] flex items-center gap-1">
-                              <Database className="w-3 h-3 text-[#C79B3A]" />
-                              <span>
-                                {loading ? 'ტვირთვა...' : details && details.count > 0 ? `${details.count} ${details.unitLabel} ბაზაში` : 'ბაზა ემზადება'}
-                              </span>
-                            </span>
-                          </div>
-
-                          <h3 className="font-serif font-bold text-xl text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors leading-snug">
-                            {cat.title}
-                          </h3>
-                          <p className="text-xs text-[#666666] leading-relaxed">
-                            {cat.subtitle}
-                          </p>
-
-                          <div className="pt-2 flex items-center gap-2 text-xs font-bold text-[#C79B3A]">
-                            <span>ტესტების გახსნა</span>
-                            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 2. სხვა ტესტები */}
-              <div className="space-y-6">
-                <div className="border-b border-[#E6DDCB] pb-3">
-                  <h2 className="font-serif font-bold text-2xl text-[#0D1B2A]">
-                    სხვა ტესტები
-                  </h2>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {TEST_CATEGORIES.slice(4).map((cat) => {
-                    const details = categoryItemDetailsMap[cat.key];
-                    return (
-                      <div
-                        key={cat.key}
-                        onClick={() => handleSelectCategory(cat.key)}
-                        className="bg-white p-6 sm:p-7 rounded-2xl border border-[#E6DDCB] shadow-sm hover:border-[#C79B3A] hover:bg-[#FAF8F3]/40 hover:shadow-md transition-all duration-300 cursor-pointer group flex items-start gap-5"
-                      >
-                        <div className="w-14 h-14 rounded-xl bg-[#F5F2EA] border border-[#E6DDCB] flex items-center justify-center shrink-0 group-hover:bg-[#C79B3A] group-hover:border-[#C79B3A] transition-all duration-300 shadow-xs">
-                          {getCategoryIcon(cat.key)}
-                        </div>
-
-                        <div className="space-y-2 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="px-2 py-0.5 bg-[#FAF8F3] text-[#C79B3A] text-[10px] font-bold rounded uppercase tracking-wider border border-[#E6DDCB]">
-                              {cat.badge}
-                            </span>
-
-                            <span className="px-2.5 py-0.5 bg-[#FAF8F3] text-[#13253D] text-[11px] font-bold rounded-full border border-[#E6DDCB] flex items-center gap-1">
-                              <Database className="w-3 h-3 text-[#C79B3A]" />
-                              <span>
-                                {loading ? 'ტვირთვა...' : details && details.count > 0 ? `${details.count} ${details.unitLabel} ბაზაში` : 'ბაზა ემზადება'}
-                              </span>
-                            </span>
-                          </div>
-
-                          <h3 className="font-serif font-bold text-xl text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors leading-snug">
-                            {cat.title}
-                          </h3>
-                          <p className="text-xs text-[#666666] leading-relaxed">
-                            {cat.subtitle}
-                          </p>
-
-                          <div className="pt-2 flex items-center gap-2 text-xs font-bold text-[#C79B3A]">
-                            <span>დავალებების გახსნა</span>
-                            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </>
+            <TestCategoryGrid
+              loading={loading}
+              isLoggedIn={isLoggedIn}
+              isMockExamActive={isMockExamActive}
+              mockBanner={mockBanner}
+              openingMockExam={openingMockExam}
+              categoryItemDetailsMap={categoryItemDetailsMap}
+              onOpenMockExam={handleOpenMockExam}
+              onSelectCategory={handleSelectCategory}
+            />
           ) : !loading && selectedCategoryKey ? (
-            /* CATEGORY SELECTED VIEW */
-            <div className="space-y-8 animate-in fade-in duration-300">
-              
-              {/* Back & Category Header */}
-              <div className="space-y-4">
-                <button
-                  onClick={() => setSelectedCategoryKey(null)}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#FAF8F3] hover:bg-[#E6DDCB]/60 border border-[#E6DDCB] text-[#13253D] text-xs font-bold rounded-xl transition-all cursor-pointer shadow-sm"
-                >
-                  <ChevronLeft className="w-4 h-4 text-[#C79B3A]" />
-                  <span>ყველა ტესტში დაბრუნება</span>
-                </button>
-
-                <div className="bg-[#0D1B2A] text-white rounded-3xl p-6 sm:p-8 shadow-xl border-4 border-[#C79B3A]/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
-                  <div className="space-y-2 z-10">
-                    <div className="flex items-center gap-2">
-                      <span className="px-3 py-1 bg-[#C79B3A] text-[#0D1B2A] text-[10px] font-bold uppercase tracking-widest rounded-full">
-                        არჩეული კატეგორია
-                      </span>
-                      <span className="px-3 py-1 bg-white/10 text-[#FAF8F3] text-[11px] font-bold rounded-full border border-white/20">
-                        ბაზაშია {categoryItemDetailsMap[selectedCategoryKey]?.count || 0} {categoryItemDetailsMap[selectedCategoryKey]?.unitLabel || 'კითხვა'}
-                      </span>
-                    </div>
-                    <h2 className="font-serif font-bold text-2xl sm:text-4xl text-[#FAF8F3]">
-                      {activeCategoryMeta?.title}
-                    </h2>
-                    <p className="text-xs sm:text-sm text-[#FAF8F3]/80 max-w-xl">
-                      {activeCategoryMeta?.subtitle}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* CHRONOLOGY SPECIAL CATEGORY WORKFLOW (INDEPENDENT & OPEN TO ALL) */}
-              {selectedCategoryKey === 'chronology' ? (
-                <div className="bg-white p-8 sm:p-12 rounded-3xl border-2 border-[#C79B3A] shadow-xl text-center space-y-6 max-w-2xl mx-auto animate-fade-in">
-                  <div className="w-16 h-16 rounded-2xl bg-[#FAF8F3] border border-[#C79B3A]/40 flex items-center justify-center mx-auto text-[#C79B3A] shadow-xs">
-                    <Clock className="w-8 h-8" />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <span className="px-3.5 py-1 bg-[#FAF8F3] border border-[#C79B3A]/40 text-[#C79B3A] text-[10px] font-bold uppercase tracking-widest rounded-full inline-block">
-                      დამოუკიდებელი დავალება
-                    </span>
-                    <h3 className="font-serif font-bold text-2xl sm:text-3xl text-[#0D1B2A]">
-                      ქრონოლოგიის დავალებები
-                    </h3>
-                    <p className="text-xs sm:text-sm text-[#666666] leading-relaxed max-w-md mx-auto">
-                      ქრონოლოგიის კითხვებში მოსწავლემ უნდა დაალაგოს 3 მოვლენის სწორი თანმიმდევრობა (1-ლიდან 3-მდე).
-                    </p>
-                    <div className="pt-2">
-                      <span className="inline-block px-4 py-1.5 bg-[#FAF8F3] border border-[#E6DDCB] text-[#13253D] text-xs font-bold rounded-full">
-                        სულ ბაზაშია {categoryTotalCounts['chronology'] || categoryQuestions.length || 0} კითხვა (თანმიმდევრობით)
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Chronology Progress Bar or Auth Notice */}
-                  {(() => {
-                    if (!isLoggedIn) {
-                      return (
-                        <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] flex items-center justify-between gap-3 max-w-xl mx-auto">
-                          <div className="flex items-center gap-2 text-xs font-semibold text-[#0D1B2A] text-left">
-                            <Lock className="w-4 h-4 text-[#C79B3A] shrink-0" />
-                            <span>პროგრესის შესანახად და სანახავად გაიარეთ ავტორიზაცია</span>
-                          </div>
-                          {onOpenAuth && (
-                            <button
-                              onClick={onOpenAuth}
-                              className="px-3.5 py-1.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold rounded-xl transition-all shrink-0 cursor-pointer shadow-xs"
-                            >
-                              ავტორიზაცია
-                            </button>
-                          )}
-                        </div>
-                      );
-                    }
-
-                    const totalQ = categoryTotalCounts['chronology'] || categoryQuestions.length || 0;
-                    const stats = getChapterStats('chronology', 'all', totalQ);
-
-                    return (
-                      <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-3 max-w-xl mx-auto text-left">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold text-[#0D1B2A]">
-                            ქრონოლოგიის პროგრესი
-                          </span>
-                          <span className="text-[11px] font-mono font-bold text-[#C79B3A]">
-                            {stats.pct}% შესრულებული
-                          </span>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <div className="w-full h-3 bg-[#E6DDCB] rounded-full overflow-hidden flex">
-                            <div 
-                              style={{ width: `${stats.total > 0 ? (stats.correct / stats.total) * 100 : 0}%` }}
-                              className="bg-emerald-500 h-full transition-all duration-500"
-                              title={`სწორი: ${stats.correct}`}
-                            />
-                            <div 
-                              style={{ width: `${stats.total > 0 ? (stats.incorrect / stats.total) * 100 : 0}%` }}
-                              className="bg-rose-500 h-full transition-all duration-500"
-                              title={`არასწორი: ${stats.incorrect}`}
-                            />
-                            <div 
-                              style={{ width: `${stats.total > 0 ? (stats.unattempted / stats.total) * 100 : 0}%` }}
-                              className="bg-gray-200 h-full transition-all duration-500"
-                              title={`არ გაუკეთებია: ${stats.unattempted}`}
-                            />
-                          </div>
-
-                          <div className="grid grid-cols-3 text-center text-[11px] font-semibold pt-1">
-                            <div className="flex items-center justify-center gap-1 text-emerald-700">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                              <span>სწორი: {stats.correct}</span>
-                            </div>
-                            <div className="flex items-center justify-center gap-1 text-rose-700">
-                              <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                              <span>არასწორი: {stats.incorrect}</span>
-                            </div>
-                            <div className="flex items-center justify-center gap-1 text-gray-600">
-                              <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
-                              <span>დარჩა: {stats.unattempted}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="pt-2 flex justify-end">
-                          <button
-                            onClick={handleResetCategoryProgress}
-                            disabled={isResetting}
-                            className="px-3 py-1.5 bg-white hover:bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl transition-colors flex items-center gap-1 shrink-0 cursor-pointer disabled:opacity-50"
-                          >
-                            <RotateCcw className="w-3 h-3 text-rose-600" />
-                            <span>დარესეტება</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  <button
-                    onClick={handleStartRandomTest}
-                    disabled={loading}
-                    className="w-full sm:w-auto px-8 py-4 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-2xl transition-all shadow-md inline-flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                  >
-                    <Play className="w-4 h-4 fill-current" />
-                    <span>ქრონოლოგიის ტესტის დაწყება</span>
-                  </button>
-                </div>
-              ) : selectedCategoryKey === 'mcq' ? (
-                /* MCQ CATEGORY WORKFLOW (2 BOXES) */
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  
-                  {/* BOX 1: RANDOM QUESTIONS ALL CHAPTERS */}
-                  <div className="bg-white p-6 sm:p-8 rounded-3xl border-2 border-[#E6DDCB] shadow-md hover:border-[#C79B3A] transition-all flex flex-col justify-between space-y-6 relative overflow-hidden group">
-                    <div className="space-y-4">
-                      <div className="w-14 h-14 rounded-2xl bg-[#FAF8F3] border border-[#C79B3A]/40 flex items-center justify-center group-hover:bg-[#C79B3A] group-hover:text-white transition-colors">
-                        <Shuffle className="w-7 h-7 text-[#C79B3A] group-hover:text-white" />
-                      </div>
-
-                      <div className="space-y-2">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-[#C79B3A]">
-                          ბოქსი 1 • სწრაფი ტესტირება
-                        </span>
-                        <h3 className="font-serif font-bold text-2xl text-[#0D1B2A]">
-                          რენდომ კითხვები ყველა თავიდან
-                        </h3>
-                        <p className="text-xs sm:text-sm text-[#666666] leading-relaxed">
-                          გააკეთეთ ტესტი, სადაც კითხვები შემთხვევითად არის შერჩეული პროგრამის ყველა 11-ვე თავიდან.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3 pt-4 border-t border-[#E6DDCB]">
-                      <button
-                        onClick={handleStartRandomTest}
-                        disabled={loading}
-                        className="w-full py-4 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                      >
-                        <Shuffle className="w-4 h-4" />
-                        <span>ტესტის დაწყება (ყველა თავიდან)</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* BOX 2: SELECT BY PROGRAM CHAPTER */}
-                  <div className="bg-white p-6 sm:p-8 rounded-3xl border-2 border-[#C79B3A] shadow-lg flex flex-col justify-between space-y-6 relative overflow-hidden">
-                    <div className="space-y-4">
-                      <div className="w-14 h-14 rounded-2xl bg-[#FAF8F3] border border-[#C79B3A]/40 flex items-center justify-center">
-                        <BookMarked className="w-7 h-7 text-[#C79B3A]" />
-                      </div>
-
-                      <div className="space-y-2">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-[#C79B3A]">
-                          ბოქსი 2 • პროგრამის თავები ({programs.length} თავი)
-                        </span>
-                        <h3 className="font-serif font-bold text-2xl text-[#0D1B2A]">
-                          არჩევა თავის / პროგრამის მიხედვით
-                        </h3>
-                        <p className="text-xs sm:text-sm text-[#666666] leading-relaxed">
-                          აირჩიეთ კონკრეტული თავი 11 თავიდან და გააკეთეთ მხოლოდ იმ თავის კითხვები.
-                        </p>
-                      </div>
-
-                      {/* Chapter Selector Dropdown */}
-                      <div className="space-y-2 pt-2">
-                        <label className="text-xs font-bold text-[#0D1B2A] uppercase tracking-wider block">
-                          აირჩიეთ პროგრამის თავი:
-                        </label>
-                        <select
-                          value={selectedChapterId}
-                          onChange={(e) => setSelectedChapterId(e.target.value)}
-                          className="w-full bg-[#FAF8F3] border border-[#C79B3A] rounded-xl px-4 py-3 text-xs font-bold text-[#0D1B2A] focus:outline-none focus:ring-2 focus:ring-[#C79B3A]"
-                        >
-                          {programs.map((prog) => (
-                            <option key={prog.id} value={prog.id}>
-                              {prog.title} ({getChapterItemDisplay(prog.id)})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Selected Chapter Details & Action */}
-                    <div className="space-y-4 pt-4 border-t border-[#E6DDCB]">
-                      {(() => {
-                        const currProg = programs.find(p => p.id === selectedChapterId);
-                        const totalQ = questionsCountMap[selectedChapterId] ?? 0;
-                        const stats = getChapterStats(selectedCategoryKey, selectedChapterId, totalQ);
-
-                        return (
-                          <div className="space-y-4">
-                            {isLoggedIn ? (
-                              <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs font-bold text-[#0D1B2A]">
-                                    {currProg?.title}
-                                  </span>
-                                  <span className="text-[11px] font-mono font-bold text-[#C79B3A]">
-                                    {stats.pct}% შესრულებული
-                                  </span>
-                                </div>
-
-                                <div className="space-y-1.5">
-                                  <div className="w-full h-3 bg-[#E6DDCB] rounded-full overflow-hidden flex">
-                                    <div 
-                                      style={{ width: `${stats.total > 0 ? (stats.correct / stats.total) * 100 : 0}%` }}
-                                      className="bg-emerald-500 h-full transition-all duration-500"
-                                      title={`სწორი: ${stats.correct}`}
-                                    />
-                                    <div 
-                                      style={{ width: `${stats.total > 0 ? (stats.incorrect / stats.total) * 100 : 0}%` }}
-                                      className="bg-rose-500 h-full transition-all duration-500"
-                                      title={`არასწორი: ${stats.incorrect}`}
-                                    />
-                                    <div 
-                                      style={{ width: `${stats.total > 0 ? (stats.unattempted / stats.total) * 100 : 0}%` }}
-                                      className="bg-gray-200 h-full transition-all duration-500"
-                                      title={`არ გაუკეთებია: ${stats.unattempted}`}
-                                    />
-                                  </div>
-
-                                  <div className="grid grid-cols-3 text-center text-[11px] font-semibold pt-1">
-                                    <div className="flex items-center justify-center gap-1 text-emerald-700">
-                                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                      <span>სწორი: {stats.correct}</span>
-                                    </div>
-                                    <div className="flex items-center justify-center gap-1 text-rose-700">
-                                      <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                                      <span>არასწორი: {stats.incorrect}</span>
-                                    </div>
-                                    <div className="flex items-center justify-center gap-1 text-gray-600">
-                                      <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
-                                      <span>დარჩა: {stats.unattempted}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] flex items-center justify-between gap-3">
-                                <div className="flex items-center gap-2 text-xs font-semibold text-[#0D1B2A]">
-                                  <Lock className="w-4 h-4 text-[#C79B3A] shrink-0" />
-                                  <span>პროგრესის შესანახად და სანახავად: გთხოვთ გაიაროთ ავტორიზაცია</span>
-                                </div>
-                                {onOpenAuth && (
-                                  <button
-                                    onClick={onOpenAuth}
-                                    className="px-3.5 py-1.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold rounded-xl transition-all shrink-0 cursor-pointer shadow-xs"
-                                  >
-                                    ავტორიზაცია
-                                  </button>
-                                )}
-                              </div>
-                            )}
-
-                            <div className="flex flex-col sm:flex-row items-center gap-3">
-                              <button
-                                onClick={() => handleStartChapterTest(selectedChapterId)}
-                                disabled={loading}
-                                className="w-full sm:flex-1 py-3.5 bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                              >
-                                <BookMarked className="w-4 h-4" />
-                                <span>ამ თავის ტესტის დაწყება</span>
-                              </button>
-
-                              {isLoggedIn && (
-                                <button
-                                  onClick={handleResetCategoryProgress}
-                                  disabled={isResetting}
-                                  title="ამ თავის მონაცემების განულება / დარესეტება"
-                                  className="px-4 py-3.5 bg-white hover:bg-rose-50 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50"
-                                >
-                                  <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
-                                  <span>დარესეტება</span>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                  </div>
-
-                </div>
-              ) : (
-                /* MAPS, ANALOGIES, SOURCES, ILLUSTRATIONS WORKFLOW (TASK BOXES BY CHAPTER) */
-                <div className="space-y-6">
-                  
-                  {/* Chapter Selector & Progress Bar Header */}
-                  <div className="bg-white p-6 sm:p-7 rounded-3xl border-2 border-[#E6DDCB] shadow-sm space-y-4">
-                    <label className="text-xs font-bold text-[#0D1B2A] uppercase tracking-wider block">
-                      აირჩიეთ პროგრამის თავი (11 თავი):
-                    </label>
-                    <select
-                      value={selectedChapterId}
-                      onChange={(e) => setSelectedChapterId(e.target.value)}
-                      className="w-full bg-[#FAF8F3] border border-[#C79B3A] rounded-xl px-4 py-3 text-xs font-bold text-[#0D1B2A] focus:outline-none focus:ring-2 focus:ring-[#C79B3A]"
-                    >
-                      {isLoggedIn ? (
-                        <option value="all">
-                          ყველა თავი (სულ {categoryItemDetailsMap[selectedCategoryKey]?.count || 0} {categoryItemDetailsMap[selectedCategoryKey]?.unitLabel || 'დავალება'})
-                        </option>
-                      ) : (
-                        <option value="all">
-                          🔒 ყველა თავი (საჭიროებს ავტორიზაციას)
-                        </option>
-                      )}
-                      {/* I4: Show programs in batches — only visibleChapterCount items at a time */}
-      {programs.slice(0, visibleChapterCount).map((prog) => {
-                        const isLocked = !isLoggedIn && prog.chapterNumber !== 1;
-                        return (
-                          <option key={prog.id} value={prog.id}>
-                            {isLocked ? `🔒 ${prog.title} (საჭიროებს ავტორიზაციას)` : `${prog.title} (${getChapterItemDisplay(prog.id)})`}
-                          </option>
-                        );
-                      })}
-                    </select>
-
-                    {/* Progress Bar or Auth Notice Header */}
-                    {(() => {
-                      if (!isLoggedIn) {
-                        return (
-                          <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] flex flex-wrap items-center justify-between gap-3">
-                            <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-[#0D1B2A]">
-                              <Lock className="w-4 h-4 text-[#C79B3A] shrink-0" />
-                              <span>დანარჩენი თავების და პროგრესის სანახავად: გთხოვთ გაიაროთ ავტორიზაცია</span>
-                            </div>
-                            {onOpenAuth && (
-                              <button
-                                onClick={onOpenAuth}
-                                className="px-4 py-2 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold uppercase tracking-wider rounded-xl transition-all shrink-0 cursor-pointer shadow-sm"
-                              >
-                                ავტორიზაცია
-                              </button>
-                            )}
-                          </div>
-                        );
-                      }
-
-                      const currProg = programs.find(p => p.id === selectedChapterId);
-                      const displayTitle = selectedChapterId === 'all'
-                        ? 'ყველა თავი'
-                        : currProg?.title || 'არჩეული თავი';
-                      const totalQ = selectedChapterId === 'all'
-                        ? categoryQuestions.length
-                        : (questionsCountMap[selectedChapterId] ?? 0);
-                      const stats = getChapterStats(selectedCategoryKey, selectedChapterId, totalQ);
-
-                      return (
-                        <div className="p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-3 pt-4 border-t">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-bold text-[#0D1B2A]">
-                              {displayTitle} — პროგრესი
-                            </span>
-                            <span className="text-[11px] font-mono font-bold text-[#C79B3A]">
-                              {stats.pct}% შესრულებული
-                            </span>
-                          </div>
-
-                          <div className="space-y-1.5">
-                            <div className="w-full h-3 bg-[#E6DDCB] rounded-full overflow-hidden flex">
-                              <div 
-                                style={{ width: `${stats.total > 0 ? (stats.correct / stats.total) * 100 : 0}%` }}
-                                className="bg-emerald-500 h-full transition-all duration-500"
-                                title={`სწორი: ${stats.correct}`}
-                              />
-                              <div 
-                                style={{ width: `${stats.total > 0 ? (stats.incorrect / stats.total) * 100 : 0}%` }}
-                                className="bg-rose-500 h-full transition-all duration-500"
-                                title={`არასწორი: ${stats.incorrect}`}
-                              />
-                              <div 
-                                style={{ width: `${stats.total > 0 ? (stats.unattempted / stats.total) * 100 : 0}%` }}
-                                className="bg-gray-200 h-full transition-all duration-500"
-                                title={`არ გაუკეთებია: ${stats.unattempted}`}
-                              />
-                            </div>
-
-                            <div className="grid grid-cols-3 text-center text-[11px] font-semibold pt-1">
-                              <div className="flex items-center justify-center gap-1 text-emerald-700">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                <span>სწორი: {stats.correct}</span>
-                              </div>
-                              <div className="flex items-center justify-center gap-1 text-rose-700">
-                                <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                                <span>არასწორი: {stats.incorrect}</span>
-                              </div>
-                              <div className="flex items-center justify-center gap-1 text-gray-600">
-                                <HelpCircle className="w-3.5 h-3.5 text-gray-400" />
-                                <span>დარჩა: {stats.unattempted}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-
-                  {/* Task Groups / Boxes for Selected Chapter (or Lock Screen for Unregistered on Ch2-11) */}
-                  {isLoggedIn || selectedChapterId === 'ch-1' ? (
-                    taskGroups.length > 0 ? (
-                      <div className="space-y-4">
-                        <h3 className="font-serif font-bold text-xl text-[#0D1B2A]">
-                          ამ თავის დავალებები ({taskGroups.length} დავალების ბოქსი)
-                        </h3>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {taskGroups.map((task) => (
-                            <div
-                              key={task.id}
-                              className="bg-white rounded-3xl border-2 border-[#E6DDCB] hover:border-[#C79B3A] p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4 group overflow-hidden"
-                            >
-                              <div className="space-y-3">
-                                {/* Task Thumbnail Image if available (Map / Illustration) */}
-                                {task.image && (
-                                  <div className="rounded-2xl overflow-hidden aspect-video bg-[#0D1B2A] border border-[#E6DDCB] shadow-inner max-h-48">
-                                    <img 
-                                      src={task.image} 
-                                      alt={task.title} 
-                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                      referrerPolicy="no-referrer"
-                                    />
-                                  </div>
-                                )}
-
-                                {/* Task Text snippet if available (Source / Analogy) */}
-                                {task.sourceContext && (
-                                  <div className="p-4 bg-[#FAF8F3] rounded-2xl border-l-4 border-[#C79B3A] text-xs font-serif italic text-[#0D1B2A] line-clamp-3">
-                                    „{task.sourceContext}“
-                                  </div>
-                                )}
-
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between">
-                                    <span className="px-2.5 py-0.5 bg-[#FAF8F3] text-[#C79B3A] text-[10px] font-bold uppercase rounded border border-[#E6DDCB]">
-                                      {task.subtitle}
-                                    </span>
-                                  </div>
-
-                                  <h4 className="font-serif font-bold text-xl text-[#0D1B2A] group-hover:text-[#C79B3A] transition-colors">
-                                    {task.title}
-                                  </h4>
-                                </div>
-                              </div>
-
-                              <button
-                                onClick={() => handleStartTaskGroupTest(task)}
-                                className="w-full py-3.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-                              >
-                                <Play className="w-4 h-4 fill-current" />
-                                <span>ამ დავალების დაწყება</span>
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="bg-white p-10 rounded-3xl border border-[#E6DDCB] text-center space-y-3">
-                        <h4 className="font-serif font-bold text-lg text-[#0D1B2A]">
-                          ამ თავში დავალებები ჯერ არ არის
-                        </h4>
-                        <p className="text-xs text-[#666666]">
-                          აირჩიეთ სხვა თავი ჩამონათვალიდან.
-                        </p>
-                      </div>
-                    )
-                  ) : (
-                    <div className="bg-white p-8 sm:p-12 rounded-3xl border-2 border-[#C79B3A]/60 shadow-xl text-center space-y-6 max-w-2xl mx-auto my-6 animate-fade-in">
-                      <div className="w-20 h-20 rounded-3xl bg-[#FAF8F3] border-2 border-[#C79B3A] flex items-center justify-center mx-auto text-[#C79B3A] shadow-md">
-                        <Lock className="w-10 h-10" />
-                      </div>
-                      <div className="space-y-3">
-                        <span className="px-3.5 py-1 bg-[#FAF8F3] border border-[#C79B3A]/40 text-[#C79B3A] text-[11px] font-bold uppercase tracking-[0.2em] rounded-full inline-flex items-center gap-1.5">
-                          <ShieldAlert className="w-3.5 h-3.5" />
-                          <span>წვდომა შეზღუდულია</span>
-                        </span>
-                        <h3 className="font-serif font-bold text-2xl sm:text-3xl text-[#0D1B2A]">
-                          ავტორიზაცია აუცილებელია
-                        </h3>
-                        <p className="text-sm sm:text-base text-[#666666] leading-relaxed font-medium max-w-md mx-auto">
-                          დანარჩენი თავების და პროგრესის სანახავად: გთხოვთ გაიაროთ ავტორიზაცია
-                        </p>
-                      </div>
-                      {onOpenAuth && (
-                        <button
-                          onClick={onOpenAuth}
-                          className="px-8 py-4 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-2xl transition-all shadow-md inline-flex items-center justify-center gap-2 cursor-pointer"
-                        >
-                          <UserCheck className="w-4 h-4" />
-                          <span>ავტორიზაციის გავლა</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-
-                </div>
-              )}
-
-            </div>
+            <TestChapterSelector
+              selectedCategoryKey={selectedCategoryKey}
+              activeCategoryMeta={activeCategoryMeta}
+              programs={programs}
+              selectedChapterId={selectedChapterId}
+              visibleChapterCount={visibleChapterCount}
+              isLoggedIn={isLoggedIn}
+              loading={loading}
+              isResetting={isResetting}
+              categoryItemDetailsMap={categoryItemDetailsMap}
+              categoryTotalCounts={categoryTotalCounts}
+              categoryQuestionsLength={categoryQuestions.length}
+              questionsCountMap={questionsCountMap}
+              taskGroups={taskGroups}
+              onBackToCategories={handleBackToCategories}
+              onSelectChapterId={handleSelectChapterId}
+              onStartRandomTest={handleStartRandomTest}
+              onStartChapterTest={handleStartChapterTest}
+              onStartTaskGroupTest={handleStartTaskGroupTest}
+              onResetCategoryProgress={handleResetCategoryProgress}
+              onOpenAuth={onOpenAuth}
+              getChapterStats={getChapterStats}
+              getChapterItemDisplay={getChapterItemDisplay}
+            />
           ) : null}
         </>
       )}
-
-
     </div>
   );
 };

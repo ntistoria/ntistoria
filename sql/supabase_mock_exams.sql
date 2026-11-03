@@ -42,28 +42,10 @@ CREATE POLICY "Admins have full access to mock_exams"
   FOR ALL
   TO authenticated
   USING (
-    lower(auth.jwt() ->> 'email') IN ('ntistoria@gmail.com', 'admin@ntistoria.ge', 'admin@gmail.com')
-    OR EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE (
-        profiles.user_id = auth.uid()
-        OR profiles.id = auth.uid()
-        OR lower(profiles.email) = lower(auth.jwt() ->> 'email')
-      )
-      AND profiles.role = 'admin'
-    )
+    lower(coalesce(auth.jwt() ->> 'email', '')) = 'ntistoria@gmail.com'
   )
   WITH CHECK (
-    lower(auth.jwt() ->> 'email') IN ('ntistoria@gmail.com', 'admin@ntistoria.ge', 'admin@gmail.com')
-    OR EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE (
-        profiles.user_id = auth.uid()
-        OR profiles.id = auth.uid()
-        OR lower(profiles.email) = lower(auth.jwt() ->> 'email')
-      )
-      AND profiles.role = 'admin'
-    )
+    lower(coalesce(auth.jwt() ->> 'email', '')) = 'ntistoria@gmail.com'
   );
 
 -- 5. Table Grants
@@ -86,15 +68,14 @@ BEGIN
     selected_chapters,
     duration_minutes,
     is_active,
-    start_time,
-    end_time,
+    created_at AS start_time,
+    GREATEST(COALESCE(end_time, created_at + (duration_minutes * interval '1 minute')), created_at + (duration_minutes * interval '1 minute')) AS end_time,
     created_at,
     now() AS server_now
   INTO v_exam
   FROM public.mock_exams
   WHERE is_active = true
-    AND end_time IS NOT NULL
-    AND now() <= end_time
+    AND now() <= GREATEST(COALESCE(end_time, created_at + (duration_minutes * interval '1 minute')), created_at + (duration_minutes * interval '1 minute'))
   ORDER BY created_at DESC
   LIMIT 1;
 
@@ -126,16 +107,7 @@ DECLARE
   v_source_answers JSONB := '{}'::jsonb;
 BEGIN
   SELECT (
-    lower(auth.jwt() ->> 'email') IN ('ntistoria@gmail.com', 'admin@ntistoria.ge', 'admin@gmail.com')
-    OR EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE (
-        profiles.user_id = auth.uid()
-        OR profiles.id = auth.uid()
-        OR lower(profiles.email) = lower(auth.jwt() ->> 'email')
-      )
-      AND profiles.role = 'admin'
-    )
+    lower(coalesce(auth.jwt() ->> 'email', '')) = 'ntistoria@gmail.com'
   ) INTO v_is_admin;
 
   IF NOT COALESCE(v_is_admin, false) THEN
@@ -194,8 +166,7 @@ BEGIN
   INTO v_exam
   FROM public.mock_exams
   WHERE is_active = true
-    AND end_time IS NOT NULL
-    AND now() <= end_time
+    AND now() <= GREATEST(COALESCE(end_time, created_at + (duration_minutes * interval '1 minute')), created_at + (duration_minutes * interval '1 minute'))
   ORDER BY created_at DESC
   LIMIT 1;
 
@@ -279,8 +250,8 @@ BEGIN
     'selected_chapters', v_exam.selected_chapters,
     'duration_minutes', v_exam.duration_minutes,
     'is_active', v_exam.is_active,
-    'start_time', v_exam.start_time,
-    'end_time', v_exam.end_time,
+    'start_time', v_exam.created_at,
+    'end_time', GREATEST(COALESCE(v_exam.end_time, v_exam.created_at + (v_exam.duration_minutes * interval '1 minute')), v_exam.created_at + (v_exam.duration_minutes * interval '1 minute')),
     'created_at', v_exam.created_at,
     'server_now', now(),
     'questions_payload', jsonb_build_object(

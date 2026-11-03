@@ -35,7 +35,7 @@ export const Navbar: FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenSearch,
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [user?.email]);
 
   useEffect(() => {
     const handleScroll = () => {

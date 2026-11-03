@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, useCallback, type FC } from 'react';
 import { MockExam } from '../types';
 import { supabase } from '../lib/supabase';
+import { getServerClockOffsetMs } from '../lib/mockExamService';
 import { useAntiCheating } from '../hooks/useAntiCheating';
+import { QuestionImageLightbox } from './tests/QuestionImageLightbox';
 import {
   Clock,
   ChevronLeft,
@@ -9,7 +11,6 @@ import {
   ZoomOut,
   RotateCcw,
   Maximize2,
-  X,
   FileText,
   MapPin,
   Layers,
@@ -87,8 +88,11 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
 
   const computeRemaining = () => {
     if (!endTimeMs) return 0;
-    const syncedNow = Date.now() + serverTimeOffsetMs;
-    return Math.max(0, Math.floor((endTimeMs - syncedNow) / 1000));
+    const effectiveOffset = serverTimeOffsetMs || getServerClockOffsetMs();
+    const syncedNow = Date.now() + effectiveOffset;
+    const rawRemaining = Math.max(0, Math.floor((endTimeMs - syncedNow) / 1000));
+    const maxSeconds = (Number(exam.duration_minutes) || 180) * 60;
+    return Math.min(rawRemaining, maxSeconds);
   };
 
   const [remainingSeconds, setRemainingSeconds] = useState<number>(computeRemaining);
@@ -101,7 +105,7 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
   // Map Zoom State (inline & lightbox)
   const [inlineZoom, setInlineZoom] = useState<number>(1);
   const [isMapLightboxOpen, setIsMapLightboxOpen] = useState<boolean>(false);
-  const [lightboxZoom, setLightboxZoom] = useState<number>(1.5);
+  const [lightboxZoom, setLightboxZoom] = useState<number>(1);
 
   const expiredTriggeredRef = useRef<boolean>(false);
 
@@ -452,7 +456,7 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
                       <button
                         type="button"
                         onClick={() => {
-                          setLightboxZoom(1.5);
+                          setLightboxZoom(1);
                           setIsMapLightboxOpen(true);
                         }}
                         className="px-3 py-1.5 rounded-lg bg-[#0D1B2A] text-[#FAF8F3] hover:bg-[#C79B3A] hover:text-[#0D1B2A] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
@@ -471,7 +475,10 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
                         width: `${inlineZoom * 100}%`,
                         maxWidth: 'none'
                       }}
-                      onClick={() => setIsMapLightboxOpen(true)}
+                      onClick={() => {
+                        setLightboxZoom(1);
+                        setIsMapLightboxOpen(true);
+                      }}
                       className="mx-auto block rounded-xl cursor-zoom-in transition-all duration-150"
                       referrerPolicy="no-referrer"
                       draggable={false}
@@ -661,69 +668,16 @@ export const MockExamStudentView: FC<MockExamStudentViewProps> = ({
       </div>
 
       {/* =========================================================
-          FULLSCREEN MAP LIGHTBOX MODAL (ZOOMABLE)
+          FULLSCREEN MAP LIGHTBOX MODAL (ZOOMABLE PORTAL)
          ========================================================= */}
-      {isMapLightboxOpen && payload.mapTask?.mapImage && (
-        <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xs flex flex-col">
-          <div className="px-6 py-4 bg-[#0D1B2A] border-b border-white/15 flex items-center justify-between text-white">
-            <div className="flex items-center gap-3">
-              <MapPin className="w-5 h-5 text-[#C79B3A]" />
-              <span className="font-serif font-bold text-base">
-                რუკა N36 — მასშტაბი {Math.round(lightboxZoom * 100)}%
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setLightboxZoom((z) => Math.max(0.75, +(z - 0.25).toFixed(2)))}
-                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
-                title="დაპატარავება"
-              >
-                <ZoomOut className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setLightboxZoom((z) => Math.min(3.5, +(z + 0.25).toFixed(2)))}
-                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
-                title="გადიდება"
-              >
-                <ZoomIn className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setLightboxZoom(1)}
-                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
-                title="100%"
-              >
-                <RotateCcw className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsMapLightboxOpen(false)}
-                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-                <span>დახურვა</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-auto p-6 flex items-start justify-center">
-            <img
-              src={payload.mapTask.mapImage}
-              alt="რუკა N36 სრულ ეკრანზე"
-              style={{
-                width: `${lightboxZoom * 100}%`,
-                maxWidth: 'none'
-              }}
-              className="rounded-xl shadow-2xl transition-all duration-150"
-              referrerPolicy="no-referrer"
-              draggable={false}
-            />
-          </div>
-        </div>
-      )}
+      <QuestionImageLightbox
+        imageUrl={isMapLightboxOpen && payload.mapTask?.mapImage ? payload.mapTask.mapImage : null}
+        title="რუკა N36"
+        zoom={lightboxZoom}
+        onZoomChange={setLightboxZoom}
+        onResetZoom={() => setLightboxZoom(1)}
+        onClose={() => setIsMapLightboxOpen(false)}
+      />
 
       {/* =========================================================
           STRICT ANTI-CHEAT TAB SWITCH WARNING MODAL (1/3 and 2/3)

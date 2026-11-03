@@ -11,6 +11,129 @@ import {
 
 const GEORGIAN_LETTERS = ['ა', 'ბ', 'გ', 'დ'];
 
+const CLOCK_OFFSET_STORAGE_KEY = 'nt_server_clock_offset_ms';
+const ACTIVE_MOCK_CACHE_KEY = 'nt_active_mock_exam_cache_v1';
+
+let serverClockOffsetMs: number = (() => {
+  try {
+    const saved = localStorage.getItem(CLOCK_OFFSET_STORAGE_KEY);
+    const parsed = saved ? Number(saved) : 0;
+    return Number.isFinite(parsed) ? parsed : 0;
+  } catch {
+    return 0;
+  }
+})();
+
+export function setServerClockOffsetMs(offsetMs: number): void {
+  if (!Number.isFinite(offsetMs)) return;
+  serverClockOffsetMs = offsetMs;
+  try {
+    localStorage.setItem(CLOCK_OFFSET_STORAGE_KEY, String(Math.round(offsetMs)));
+  } catch {}
+}
+
+export function getServerClockOffsetMs(): number {
+  return serverClockOffsetMs;
+}
+
+export function getSyncedServerNowMs(): number {
+  return Date.now() + serverClockOffsetMs;
+}
+
+/**
+ * If an exam was created from a client whose local PC clock differed from the Supabase
+ * server clock (`created_at` is set by Postgres `DEFAULT now()`, whereas `start_time`
+ * was initially set by client `new Date()`), heal `start_time` and `end_time` using
+ * `created_at` and `duration_minutes` both in memory and in `public.mock_exams`.
+ */
+async function healSkewedMockExamIfNeeded<
+  T extends {
+    id: string;
+    is_active?: boolean;
+    start_time?: string;
+    end_time?: string;
+    created_at?: string;
+    duration_minutes?: number;
+  }
+>(exam: T): Promise<T> {
+  if (!exam || !exam.created_at || !exam.start_time) return exam;
+
+  const createdMs = new Date(exam.created_at).getTime();
+  const startMs = new Date(exam.start_time).getTime();
+  if (isNaN(createdMs) || isNaN(startMs)) return exam;
+
+  // If `created_at` (Postgres server `now()`) and `start_time` differ by > 30 seconds,
+  // the row was created with an unsynchronized client clock.
+  if (Math.abs(createdMs - startMs) <= 30_000) {
+    return exam;
+  }
+
+  const durationMinutes = Number(exam.duration_minutes) || 180;
+  const trueStartIso = new Date(createdMs).toISOString();
+  const trueEndIso = new Date(createdMs + durationMinutes * 60 * 1000).toISOString();
+
+  if (serverClockOffsetMs === 0) {
+    setServerClockOffsetMs(createdMs - startMs);
+  }
+
+  const healed: T = {
+    ...exam,
+    start_time: trueStartIso,
+    end_time: trueEndIso
+  };
+
+  if (exam.is_active) {
+    try {
+      await supabase
+        .from('mock_exams')
+        .update({
+          start_time: trueStartIso,
+          end_time: trueEndIso
+        })
+        .eq('id', exam.id);
+
+      // Once healed in DB, `get_active_mock_exam_banner` RPC can return exact `server_now`
+      const { data: rpcAfter } = await supabase.rpc('get_active_mock_exam_banner');
+      if (rpcAfter?.server_now) {
+        const srvMs = new Date(rpcAfter.server_now).getTime();
+        if (!isNaN(srvMs)) {
+          setServerClockOffsetMs(srvMs - Date.now());
+        }
+      }
+    } catch {}
+  }
+
+  return healed;
+}
+
+function cacheActiveMockExamLocally(exam: MockExam | null): void {
+  try {
+    if (!exam || !exam.is_active) {
+      localStorage.removeItem(ACTIVE_MOCK_CACHE_KEY);
+      return;
+    }
+    const sanitized = sanitizeMockExamForStudent(exam);
+    localStorage.setItem(ACTIVE_MOCK_CACHE_KEY, JSON.stringify(sanitized));
+  } catch {}
+}
+
+function getCachedActiveMockExamLocally(): MockExam | null {
+  try {
+    const raw = localStorage.getItem(ACTIVE_MOCK_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as MockExam;
+    if (!parsed || !parsed.is_active || !parsed.end_time) return null;
+    const endMs = new Date(parsed.end_time).getTime();
+    if (isNaN(endMs) || endMs <= getSyncedServerNowMs()) {
+      localStorage.removeItem(ACTIVE_MOCK_CACHE_KEY);
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Unbiased Fisher-Yates array shuffle
  */
@@ -352,9 +475,10 @@ export async function generateAndActivateMockExam(params: {
     .update({ is_active: false })
     .eq('is_active', true);
 
-  // 8. Compute start_time and end_time
-  const startTime = new Date();
-  const endTime = new Date(startTime.getTime() + durationMinutes * 60 * 1000);
+  // 8. Compute initial start_time and end_time using synced server clock if available
+  const initialStartMs = getSyncedServerNowMs();
+  const startTime = new Date(initialStartMs);
+  const endTime = new Date(initialStartMs + durationMinutes * 60 * 1000);
 
   const cleanTitle = title.trim() || 'იმიტირებული ეროვნული გამოცდა';
 
@@ -376,7 +500,41 @@ export async function generateAndActivateMockExam(params: {
     throw new Error(error?.message || 'იმიტირებული გამოცდის შენახვა ვერ მოხერხდა.');
   }
 
-  return data as MockExam;
+  // 9. Anchor start_time and end_time to Postgres `created_at` (true server `now()`)
+  // so that even if the Admin's local PC clock is behind or ahead of UTC, `now() <= end_time`
+  // in PostgreSQL RPCs and RLS policies is 100% accurate for all students & guests.
+  let finalRow = data as MockExam;
+  const serverCreatedMs = finalRow.created_at ? new Date(finalRow.created_at).getTime() : NaN;
+  if (!isNaN(serverCreatedMs)) {
+    setServerClockOffsetMs(serverCreatedMs - Date.now());
+    const trueStartIso = new Date(serverCreatedMs).toISOString();
+    const trueEndIso = new Date(serverCreatedMs + durationMinutes * 60 * 1000).toISOString();
+
+    if (Math.abs(serverCreatedMs - startTime.getTime()) > 5_000) {
+      const { data: syncedRow } = await supabase
+        .from('mock_exams')
+        .update({
+          start_time: trueStartIso,
+          end_time: trueEndIso
+        })
+        .eq('id', finalRow.id)
+        .select('*')
+        .single();
+
+      if (syncedRow) {
+        finalRow = syncedRow as MockExam;
+      } else {
+        finalRow = {
+          ...finalRow,
+          start_time: trueStartIso,
+          end_time: trueEndIso
+        };
+      }
+    }
+  }
+
+  cacheActiveMockExamLocally(finalRow);
+  return finalRow;
 }
 
 /**
@@ -522,6 +680,7 @@ export async function enrichMockExamWithAnswerKey(exam: MockExam): Promise<MockE
  * Deactivate / Finish an active mock exam (Admin action)
  */
 export async function deactivateMockExam(examId?: string): Promise<void> {
+  cacheActiveMockExamLocally(null);
   let query = supabase.from('mock_exams').update({ is_active: false });
   if (examId) {
     query = query.eq('id', examId);
@@ -535,6 +694,60 @@ export async function deactivateMockExam(examId?: string): Promise<void> {
 }
 
 /**
+ * Permanently delete a mock exam session (including its questions & answers payload)
+ * from Supabase `public.mock_exams` table so the database does not get bloated.
+ */
+export async function deleteMockExamFromDb(examId: string): Promise<void> {
+  if (!examId) return;
+
+  try {
+    const raw = localStorage.getItem(ACTIVE_MOCK_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.id === examId) {
+        localStorage.removeItem(ACTIVE_MOCK_CACHE_KEY);
+      }
+    }
+  } catch {}
+
+  const { error } = await supabase
+    .from('mock_exams')
+    .delete()
+    .eq('id', examId);
+
+  if (error) {
+    throw new Error(error.message || 'დასრულებული გამოცდის ბაზიდან წაშლა ვერ მოხერხდა.');
+  }
+}
+
+/**
+ * Permanently delete multiple completed mock exam sessions (including their tests & answers)
+ * from Supabase `public.mock_exams` table.
+ */
+export async function deleteAllCompletedMockExamsFromDb(examIds: string[]): Promise<void> {
+  if (!examIds || examIds.length === 0) return;
+
+  try {
+    const raw = localStorage.getItem(ACTIVE_MOCK_CACHE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.id && examIds.includes(parsed.id)) {
+        localStorage.removeItem(ACTIVE_MOCK_CACHE_KEY);
+      }
+    }
+  } catch {}
+
+  const { error } = await supabase
+    .from('mock_exams')
+    .delete()
+    .in('id', examIds);
+
+  if (error) {
+    throw new Error(error.message || 'დასრულებული გამოცდების ბაზიდან წაშლა ვერ მოხერხდა.');
+  }
+}
+
+/**
  * Fetch active mock exam banner metadata (works for both guests & logged-in students)
  */
 export async function fetchActiveMockExamBanner(): Promise<MockExamBannerInfo | null> {
@@ -542,27 +755,60 @@ export async function fetchActiveMockExamBanner(): Promise<MockExamBannerInfo | 
     // 1. Try lightweight security-definer RPC first (works for anon & authenticated)
     const { data: rpcData, error: rpcErr } = await supabase.rpc('get_active_mock_exam_banner');
     if (!rpcErr && rpcData) {
-      const endMs = rpcData.end_time ? new Date(rpcData.end_time).getTime() : 0;
-      const nowMs = rpcData.server_now ? new Date(rpcData.server_now).getTime() : Date.now();
-      if (rpcData.is_active && endMs > nowMs) {
-        return rpcData as MockExamBannerInfo;
+      if (rpcData.server_now) {
+        const srvMs = new Date(rpcData.server_now).getTime();
+        if (!isNaN(srvMs)) {
+          setServerClockOffsetMs(srvMs - Date.now());
+        }
+      }
+      const healedRpc = await healSkewedMockExamIfNeeded(rpcData as MockExamBannerInfo);
+      const endMs = healedRpc.end_time ? new Date(healedRpc.end_time).getTime() : 0;
+      const nowMs = healedRpc.server_now
+        ? new Date(healedRpc.server_now).getTime()
+        : getSyncedServerNowMs();
+      if (healedRpc.is_active && endMs > nowMs) {
+        return healedRpc;
       }
       return null;
     }
 
-    // 2. Fallback: direct query for authenticated users
-    const nowIso = new Date().toISOString();
+    // 2. Fallback: direct query without client-clock `.gt('end_time', nowIso)` filter
     const { data, error } = await supabase
       .from('mock_exams')
       .select('id, title, selected_chapters, duration_minutes, is_active, start_time, end_time, created_at')
       .eq('is_active', true)
-      .gt('end_time', nowIso)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (error || !data) return null;
-    return data as MockExamBannerInfo;
+    if (!error && data) {
+      const healed = await healSkewedMockExamIfNeeded(data as MockExamBannerInfo);
+      const endMs = healed.end_time ? new Date(healed.end_time).getTime() : 0;
+      if (healed.is_active && endMs > getSyncedServerNowMs()) {
+        return {
+          ...healed,
+          server_now: new Date(getSyncedServerNowMs()).toISOString()
+        };
+      }
+    }
+
+    // 3. Local browser cache fallback (if an exam was activated in this browser and not yet expired)
+    const cached = getCachedActiveMockExamLocally();
+    if (cached) {
+      return {
+        id: cached.id,
+        title: cached.title,
+        selected_chapters: cached.selected_chapters,
+        duration_minutes: cached.duration_minutes,
+        is_active: cached.is_active,
+        start_time: cached.start_time,
+        end_time: cached.end_time,
+        created_at: cached.created_at,
+        server_now: new Date(getSyncedServerNowMs()).toISOString()
+      };
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -576,22 +822,38 @@ export async function fetchActiveMockExamForStudent(): Promise<MockExam | null> 
     // 1. Try server-side sanitized RPC first so answer keys never even cross the wire
     const { data: rpcData, error: rpcErr } = await supabase.rpc('get_active_mock_exam_student');
     if (!rpcErr && rpcData && rpcData.id) {
-      return sanitizeMockExamForStudent(rpcData as MockExam);
+      const healedRpc = await healSkewedMockExamIfNeeded(rpcData as MockExam);
+      const sanitized = sanitizeMockExamForStudent(healedRpc);
+      cacheActiveMockExamLocally(sanitized);
+      return sanitized;
     }
 
-    // 2. Fallback: direct query + client sanitization
-    const nowIso = new Date().toISOString();
+    // 2. Fallback: direct query + client sanitization (without skewed client `.gt('end_time')`)
     const { data, error } = await supabase
       .from('mock_exams')
       .select('*')
       .eq('is_active', true)
-      .gt('end_time', nowIso)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (error || !data) return null;
-    return sanitizeMockExamForStudent(data as MockExam);
+    if (!error && data) {
+      const healed = await healSkewedMockExamIfNeeded(data as MockExam);
+      const endMs = healed.end_time ? new Date(healed.end_time).getTime() : 0;
+      if (healed.is_active && endMs > getSyncedServerNowMs()) {
+        const sanitized = sanitizeMockExamForStudent(healed);
+        cacheActiveMockExamLocally(sanitized);
+        return sanitized;
+      }
+    }
+
+    // 3. Local browser cache fallback
+    const cached = getCachedActiveMockExamLocally();
+    if (cached) {
+      return sanitizeMockExamForStudent(cached);
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -609,7 +871,22 @@ export async function fetchAllMockExamsForAdmin(): Promise<MockExam[]> {
       .limit(50);
 
     if (error || !data) return [];
-    return data as MockExam[];
+
+    const rows = data as MockExam[];
+    const processed: MockExam[] = [];
+    for (const row of rows) {
+      if (row.is_active) {
+        const healed = await healSkewedMockExamIfNeeded(row);
+        const endMs = healed.end_time ? new Date(healed.end_time).getTime() : 0;
+        if (endMs > getSyncedServerNowMs()) {
+          cacheActiveMockExamLocally(healed);
+        }
+        processed.push(healed);
+      } else {
+        processed.push(row);
+      }
+    }
+    return processed;
   } catch {
     return [];
   }

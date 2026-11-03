@@ -51,10 +51,16 @@ export const HomeView: FC<HomeViewProps> = ({
 
       {/* LIVE MOCK EXAM TOP BANNER */}
       {activeMockBanner && (
-        <div className="max-w-[1180px] mx-auto px-4 sm:px-6 pt-4 -mb-16">
-          <div
-            onClick={() => setActiveTab('tests')}
-            className="w-full p-4 sm:px-6 bg-gradient-to-r from-[#0D1B2A] via-[#13253D] to-[#0D1B2A] text-white rounded-2xl border-2 border-[#C79B3A] shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 cursor-pointer hover:border-[#E6C86B] transition-all group"
+        <div className="relative z-30 max-w-[1180px] mx-auto px-4 sm:px-6 pt-4 -mb-14">
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                sessionStorage.setItem('nt_auto_open_mock_exam', '1');
+              } catch {}
+              setActiveTab('tests');
+            }}
+            className="w-full p-4 sm:px-6 bg-gradient-to-r from-[#0D1B2A] via-[#13253D] to-[#0D1B2A] text-white rounded-2xl border-2 border-[#C79B3A] shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 cursor-pointer hover:border-[#E6C86B] transition-all group text-left"
           >
             <div className="flex items-center gap-3">
               <span className="relative flex h-3.5 w-3.5 shrink-0">
@@ -81,7 +87,7 @@ export const HomeView: FC<HomeViewProps> = ({
               <span>შეუერთდი</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </span>
-          </div>
+          </button>
         </div>
       )}
       

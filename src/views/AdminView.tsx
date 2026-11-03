@@ -1,12 +1,21 @@
-import { useState, useEffect, type FC } from 'react';
+import { useState, useEffect, lazy, Suspense, type FC } from 'react';
 import { Plus, Edit2, Trash2, Search, Filter, FileText, ShieldCheck, RefreshCw, AlertTriangle, Eye, HelpCircle, Video, Clock, Database } from 'lucide-react';
 import { Article } from '../types';
 import { fetchAllArticles, saveArticle, deleteArticle, isAdminUser } from '../lib/blogService';
 import { BlogEditorModal } from '../components/BlogEditorModal';
-import { AdminQuizManager } from '../components/AdminQuizManager';
-import { AdminVideoManager } from '../components/AdminVideoManager';
-import { AdminMockExamManager } from '../components/AdminMockExamManager';
-import { AdminQuestionBankManager } from '../components/AdminQuestionBankManager';
+
+const AdminQuizManager = lazy(() =>
+  import('../components/AdminQuizManager').then(m => ({ default: m.AdminQuizManager }))
+);
+const AdminVideoManager = lazy(() =>
+  import('../components/AdminVideoManager').then(m => ({ default: m.AdminVideoManager }))
+);
+const AdminMockExamManager = lazy(() =>
+  import('../components/AdminMockExamManager').then(m => ({ default: m.AdminMockExamManager }))
+);
+const AdminQuestionBankManager = lazy(() =>
+  import('../components/AdminQuestionBankManager').then(m => ({ default: m.AdminQuestionBankManager }))
+);
 
 interface AdminViewProps {
   user: { name: string; email: string } | null;
@@ -217,14 +226,24 @@ export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
       </div>
 
       {/* TAB CONTENT */}
-      {adminTab === 'quizzes' ? (
-        <AdminQuizManager />
-      ) : adminTab === 'videos' ? (
-        <AdminVideoManager />
-      ) : adminTab === 'mock_exams' ? (
-        <AdminMockExamManager />
-      ) : adminTab === 'question_bank' ? (
-        <AdminQuestionBankManager />
+      {adminTab !== 'blogs' ? (
+        <Suspense
+          fallback={
+            <div className="bg-white rounded-3xl border border-[#E6DDCB] p-12 text-center">
+              <div className="w-7 h-7 border-2 border-[#C79B3A] border-t-transparent rounded-full animate-spin mx-auto" />
+            </div>
+          }
+        >
+          {adminTab === 'quizzes' ? (
+            <AdminQuizManager />
+          ) : adminTab === 'videos' ? (
+            <AdminVideoManager />
+          ) : adminTab === 'mock_exams' ? (
+            <AdminMockExamManager />
+          ) : (
+            <AdminQuestionBankManager />
+          )}
+        </Suspense>
       ) : (
 
         <div className="space-y-8">

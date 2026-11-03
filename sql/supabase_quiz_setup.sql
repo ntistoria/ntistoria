@@ -14,24 +14,7 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT (
-    lower(coalesce(auth.jwt() ->> 'email', '')) IN (
-      'ntistoria@gmail.com',
-      'admin@ntistoria.ge',
-      'admin@gmail.com',
-      't.totadze@gmail.com',
-      'nodar.totadze@gmail.com'
-    )
-    OR EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE (
-        profiles.user_id = auth.uid()
-        OR profiles.id = auth.uid()
-        OR lower(profiles.email) = lower(coalesce(auth.jwt() ->> 'email', ''))
-      )
-      AND profiles.role = 'admin'
-    )
-  );
+  SELECT lower(coalesce(auth.jwt() ->> 'email', '')) = 'ntistoria@gmail.com';
 $$;
 
 -- =========================================================

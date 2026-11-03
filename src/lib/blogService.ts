@@ -5,11 +5,9 @@ import DOMPurify from 'dompurify';
 
 const LOCAL_ARTICLES_KEY = 'ntistoria_custom_articles';
 
-// Admin Email List
+// Admin Email (ONLY ntistoria@gmail.com)
 export const ADMIN_EMAILS = [
   'ntistoria@gmail.com',
-  'admin@ntistoria.ge',
-  'admin@gmail.com',
 ];
 
 export const isAdminUser = (user: { email: string } | null): boolean => {

@@ -4,7 +4,10 @@ import { DEFAULT_PROGRAMS, fetchProgramsAndSubprograms, ProgramChapter } from '.
 import {
   fetchAllMockExamsForAdmin,
   generateAndActivateMockExam,
-  deactivateMockExam
+  deactivateMockExam,
+  deleteMockExamFromDb,
+  deleteAllCompletedMockExamsFromDb,
+  getSyncedServerNowMs
 } from '../lib/mockExamService';
 import { MockExamStudentView } from './MockExamStudentView';
 import { AdminMockExamAnswerKeyView } from './AdminMockExamAnswerKeyView';
@@ -24,7 +27,8 @@ import {
   FileText,
   History,
   Eye,
-  KeyRound
+  KeyRound,
+  Trash2
 } from 'lucide-react';
 
 function formatCountdown(remainingSeconds: number): string {
@@ -48,6 +52,11 @@ export const AdminMockExamManager: FC = () => {
   const [viewingTestExam, setViewingTestExam] = useState<MockExam | null>(null);
   const [viewingAnswerKeyExam, setViewingAnswerKeyExam] = useState<MockExam | null>(null);
 
+  // Completed exam deletion state
+  const [examToDelete, setExamToDelete] = useState<MockExam | null>(null);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState<boolean>(false);
+  const [isDeletingExam, setIsDeletingExam] = useState<boolean>(false);
+
   // Generator Form State
   const [title, setTitle] = useState<string>('იმიტირებული გამოცდა #1');
   const [selectedChapters, setSelectedChapters] = useState<number[]>([
@@ -55,8 +64,8 @@ export const AdminMockExamManager: FC = () => {
   ]);
   const [durationMinutes, setDurationMinutes] = useState<number>(180);
 
-  // Live ticker for remaining time display
-  const [nowMs, setNowMs] = useState<number>(Date.now());
+  // Live ticker for remaining time display (synced with Supabase server clock)
+  const [nowMs, setNowMs] = useState<number>(() => getSyncedServerNowMs());
 
   const loadData = async () => {
     setLoading(true);
@@ -68,6 +77,7 @@ export const AdminMockExamManager: FC = () => {
       if (progs && progs.length > 0) {
         setPrograms(progs);
       }
+      setNowMs(getSyncedServerNowMs());
       setExams(allExams);
 
       // Suggest next exam number in title
@@ -87,7 +97,7 @@ export const AdminMockExamManager: FC = () => {
   // 1-second interval for live remaining time
   useEffect(() => {
     const timer = setInterval(() => {
-      setNowMs(Date.now());
+      setNowMs(getSyncedServerNowMs());
     }, 1000);
     return () => clearInterval(timer);
   }, []);
@@ -107,6 +117,7 @@ export const AdminMockExamManager: FC = () => {
 
   // Auto-mark expired active exams as inactive in DB when their time runs out
   useEffect(() => {
+    if (loading) return;
     const expiredStillMarkedActive = exams.filter(
       (ex) => ex.is_active && ex.end_time && new Date(ex.end_time).getTime() <= nowMs
     );
@@ -122,10 +133,13 @@ export const AdminMockExamManager: FC = () => {
         )
       );
     }
-  }, [exams, nowMs]);
+  }, [exams, nowMs, loading]);
 
   const activeRemainingSeconds = activeExam?.end_time
-    ? Math.max(0, Math.floor((new Date(activeExam.end_time).getTime() - nowMs) / 1000))
+    ? Math.min(
+        (Number(activeExam.duration_minutes) || 180) * 60,
+        Math.max(0, Math.floor((new Date(activeExam.end_time).getTime() - nowMs) / 1000))
+      )
     : 0;
 
   const toggleChapter = (chapterNum: number) => {
@@ -167,6 +181,7 @@ export const AdminMockExamManager: FC = () => {
         durationMinutes: Number(durationMinutes)
       });
 
+      setNowMs(getSyncedServerNowMs());
       setExams((prev) => [
         created,
         ...prev.map((item) => ({ ...item, is_active: false }))
@@ -194,6 +209,44 @@ export const AdminMockExamManager: FC = () => {
       setErrorMsg(err?.message || 'ტესტის გაუქმება ვერ მოხერხდა.');
     } finally {
       setIsStopping(false);
+    }
+  };
+
+  const handleConfirmDeleteSingleExam = async () => {
+    if (!examToDelete) return;
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setIsDeletingExam(true);
+    try {
+      await deleteMockExamFromDb(examToDelete.id);
+      setExams((prev) => prev.filter((ex) => ex.id !== examToDelete.id));
+      setSuccessMsg(`„${examToDelete.title}“ (ტესტი და პასუხები) სამუდამოდ წაიშალა მონაცემთა ბაზიდან.`);
+      setExamToDelete(null);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'დასრულებული გამოცდის წაშლა ვერ მოხერხდა.');
+    } finally {
+      setIsDeletingExam(false);
+    }
+  };
+
+  const handleConfirmDeleteAllCompleted = async () => {
+    const idsToDelete = completedExams.map((ex) => ex.id);
+    if (idsToDelete.length === 0) {
+      setConfirmDeleteAll(false);
+      return;
+    }
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    setIsDeletingExam(true);
+    try {
+      await deleteAllCompletedMockExamsFromDb(idsToDelete);
+      setExams((prev) => prev.filter((ex) => !idsToDelete.includes(ex.id)));
+      setSuccessMsg(`ყველა დასრულებული იმიტირებული გამოცდა (${idsToDelete.length} სესია, ტესტები და პასუხები) წაიშალა მონაცემთა ბაზიდან.`);
+      setConfirmDeleteAll(false);
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'დასრულებული გამოცდების წაშლა ვერ მოხერხდა.');
+    } finally {
+      setIsDeletingExam(false);
     }
   };
 
@@ -494,16 +547,28 @@ export const AdminMockExamManager: FC = () => {
 
       {/* 3. COMPLETED MOCK EXAMS ARCHIVE SECTION („დასრულებული იმიტირებული გამოცდები“) */}
       <div className="bg-white rounded-3xl border-2 border-[#E6DDCB] shadow-sm overflow-hidden">
-        <div className="px-6 py-4 bg-[#FAF8F3] border-b border-[#E6DDCB] flex items-center justify-between">
+        <div className="px-6 py-4 bg-[#FAF8F3] border-b border-[#E6DDCB] flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <History className="w-5 h-5 text-[#C79B3A]" />
             <h3 className="font-serif font-bold text-lg text-[#0D1B2A]">
               დასრულებული იმიტირებული გამოცდები ({completedExams.length})
             </h3>
           </div>
-          <span className="text-xs text-[#666666] font-medium">
-            ტესტის ნახვა და სწორი პასუხების (შესასწორებელი ფურცლის) ბეჭდვა
-          </span>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs text-[#666666] font-medium">
+              ტესტის ნახვა, სწორი პასუხების ბეჭდვა და ბაზიდან წაშლა
+            </span>
+            {completedExams.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteAll(true)}
+                className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-xs font-bold rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>ყველა დასრულებულის წაშლა</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {completedExams.length === 0 ? (
@@ -547,7 +612,7 @@ export const AdminMockExamManager: FC = () => {
                   </div>
                 </div>
 
-                {/* Right Actions: View Test Variant & View Answer Key */}
+                {/* Right Actions: View Test Variant, View Answer Key & Delete from DB */}
                 <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
                   <button
                     type="button"
@@ -572,12 +637,71 @@ export const AdminMockExamManager: FC = () => {
                     <KeyRound className="w-4 h-4 text-[#C79B3A] group-hover:text-[#0D1B2A]" />
                     <span>სწორი პასუხები (შესასწორებელი ფურცელი)</span>
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExamToDelete(ex)}
+                    title="სესიის ტესტისა და პასუხების წაშლა ბაზიდან"
+                    className="px-4 py-2.5 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white border border-rose-200 hover:border-rose-600 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    <span>წაშლა</span>
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal (Single Completed Exam or All Completed Exams) */}
+      {(examToDelete || confirmDeleteAll) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white border-2 border-[#E6DDCB] rounded-3xl max-w-md w-full p-6 sm:p-7 text-center space-y-4 shadow-2xl">
+            <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 mx-auto flex items-center justify-center">
+              <Trash2 className="w-7 h-7" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="font-serif font-bold text-xl text-[#0D1B2A]">
+                {confirmDeleteAll
+                  ? 'ყველა დასრულებული გამოცდის წაშლა?'
+                  : `წაიშალოს „${examToDelete?.title}“?`}
+              </h3>
+              <p className="text-xs sm:text-sm text-[#666666] leading-relaxed">
+                {confirmDeleteAll
+                  ? `ყველა დასრულებული სესიის (${completedExams.length}) ტესტი და სწორი პასუხები სამუდამოდ წაიშლება Supabase-ის მონაცემთა ბაზიდან, რათა ბაზა არ გადაიტვირთოს.`
+                  : 'ამ დასრულებული სესიის ტესტი და სწორი პასუხები სამუდამოდ წაიშლება Supabase-ის მონაცემთა ბაზიდან.'}
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingExam}
+                onClick={() => {
+                  setExamToDelete(null);
+                  setConfirmDeleteAll(false);
+                }}
+                className="px-5 py-2.5 border border-[#E6DDCB] text-xs font-bold rounded-xl text-[#0D1B2A] hover:bg-[#FAF8F3] transition-colors cursor-pointer disabled:opacity-50"
+              >
+                გაუქმება
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingExam}
+                onClick={
+                  confirmDeleteAll
+                    ? handleConfirmDeleteAllCompleted
+                    : handleConfirmDeleteSingleExam
+                }
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-md transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>{isDeletingExam ? 'იშლება ბაზიდან...' : 'დიახ, ბაზიდან წაშლა'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
