@@ -112,6 +112,7 @@ export function App() {
   const [selectedInstitutionCode, setSelectedInstitutionCode] = useState<string | null>(null);
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
   const [selectedQuiz, setSelectedQuiz] = useState<QuizItem | null>(null);
+  const [targetTestFilter, setTargetTestFilter] = useState<{ categoryKey: string; chapterId: string } | null>(null);
 
   // Route syncing helper
   const syncRouteWithState = useCallback((articlesList: Article[]) => {
@@ -701,6 +702,9 @@ export function App() {
                         user={user}
                         onOpenAuth={() => setIsAuthOpen(true)}
                         onNavigateHome={() => handleTabChange('home')}
+                        initialCategoryKey={targetTestFilter?.categoryKey || null}
+                        initialChapterId={targetTestFilter?.chapterId || null}
+                        onClearInitialTarget={() => setTargetTestFilter(null)}
                       />
                     </ErrorBoundary>
                   )}
@@ -743,6 +747,7 @@ export function App() {
                         handleTabChange('quizzes');
                       }}
                       onOpenTest={(categoryKey, chapterId) => {
+                        setTargetTestFilter({ categoryKey, chapterId });
                         handleTabChange('tests');
                       }}
                       onOpenAuth={() => setIsAuthOpen(true)}

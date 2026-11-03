@@ -65,7 +65,7 @@ export const ProfileView: FC<ProfileViewProps> = ({
 
   const loadData = async () => {
     if (!userEmail) return;
-    
+
     // Load programs and progress
     const progs = await fetchProgramsAndSubprograms();
     setPrograms(progs);
@@ -196,6 +196,53 @@ export const ProfileView: FC<ProfileViewProps> = ({
   }
 
   const overallAccuracy = totalAttempted > 0 ? Math.round((totalCorrect / totalAttempted) * 100) : 0;
+
+  // 3.3 Compute weakest chapters/categories for automatic study recommendation
+  const weakestTopics = (() => {
+    if (!progress) return [];
+    const candidates: {
+      statKey: string;
+      categoryKey: string;
+      categoryTitle: string;
+      chapterId: string;
+      chapterTitle: string;
+      correct: number;
+      incorrect: number;
+      attempted: number;
+      accuracy: number;
+    }[] = [];
+
+    Object.entries(progress.statsByChapter).forEach(([statKey, stat]: [string, ChapterProgressStats]) => {
+      const correct = stat.correctQuestionIds?.length || 0;
+      const incorrect = stat.incorrectQuestionIds?.length || 0;
+      const attempted = correct + incorrect;
+      if (incorrect <= 0 || attempted <= 0) return;
+
+      const accuracy = Math.round((correct / attempted) * 100);
+      const categoryKey = stat.categoryKey || statKey.split('_')[0] || 'mcq';
+      const chapterId = stat.chapterId || statKey.split('_').slice(1).join('_') || 'ch-1';
+      const catMeta = TEST_CATEGORIES.find(c => c.key === categoryKey);
+      const progMeta = programs.find(p => p.id === chapterId || `ch-${p.id.replace('ch-', '')}` === chapterId);
+      const chNum = String(chapterId).replace(/[^0-9]/g, '') || '1';
+
+      candidates.push({
+        statKey,
+        categoryKey,
+        categoryTitle: catMeta?.title || 'დახურული კითხვები',
+        chapterId,
+        chapterTitle: progMeta?.title || `თავი #${chNum}`,
+        correct,
+        incorrect,
+        attempted,
+        accuracy
+      });
+    });
+
+    // Sort by lowest accuracy first, then by highest number of incorrect answers
+    return candidates
+      .sort((a, b) => (a.accuracy !== b.accuracy ? a.accuracy - b.accuracy : b.incorrect - a.incorrect))
+      .slice(0, 2);
+  })();
 
   const handleResetAll = async () => {
     if (!userEmail) return;
@@ -335,10 +382,10 @@ export const ProfileView: FC<ProfileViewProps> = ({
 
   return (
     <div className="max-w-[1280px] mx-auto py-6 sm:py-8 px-4 sm:px-6 space-y-8 animate-in fade-in duration-300">
-      
+
       {/* Profile Top Banner */}
       <div className="relative bg-[#0D1B2A] text-white rounded-3xl p-6 sm:p-8 overflow-hidden shadow-2xl border-4 border-[#C79B3A]/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-        
+
         {/* Background Accent */}
         <div className="absolute right-0 top-0 bottom-0 w-1/3 opacity-10 bg-[radial-gradient(#C79B3A_1px,transparent_1px)] bg-[size:16px_16px] pointer-events-none" />
 
@@ -430,15 +477,72 @@ export const ProfileView: FC<ProfileViewProps> = ({
 
       </div>
 
+      {/* 3.3 Weak Topics Automatic Recommendation Card */}
+      {weakestTopics.length > 0 && (
+        <div className="bg-amber-50/70 border-2 border-[#C79B3A]/50 rounded-3xl p-5 sm:p-6 shadow-sm space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1">
+              <span className="inline-flex items-center gap-1.5 px-3 py-0.5 bg-[#0D1B2A] text-[#C79B3A] text-[10px] font-bold uppercase tracking-wider rounded-full">
+                <Sparkles className="w-3 h-3" />
+                <span>პერსონალური რეკომენდაცია</span>
+              </span>
+              <h2 className="font-serif font-bold text-lg sm:text-xl text-[#0D1B2A]">
+                სუსტი თემები — სად გჭირდებათ გამეორება
+              </h2>
+              <p className="text-xs text-[#666666]">
+                თქვენი შედეგების ანალიზით, ყველაზე მეტი შეცდომა ქვემოთ მოცემულ თემებში დაფიქსირდა:
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {weakestTopics.map((item) => (
+              <div
+                key={item.statKey}
+                className="bg-white rounded-2xl border border-[#E6DDCB] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs"
+              >
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="px-2.5 py-0.5 bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-bold rounded-lg">
+                      სიზუსტე: {item.accuracy}%
+                    </span>
+                    <span className="text-[11px] font-semibold text-[#666666]">
+                      ({item.incorrect} შეცდომა / {item.attempted} მცდელობა)
+                    </span>
+                  </div>
+                  <div className="font-serif font-bold text-sm sm:text-base text-[#0D1B2A]">
+                    {item.chapterTitle}
+                  </div>
+                  <div className="text-xs text-[#C79B3A] font-semibold flex items-center gap-1.5">
+                    {getCategoryIcon(item.categoryKey)}
+                    <span>{item.categoryTitle}</span>
+                  </div>
+                </div>
+
+                {onOpenTest && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenTest(item.categoryKey, item.chapterId)}
+                    className="px-4 py-2.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>გაიმეორე ეს თემა</span>
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Profile Navigation Tabs */}
       <div className="flex items-center gap-2 border-b border-[#E6DDCB] pb-2 overflow-x-auto">
         <button
           onClick={() => setActiveTab('quizzes')}
-          className={`px-5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
-            activeTab === 'quizzes'
-              ? 'bg-[#0D1B2A] text-white shadow-md'
-              : 'bg-white text-[#0D1B2A] border border-[#E6DDCB] hover:bg-[#FAF8F3]'
-          }`}
+          className={`px-5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 ${activeTab === 'quizzes'
+            ? 'bg-[#0D1B2A] text-white shadow-md'
+            : 'bg-white text-[#0D1B2A] border border-[#E6DDCB] hover:bg-[#FAF8F3]'
+            }`}
         >
           <HelpCircle className="w-4 h-4 text-[#C79B3A]" />
           <span>ქვიზების შედეგები ({quizAttempts.length})</span>
@@ -446,11 +550,10 @@ export const ProfileView: FC<ProfileViewProps> = ({
 
         <button
           onClick={() => setActiveTab('chapters')}
-          className={`px-5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
-            activeTab === 'chapters'
-              ? 'bg-[#0D1B2A] text-white shadow-md'
-              : 'bg-white text-[#0D1B2A] border border-[#E6DDCB] hover:bg-[#FAF8F3]'
-          }`}
+          className={`px-5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 ${activeTab === 'chapters'
+            ? 'bg-[#0D1B2A] text-white shadow-md'
+            : 'bg-white text-[#0D1B2A] border border-[#E6DDCB] hover:bg-[#FAF8F3]'
+            }`}
         >
           <BookMarked className="w-4 h-4 text-[#C79B3A]" />
           <span>11 თავის პროგრესი</span>
@@ -458,11 +561,10 @@ export const ProfileView: FC<ProfileViewProps> = ({
 
         <button
           onClick={() => setActiveTab('categories')}
-          className={`px-5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 ${
-            activeTab === 'categories'
-              ? 'bg-[#0D1B2A] text-white shadow-md'
-              : 'bg-white text-[#0D1B2A] border border-[#E6DDCB] hover:bg-[#FAF8F3]'
-          }`}
+          className={`px-5 py-2.5 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 shrink-0 ${activeTab === 'categories'
+            ? 'bg-[#0D1B2A] text-white shadow-md'
+            : 'bg-white text-[#0D1B2A] border border-[#E6DDCB] hover:bg-[#FAF8F3]'
+            }`}
         >
           <Award className="w-4 h-4 text-[#C79B3A]" />
           <span>დავალების ტიპები</span>
@@ -471,7 +573,7 @@ export const ProfileView: FC<ProfileViewProps> = ({
 
       {/* Main Tab Views */}
       <div className="space-y-8">
-        
+
         {/* Success Alert Banner */}
         {resetSuccess && (
           <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs font-semibold flex items-center gap-2 shadow-xs">
@@ -660,11 +762,10 @@ export const ProfileView: FC<ProfileViewProps> = ({
                   const chPct = chAttempted > 0 ? Math.round((chCorrect / chAttempted) * 100) : 0;
 
                   return (
-                    <div 
-                      key={prog.id} 
-                      className={`rounded-2xl border-2 transition-all duration-300 overflow-hidden ${
-                        isExpanded ? 'border-[#C79B3A] bg-white shadow-md' : 'border-[#E6DDCB] bg-[#FAF8F3] hover:border-[#C79B3A]/60'
-                      }`}
+                    <div
+                      key={prog.id}
+                      className={`rounded-2xl border-2 transition-all duration-300 overflow-hidden ${isExpanded ? 'border-[#C79B3A] bg-white shadow-md' : 'border-[#E6DDCB] bg-[#FAF8F3] hover:border-[#C79B3A]/60'
+                        }`}
                     >
                       {/* Chapter Accordion Header */}
                       <button
@@ -672,9 +773,8 @@ export const ProfileView: FC<ProfileViewProps> = ({
                         className="w-full p-4 sm:p-5 text-left flex items-center justify-between gap-4 cursor-pointer"
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${
-                            isExpanded ? 'bg-[#0D1B2A] text-[#C79B3A]' : 'bg-white border border-[#E6DDCB] text-[#0D1B2A]'
-                          }`}>
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 ${isExpanded ? 'bg-[#0D1B2A] text-[#C79B3A]' : 'bg-white border border-[#E6DDCB] text-[#0D1B2A]'
+                            }`}>
                             {prog.title.match(/\d+/)?.[0] || '1'}
                           </div>
                           <h4 className="font-serif font-bold text-sm sm:text-base text-[#0D1B2A] truncate">
@@ -706,7 +806,7 @@ export const ProfileView: FC<ProfileViewProps> = ({
                       {/* Chapter Accordion Expanded Content */}
                       {isExpanded && (
                         <div className="p-4 sm:p-6 bg-white border-t border-[#E6DDCB] space-y-6 animate-in fade-in duration-200">
-                          
+
                           <div className="text-xs text-[#666666] bg-[#FAF8F3] p-3.5 rounded-xl border border-[#E6DDCB]">
                             💡 <strong>წესი:</strong> რუკებში, ანალოგიებში, წყაროებსა და ილუსტრაციებში დავალება სწორად ითვლება მხოლოდ მაშინ, თუ <strong>ყველა კითხვას</strong> სწორად უპასუხეთ. 1 შეცდომაც კი დავალებას თვლის არასწორად.
                           </div>
@@ -720,7 +820,7 @@ export const ProfileView: FC<ProfileViewProps> = ({
                               const unitText = isMcq ? 'კითხვა' : cat.key === 'map' ? 'რუკა' : cat.key === 'analogies' ? 'ანალოგია' : cat.key === 'source' ? 'წყარო' : cat.key === 'illustrations' ? 'ილუსტრაცია' : 'დავალება';
 
                               return (
-                                <div 
+                                <div
                                   key={cat.key}
                                   className="p-4 bg-[#FAF8F3] rounded-xl border border-[#E6DDCB] space-y-3.5 flex flex-col justify-between"
                                 >
@@ -755,11 +855,11 @@ export const ProfileView: FC<ProfileViewProps> = ({
 
                                     {/* Progress Bar */}
                                     <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden flex">
-                                      <div 
+                                      <div
                                         style={{ width: `${stats.pct}%` }}
                                         className="bg-emerald-500 h-full transition-all duration-300"
                                       />
-                                      <div 
+                                      <div
                                         style={{ width: `${stats.total > 0 ? (stats.incorrect / stats.total) * 100 : 0}%` }}
                                         className="bg-rose-500 h-full transition-all duration-300"
                                       />
@@ -850,9 +950,8 @@ export const ProfileView: FC<ProfileViewProps> = ({
                   return (
                     <div
                       key={cat.key}
-                      className={`rounded-2xl border-2 transition-all duration-300 overflow-hidden ${
-                        isCategoryExpanded ? 'border-[#C79B3A] bg-white shadow-md' : 'border-[#E6DDCB] bg-[#FAF8F3] hover:border-[#C79B3A]/60'
-                      }`}
+                      className={`rounded-2xl border-2 transition-all duration-300 overflow-hidden ${isCategoryExpanded ? 'border-[#C79B3A] bg-white shadow-md' : 'border-[#E6DDCB] bg-[#FAF8F3] hover:border-[#C79B3A]/60'
+                        }`}
                     >
                       {/* Category Accordion Header */}
                       <button
@@ -860,9 +959,8 @@ export const ProfileView: FC<ProfileViewProps> = ({
                         className="w-full p-4 sm:p-5 text-left flex items-center justify-between gap-4 cursor-pointer"
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold shrink-0 transition-colors ${
-                            isCategoryExpanded ? 'bg-[#0D1B2A] text-[#C79B3A]' : 'bg-white border border-[#E6DDCB]'
-                          }`}>
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold shrink-0 transition-colors ${isCategoryExpanded ? 'bg-[#0D1B2A] text-[#C79B3A]' : 'bg-white border border-[#E6DDCB]'
+                            }`}>
                             {getCategoryIcon(cat.key)}
                           </div>
                           <div>
@@ -899,7 +997,7 @@ export const ProfileView: FC<ProfileViewProps> = ({
                       {/* Category Accordion Expanded Content: 11 Chapters Breakdown for this Category */}
                       {isCategoryExpanded && (
                         <div className="p-4 sm:p-6 bg-white border-t border-[#E6DDCB] space-y-5 animate-in fade-in duration-200">
-                          
+
                           <div className="text-xs text-[#666666] bg-[#FAF8F3] p-3.5 rounded-xl border border-[#E6DDCB]">
                             💡 <strong>11 თავის სტატისტიკა ({cat.title}):</strong> ქვემოთ მოცემულია თითოეულ თავში ჩატარებული {unitText}ების შედეგები. დააჭირეთ „ნახე შეცდომები“ იმ თავის შეცდომების სანახავად.
                           </div>
@@ -936,11 +1034,11 @@ export const ProfileView: FC<ProfileViewProps> = ({
                                     </div>
 
                                     <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden flex">
-                                      <div 
+                                      <div
                                         style={{ width: `${stats.pct}%` }}
                                         className="bg-emerald-500 h-full transition-all duration-300"
                                       />
-                                      <div 
+                                      <div
                                         style={{ width: `${stats.total > 0 ? (stats.incorrect / stats.total) * 100 : 0}%` }}
                                         className="bg-rose-500 h-full transition-all duration-300"
                                       />

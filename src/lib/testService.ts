@@ -191,6 +191,13 @@ export interface QuestionAnswerSecret {
 
 const answerKeyVault = new Map<string, QuestionAnswerSecret>();
 
+export function invalidateTestServiceCache(): void {
+  categoryCountCache.clear();
+  categoryDetailsCache.clear();
+  categoryQuestionsCache.clear();
+  chapterCountsCache.clear();
+}
+
 export function getQuestionAnswerSecret(
   questionId: string,
   fallbackQuestion?: Partial<QuizQuestion>

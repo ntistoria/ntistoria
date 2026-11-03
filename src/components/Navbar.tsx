@@ -1,8 +1,10 @@
 import { useState, useEffect, type FC } from 'react';
-import { NavTab } from '../types';
+import { NavTab, MockExamBannerInfo } from '../types';
 import { Logo } from './Logo';
 import { Menu, X, BookOpen, Search, ArrowRight, User, ShieldCheck } from 'lucide-react';
 import { isAdminUser } from '../lib/blogService';
+import { fetchActiveMockExamBanner } from '../lib/mockExamService';
+import { supabase } from '../lib/supabase';
 
 interface NavbarProps {
   activeTab: NavTab;
@@ -17,6 +19,23 @@ interface NavbarProps {
 export const Navbar: FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenSearch, onOpenAuth, onOpenProfile, user, onLogout }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [liveMockBanner, setLiveMockBanner] = useState<MockExamBannerInfo | null>(null);
+
+  useEffect(() => {
+    const checkMock = () => {
+      fetchActiveMockExamBanner().then(setLiveMockBanner);
+    };
+    checkMock();
+
+    const channel = supabase
+      .channel('navbar-mock-exam-live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mock_exams' }, checkMock)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -94,13 +113,18 @@ export const Navbar: FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenSearch,
                 <button
                   key={item.id}
                   onClick={() => handleNavClick(item.id)}
-                  className={`relative py-1 transition-colors duration-200 cursor-pointer whitespace-nowrap ${
+                  className={`relative py-1 transition-colors duration-200 cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
                     isActive 
                       ? 'text-[#13253D] border-b border-[#C79B3A] pb-1 font-bold' 
                       : 'hover:text-[#13253D]'
                   }`}
                 >
-                  {item.label}
+                  <span>{item.label}</span>
+                  {item.id === 'tests' && liveMockBanner && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[9px] font-bold tracking-wider animate-pulse">
+                      LIVE
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -202,7 +226,14 @@ export const Navbar: FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenSearch,
                       : 'text-[#666666] hover:bg-[#F5F2EA]/60 hover:text-[#0D1B2A]'
                   }`}
                 >
-                  <span>{item.label}</span>
+                  <span className="flex items-center gap-2">
+                    <span>{item.label}</span>
+                    {item.id === 'tests' && liveMockBanner && (
+                      <span className="px-2 py-0.5 rounded-full bg-rose-500 text-white text-[10px] font-bold uppercase tracking-wider animate-pulse">
+                        🔴 LIVE გამოცდა
+                      </span>
+                    )}
+                  </span>
                   {isActive && <ArrowRight className="w-4 h-4 text-[#C79B3A]" />}
                 </button>
               );

@@ -58,7 +58,11 @@ import {
   UserCheck,
   ShieldAlert,
   LogIn,
-  AlertCircle
+  AlertCircle,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Keyboard
 } from 'lucide-react';
 
 interface TestsViewProps {
@@ -67,6 +71,9 @@ interface TestsViewProps {
   onOpenAuth?: () => void;
   isLoggedIn?: boolean;
   onNavigateHome?: () => void;
+  initialCategoryKey?: string | null;
+  initialChapterId?: string | null;
+  onClearInitialTarget?: () => void;
 }
 
 interface TaskGroup {
@@ -97,17 +104,31 @@ const checkChronologyItemsMatch = (
   return userItemsOrder.every((item, i) => item === expectedOrder[i]);
 };
 
-export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth, onNavigateHome }) => {
+export const TestsView: FC<TestsViewProps> = ({
+  onOpenTest,
+  user,
+  onOpenAuth,
+  onNavigateHome,
+  initialCategoryKey,
+  initialChapterId,
+  onClearInitialTarget
+}) => {
   const isLoggedIn = !!(user && user.email);
-  const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(null);
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState<string | null>(initialCategoryKey || null);
   const [programs, setPrograms] = useState<ProgramChapter[]>([]);
-  const [selectedChapterId, setSelectedChapterId] = useState<string>('all');
+  const [selectedChapterId, setSelectedChapterId] = useState<string>(initialChapterId || 'all');
   const [questionsCountMap, setQuestionsCountMap] = useState<Record<string, number>>({});
   const [categoryTotalCounts, setCategoryTotalCounts] = useState<Record<string, number>>({});
   const [categoryItemDetailsMap, setCategoryItemDetailsMap] = useState<Record<string, CategoryItemDetails>>({});
   const [progressData, setProgressData] = useState<StudentProfileProgress | null>(null);
   const [loading, setLoading] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+
+  // Lightbox for Map / Illustration inside Inline Test Runner
+  const [inlineLightboxUrl, setInlineLightboxUrl] = useState<string | null>(null);
+  const [inlineLightboxZoom, setInlineLightboxZoom] = useState<number>(1.5);
+  // Summary review filter ('mistakes' vs 'all')
+  const [reviewFilter, setReviewFilter] = useState<'mistakes' | 'all'>('mistakes');
 
   // MOCK EXAM MODE STATE
   const [mockBanner, setMockBanner] = useState<MockExamBannerInfo | null>(null);
@@ -721,6 +742,66 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth, on
     saveSession({ selectedAnswers: updated, currentQIndex });
   };
 
+  // Support deep-linking from ProfileView ("გაიმეორე ეს თემა")
+  useEffect(() => {
+    if (initialCategoryKey) {
+      setSelectedCategoryKey(initialCategoryKey);
+      setSelectedChapterId(initialChapterId || 'ch-1');
+      setActiveInlineTest(null);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (onClearInitialTarget) onClearInitialTarget();
+    }
+  }, [initialCategoryKey, initialChapterId, onClearInitialTarget]);
+
+  // 3.2 Keyboard Shortcuts for Inline Test Runner:
+  // 1-4 / ა-დ / a-d to select MCQ options, ArrowLeft / ArrowRight to navigate questions
+  useEffect(() => {
+    if (!activeInlineTest || isTestFinished || inlineLightboxUrl) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const tagName = target?.tagName?.toUpperCase() || '';
+      if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT' || target?.isContentEditable) {
+        return;
+      }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      const totalQ = activeInlineTest.questions.length;
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setCurrentQIndex(prev => Math.max(0, prev - 1));
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setCurrentQIndex(prev => Math.min(totalQ - 1, prev + 1));
+        return;
+      }
+
+      const currentQ = activeInlineTest.questions[currentQIndex];
+      if (!currentQ || (currentQ.questionType && currentQ.questionType !== 'mcq')) return;
+
+      const keyMap: Record<string, number> = {
+        '1': 0, 'a': 0, 'A': 0, 'ა': 0,
+        '2': 1, 'b': 1, 'B': 1, 'ბ': 1,
+        '3': 2, 'c': 2, 'C': 2, 'გ': 2,
+        '4': 3, 'd': 3, 'D': 3, 'დ': 3
+      };
+
+      if (e.key in keyMap) {
+        const optIdx = keyMap[e.key];
+        if (currentQ.options && optIdx < currentQ.options.length) {
+          e.preventDefault();
+          handleSelectOptionInline(optIdx);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeInlineTest, isTestFinished, currentQIndex, selectedAnswers, inlineLightboxUrl]);
+
   // CHRONOLOGY MOVE HANDLERS (Mouse move up / move down 3 items)
   const handleMoveChronologyItem = (fromIdx: number, toIdx: number) => {
     if (!activeInlineTest || isTestFinished) return;
@@ -957,6 +1038,83 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth, on
             </span>
           </div>
 
+          {/* 3.2 Question Navigator / Palette */}
+          {!isTestFinished && activeInlineTest.questions.length > 1 && (
+            <div className="bg-white rounded-2xl border border-[#E6DDCB] p-4 shadow-xs space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold text-[#666666]">
+                <span className="uppercase tracking-wider text-[#0D1B2A]">
+                  კითხვების ნავიგატორი
+                </span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                    <span>სწორი</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                    <span>შეცდომა</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#E6DDCB]" />
+                    <span>პასუხგაუცემელი</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto pr-1">
+                {activeInlineTest.questions.map((q, idx) => {
+                  const isCurrent = idx === currentQIndex;
+                  let isAnswered = false;
+                  let isCorrect = false;
+
+                  if (q.questionType === 'chronology') {
+                    isAnswered = !!chronologyChecked[idx];
+                    if (isAnswered) {
+                      const order = chronologyOrders[idx] || q.chronologyItems || [];
+                      isCorrect = checkChronologyItemsMatch(order, q.chronologyItems || [], q.correctSequence || [0, 1, 2]);
+                    }
+                  } else if (q.questionType === 'open_text') {
+                    isAnswered = !!openTextChecked[idx];
+                    if (isAnswered) {
+                      const graded = openTextScores[idx];
+                      const typed = openTextAnswers[idx] || '';
+                      isCorrect = graded
+                        ? graded.score >= graded.maxScore
+                        : checkOpenAnswerMatch(typed, q.correctAnswerText || '');
+                    }
+                  } else {
+                    isAnswered = selectedAnswers[idx] !== undefined && selectedAnswers[idx] !== -1;
+                    if (isAnswered) {
+                      isCorrect = selectedAnswers[idx] === q.correctAnswerIndex;
+                    }
+                  }
+
+                  let btnClass = 'bg-[#FAF8F3] border-[#E6DDCB] text-[#0D1B2A] hover:border-[#C79B3A]';
+                  if (isAnswered) {
+                    btnClass = isCorrect
+                      ? 'bg-emerald-50 border-emerald-400 text-emerald-800'
+                      : 'bg-rose-50 border-rose-400 text-rose-800';
+                  }
+                  if (isCurrent) {
+                    btnClass += ' ring-2 ring-[#C79B3A] font-extrabold scale-105';
+                  }
+
+                  return (
+                    <button
+                      key={q.id || idx}
+                      type="button"
+                      onClick={() => setCurrentQIndex(idx)}
+                      className={`w-8 h-8 rounded-lg border text-xs font-mono font-bold transition-all flex items-center justify-center cursor-pointer ${btnClass}`}
+                      title={`კითხვა #${idx + 1}`}
+                    >
+                      {idx + 1}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {!isTestFinished ? (
             /* ACTIVE INLINE QUESTION VIEW */
             <div className="bg-white rounded-3xl border-2 border-[#E6DDCB] p-6 sm:p-10 space-y-8 shadow-md prevent-select select-none">
@@ -1021,13 +1179,35 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth, on
 
               {/* Map / Illustration Image if present */}
               {activeInlineTest.questions[currentQIndex]?.mapImage && (
-                <div className="rounded-2xl overflow-hidden border border-[#E6DDCB] shadow-md bg-[#0D1B2A] max-h-[480px]">
-                  <img 
-                    src={activeInlineTest.questions[currentQIndex]?.mapImage} 
-                    alt="დავალების სურათი/რუკა" 
-                    className="w-full h-full object-contain max-h-[480px] mx-auto"
-                    referrerPolicy="no-referrer"
-                  />
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between px-3 py-2 bg-[#FAF8F3] rounded-xl border border-[#E6DDCB]">
+                    <span className="text-xs font-bold text-[#0D1B2A]">
+                      სურათი / რუკა (დააჭირეთ გასადიდებლად)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setInlineLightboxZoom(1.5);
+                        setInlineLightboxUrl(activeInlineTest.questions[currentQIndex]?.mapImage || null);
+                      }}
+                      className="px-3 py-1 rounded-lg bg-[#0D1B2A] text-[#FAF8F3] hover:bg-[#C79B3A] hover:text-[#0D1B2A] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Maximize2 className="w-3.5 h-3.5" />
+                      <span>სრულ ეკრანზე</span>
+                    </button>
+                  </div>
+                  <div className="rounded-2xl overflow-hidden border border-[#E6DDCB] shadow-md bg-[#0D1B2A] max-h-[480px]">
+                    <img 
+                      src={activeInlineTest.questions[currentQIndex]?.mapImage} 
+                      alt="დავალების სურათი/რუკა" 
+                      onClick={() => {
+                        setInlineLightboxZoom(1.5);
+                        setInlineLightboxUrl(activeInlineTest.questions[currentQIndex]?.mapImage || null);
+                      }}
+                      className="w-full h-full object-contain max-h-[480px] mx-auto cursor-zoom-in"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
                 </div>
               )}
 
@@ -1279,129 +1459,359 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth, on
               )}
 
               {/* Navigation Controls: Previous, Next, Finish */}
-              <div className="flex items-center justify-between pt-6 border-t border-[#E6DDCB]">
-                <button
-                  onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))}
-                  disabled={currentQIndex === 0}
-                  className="px-5 py-2.5 bg-[#FAF8F3] hover:bg-[#E6DDCB] border border-[#E6DDCB] text-[#0D1B2A] text-xs font-bold rounded-xl transition-all disabled:opacity-40 cursor-pointer"
-                >
-                  წინა შეკითხვა
-                </button>
+              <div className="space-y-3 pt-6 border-t border-[#E6DDCB]">
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => setCurrentQIndex(prev => Math.max(0, prev - 1))}
+                    disabled={currentQIndex === 0}
+                    className="px-5 py-2.5 bg-[#FAF8F3] hover:bg-[#E6DDCB] border border-[#E6DDCB] text-[#0D1B2A] text-xs font-bold rounded-xl transition-all disabled:opacity-40 cursor-pointer"
+                  >
+                    წინა შეკითხვა
+                  </button>
 
-                {currentQIndex < activeInlineTest.questions.length - 1 ? (
-                  <button
-                    onClick={() => setCurrentQIndex(prev => Math.min(activeInlineTest.questions.length - 1, prev + 1))}
-                    className="px-6 py-3 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md cursor-pointer"
-                  >
-                    შემდეგი შეკითხვა
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleFinishInlineTest}
-                    className="px-6 py-3 bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md cursor-pointer"
-                  >
-                    ტესტის დასრულება
-                  </button>
-                )}
+                  {currentQIndex < activeInlineTest.questions.length - 1 ? (
+                    <button
+                      onClick={() => setCurrentQIndex(prev => Math.min(activeInlineTest.questions.length - 1, prev + 1))}
+                      className="px-6 py-3 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md cursor-pointer"
+                    >
+                      შემდეგი შეკითხვა
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleFinishInlineTest}
+                      className="px-6 py-3 bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md cursor-pointer"
+                    >
+                      ტესტის დასრულება
+                    </button>
+                  )}
+                </div>
+
+                {/* Keyboard Shortcuts Hint */}
+                <div className="hidden sm:flex items-center justify-center gap-2 text-[11px] text-[#8A8A8A] pt-1">
+                  <Keyboard className="w-3.5 h-3.5 text-[#C79B3A]" />
+                  <span>
+                    კლავიატურა: <strong className="text-[#0D1B2A]">1–4</strong> ან <strong className="text-[#0D1B2A]">ა–დ</strong> პასუხის ასარჩევად • <strong className="text-[#0D1B2A]">← / →</strong> გადასასვლელად
+                  </span>
+                </div>
               </div>
 
             </div>
           ) : (
             /* FINISHED TEST SUMMARY SCREEN */
-            <div className="bg-white rounded-3xl border-2 border-[#C79B3A] p-8 sm:p-12 text-center space-y-8 shadow-xl animate-fade-in">
+            <div className="bg-white rounded-3xl border-2 border-[#C79B3A] p-6 sm:p-12 text-center space-y-8 shadow-xl animate-fade-in">
               {(() => {
                 let correctCount = 0;
                 let earnedPoints = 0;
                 let totalPoints = 0;
                 const pointsMode = activeInlineTest.questions.length > 0 && activeInlineTest.questions.every(q => !!q.maxScore);
-                activeInlineTest.questions.forEach((q, idx) => {
+                const questionOutcomes = activeInlineTest.questions.map((q, idx) => {
                   if (pointsMode) {
                     totalPoints += q.maxScore || 0;
                     earnedPoints += openTextScores[idx]?.score || 0;
                   }
+                  let isCorrect = false;
                   if (q.questionType === 'chronology') {
                     const order = chronologyOrders[idx] || q.chronologyItems || [];
-                    if (checkChronologyItemsMatch(order, q.chronologyItems || [], q.correctSequence || [0, 1, 2])) correctCount++;
+                    isCorrect = checkChronologyItemsMatch(order, q.chronologyItems || [], q.correctSequence || [0, 1, 2]);
                   } else if (q.questionType === 'open_text') {
                     const typed = openTextAnswers[idx] || '';
                     const graded = openTextScores[idx];
-                    if (graded ? graded.score >= graded.maxScore : (!q.maxScore && checkOpenAnswerMatch(typed, q.correctAnswerText || ''))) correctCount++;
+                    isCorrect = graded ? graded.score >= graded.maxScore : (!q.maxScore && checkOpenAnswerMatch(typed, q.correctAnswerText || ''));
                   } else {
-                    if (selectedAnswers[idx] === q.correctAnswerIndex) correctCount++;
+                    isCorrect = selectedAnswers[idx] === q.correctAnswerIndex;
                   }
+                  if (isCorrect) correctCount++;
+                  return { q, idx, isCorrect };
                 });
+
                 const totalCount = activeInlineTest.questions.length;
+                const mistakeCount = totalCount - correctCount;
                 const scorePct = pointsMode
                   ? (totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0)
                   : (totalCount > 0 ? Math.round((correctCount / totalCount) * 100) : 0);
 
+                const displayedOutcomes = reviewFilter === 'mistakes' && mistakeCount > 0
+                  ? questionOutcomes.filter(item => !item.isCorrect)
+                  : questionOutcomes;
+
+                const optLabels = ['ა', 'ბ', 'გ', 'დ'];
+
                 return (
-                  <div className="space-y-6 max-w-lg mx-auto">
-                    <div className="w-20 h-20 mx-auto rounded-3xl bg-[#FAF8F3] border-2 border-[#C79B3A] flex items-center justify-center shadow-md">
-                      <Award className="w-10 h-10 text-[#C79B3A]" />
-                    </div>
-
-                    <div className="space-y-2">
-                      <h2 className="font-serif font-bold text-3xl text-[#0D1B2A]">
-                        ტესტი დასრულებულია!
-                      </h2>
-                      <p className="text-sm text-[#666666]">
-                        {activeInlineTest.title}
-                      </p>
-                    </div>
-
-                    <div className="p-6 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-4">
-                      <div className="text-4xl font-serif font-bold text-[#C79B3A]">
-                        {pointsMode ? `${earnedPoints} / ${totalPoints} ქულა` : `${scorePct}%`}
+                  <div className="space-y-8">
+                    <div className="space-y-6 max-w-lg mx-auto">
+                      <div className="w-20 h-20 mx-auto rounded-3xl bg-[#FAF8F3] border-2 border-[#C79B3A] flex items-center justify-center shadow-md">
+                        <Award className="w-10 h-10 text-[#C79B3A]" />
                       </div>
-                      {pointsMode && (
-                        <div className="text-xs font-semibold text-[#666666]">{scorePct}%</div>
-                      )}
-                      <div className="grid grid-cols-2 gap-4 text-xs font-semibold pt-2 border-t border-[#E6DDCB]">
-                        <div className="text-emerald-700 bg-emerald-50 py-2 rounded-xl border border-emerald-200">
-                          სწორი: {correctCount}
+
+                      <div className="space-y-2">
+                        <h2 className="font-serif font-bold text-3xl text-[#0D1B2A]">
+                          ტესტი დასრულებულია!
+                        </h2>
+                        <p className="text-sm text-[#666666]">
+                          {activeInlineTest.title}
+                        </p>
+                      </div>
+
+                      <div className="p-6 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] space-y-4">
+                        <div className="text-4xl font-serif font-bold text-[#C79B3A]">
+                          {pointsMode ? `${earnedPoints} / ${totalPoints} ქულა` : `${scorePct}%`}
                         </div>
-                        <div className="text-rose-700 bg-rose-50 py-2 rounded-xl border border-rose-200">
-                          არასწორი: {totalCount - correctCount}
+                        {pointsMode && (
+                          <div className="text-xs font-semibold text-[#666666]">{scorePct}%</div>
+                        )}
+                        <div className="grid grid-cols-2 gap-4 text-xs font-semibold pt-2 border-t border-[#E6DDCB]">
+                          <div className="text-emerald-700 bg-emerald-50 py-2 rounded-xl border border-emerald-200">
+                            სწორი: {correctCount}
+                          </div>
+                          <div className="text-rose-700 bg-rose-50 py-2 rounded-xl border border-rose-200">
+                            არასწორი: {mistakeCount}
+                          </div>
                         </div>
+                      </div>
+
+                      {/* Tab Switch Anti-cheating Status */}
+                      <div className="p-3.5 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] text-xs font-bold shadow-xs">
+                        {switchCountRef.current > 0 ? (
+                          <span className="text-amber-800 flex items-center justify-center gap-2">
+                            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                            <span>⚠️ ტესტის მიმდინარეობისას {switchCountRef.current}-ჯერ დაფიქსირდა გვერდის/ტაბის დატოვება</span>
+                          </span>
+                        ) : (
+                          <span className="text-emerald-800 flex items-center justify-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span>✓ გვერდის/ტაბის დატოვება არ დაფიქსირებულა</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
+                        <button
+                          onClick={handleRestartInlineTest}
+                          className="w-full py-3.5 bg-[#FAF8F3] hover:bg-[#E6DDCB] border border-[#E6DDCB] text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
+                        >
+                          <RotateCcw className="w-4 h-4 text-[#C79B3A]" />
+                          <span>თავიდან გაკეთება</span>
+                        </button>
+
+                        <button
+                          onClick={() => setActiveInlineTest(null)}
+                          className="w-full py-3.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
+                        >
+                          <BookOpen className="w-4 h-4" />
+                          <span>ტესტებში დაბრუნება</span>
+                        </button>
                       </div>
                     </div>
 
-                    {/* Tab Switch Anti-cheating Status */}
-                    <div className="p-3.5 bg-[#FAF8F3] rounded-2xl border border-[#E6DDCB] text-xs font-bold shadow-xs">
-                      {switchCountRef.current > 0 ? (
-                        <span className="text-amber-800 flex items-center justify-center gap-2">
-                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                          <span>⚠️ ტესტის მიმდინარეობისას {switchCountRef.current}-ჯერ დაფიქსირდა გვერდის/ტაბის დატოვება</span>
-                        </span>
-                      ) : (
-                        <span className="text-emerald-800 flex items-center justify-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span>✓ გვერდის/ტაბის დატოვება არ დაფიქსირებულა</span>
-                        </span>
-                      )}
-                    </div>
+                    {/* 3.3 Detailed Mistake & Question Review */}
+                    <div className="border-t-2 border-[#E6DDCB] pt-8 text-left space-y-5 max-w-3xl mx-auto">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <h3 className="font-serif font-bold text-xl text-[#0D1B2A]">
+                            შედეგების დეტალური გარჩევა
+                          </h3>
+                          <p className="text-xs text-[#666666]">
+                            გადახედეთ თქვენს პასუხებს, სწორ ვარიანტებსა და განმარტებებს
+                          </p>
+                        </div>
 
-                    <div className="flex flex-col sm:flex-row items-center gap-4 pt-4">
-                      <button
-                        onClick={handleRestartInlineTest}
-                        className="w-full py-3.5 bg-[#FAF8F3] hover:bg-[#E6DDCB] border border-[#E6DDCB] text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        <RotateCcw className="w-4 h-4 text-[#C79B3A]" />
-                        <span>თავიდან გაკეთება</span>
-                      </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setReviewFilter('mistakes')}
+                            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                              reviewFilter === 'mistakes' && mistakeCount > 0
+                                ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                                : 'bg-[#FAF8F3] text-[#0D1B2A] border-[#E6DDCB] hover:border-[#C79B3A]'
+                            }`}
+                          >
+                            შეცდომები ({mistakeCount})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setReviewFilter('all')}
+                            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                              reviewFilter === 'all' || mistakeCount === 0
+                                ? 'bg-[#0D1B2A] text-white border-[#0D1B2A] shadow-xs'
+                                : 'bg-[#FAF8F3] text-[#0D1B2A] border-[#E6DDCB] hover:border-[#C79B3A]'
+                            }`}
+                          >
+                            ყველა კითხვა ({totalCount})
+                          </button>
+                        </div>
+                      </div>
 
-                      <button
-                        onClick={() => setActiveInlineTest(null)}
-                        className="w-full py-3.5 bg-[#0D1B2A] hover:bg-[#C79B3A] text-white hover:text-[#0D1B2A] text-xs uppercase tracking-wider font-bold rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        <BookOpen className="w-4 h-4" />
-                        <span>ტესტებში დაბრუნება</span>
-                      </button>
+                      <div className="space-y-4">
+                        {displayedOutcomes.map(({ q, idx, isCorrect }) => {
+                          const userAnsIdx = selectedAnswers[idx];
+                          const userAnsText =
+                            q.questionType === 'chronology'
+                              ? (chronologyOrders[idx] || q.chronologyItems || []).join(' ➔ ')
+                              : q.questionType === 'open_text'
+                              ? openTextAnswers[idx] || 'პასუხი არ გაცემულა'
+                              : userAnsIdx !== undefined && userAnsIdx >= 0 && q.options[userAnsIdx]
+                              ? `${optLabels[userAnsIdx] || userAnsIdx + 1}) ${q.options[userAnsIdx]}`
+                              : 'პასუხი არ გაცემულა';
+
+                          const correctAnsText =
+                            q.questionType === 'chronology'
+                              ? (q.correctSequence || [1, 2, 3])
+                                  .map(seqIdx => {
+                                    const orig = q.chronologyItems || [];
+                                    const i = seqIdx > 0 && seqIdx <= orig.length ? seqIdx - 1 : seqIdx;
+                                    return orig[i] || '';
+                                  })
+                                  .join(' ➔ ')
+                              : q.questionType === 'open_text'
+                              ? openTextScores[idx]?.correctAnswer || q.correctAnswerText || ''
+                              : q.options[q.correctAnswerIndex]
+                              ? `${optLabels[q.correctAnswerIndex] || q.correctAnswerIndex + 1}) ${q.options[q.correctAnswerIndex]}`
+                              : '';
+
+                          return (
+                            <div
+                              key={q.id || idx}
+                              className={`p-5 rounded-2xl border-2 space-y-3 ${
+                                isCorrect
+                                  ? 'bg-emerald-50/40 border-emerald-200'
+                                  : 'bg-rose-50/40 border-rose-200'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-start gap-2.5">
+                                  <span className="px-2.5 py-0.5 bg-[#0D1B2A] text-[#C79B3A] font-mono font-bold text-xs rounded-md shrink-0 mt-0.5">
+                                    #{idx + 1}
+                                  </span>
+                                  <p className="font-serif font-bold text-base text-[#0D1B2A] leading-snug">
+                                    {q.prompt}
+                                  </p>
+                                </div>
+                                <span
+                                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold shrink-0 inline-flex items-center gap-1 ${
+                                    isCorrect
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                      : 'bg-rose-100 text-rose-800 border border-rose-300'
+                                  }`}
+                                >
+                                  {isCorrect ? (
+                                    <>
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                      <span>სწორია</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <XCircle className="w-3.5 h-3.5" />
+                                      <span>შეცდომა</span>
+                                    </>
+                                  )}
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
+                                <div
+                                  className={`p-3 rounded-xl border ${
+                                    isCorrect
+                                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                                      : 'bg-rose-50 border-rose-200 text-rose-900'
+                                  }`}
+                                >
+                                  <span className="block font-bold uppercase tracking-wider text-[10px] opacity-75 mb-1">
+                                    თქვენი პასუხი:
+                                  </span>
+                                  <span className="font-semibold">{userAnsText}</span>
+                                </div>
+
+                                {!isCorrect && correctAnsText && (
+                                  <div className="p-3 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-900">
+                                    <span className="block font-bold uppercase tracking-wider text-[10px] opacity-75 mb-1">
+                                      სწორი პასუხი:
+                                    </span>
+                                    <span className="font-semibold">{correctAnsText}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {(q.explanation || openTextScores[idx]?.feedback) && (
+                                <div className="p-3.5 bg-white rounded-xl border border-[#E6DDCB] text-xs text-[#0D1B2A] space-y-1">
+                                  <span className="font-bold text-[#C79B3A] uppercase tracking-wider text-[10px] block">
+                                    განმარტება:
+                                  </span>
+                                  <p className="leading-relaxed">
+                                    {openTextScores[idx]?.feedback || q.explanation}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 );
               })()}
+            </div>
+          )}
+
+          {/* FULLSCREEN LIGHTBOX MODAL FOR INLINE TEST MAPS / ILLUSTRATIONS */}
+          {inlineLightboxUrl && (
+            <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-xs flex flex-col">
+              <div className="px-6 py-4 bg-[#0D1B2A] border-b border-white/15 flex items-center justify-between text-white">
+                <div className="flex items-center gap-3">
+                  <MapPin className="w-5 h-5 text-[#C79B3A]" />
+                  <span className="font-serif font-bold text-base">
+                    მასშტაბი {Math.round(inlineLightboxZoom * 100)}%
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setInlineLightboxZoom(z => Math.max(0.75, +(z - 0.25).toFixed(2)))}
+                    className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+                    title="დაპატარავება"
+                  >
+                    <ZoomOut className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInlineLightboxZoom(z => Math.min(3.5, +(z + 0.25).toFixed(2)))}
+                    className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+                    title="გადიდება"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInlineLightboxZoom(1)}
+                    className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white cursor-pointer"
+                    title="100%"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInlineLightboxUrl(null)}
+                    className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                    <span>დახურვა</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-auto p-6 flex items-start justify-center">
+                <img
+                  src={inlineLightboxUrl}
+                  alt="სურათი სრულ ეკრანზე"
+                  style={{
+                    width: `${inlineLightboxZoom * 100}%`,
+                    maxWidth: 'none'
+                  }}
+                  className="rounded-xl shadow-2xl transition-all duration-150"
+                  referrerPolicy="no-referrer"
+                  draggable={false}
+                />
+              </div>
             </div>
           )}
 

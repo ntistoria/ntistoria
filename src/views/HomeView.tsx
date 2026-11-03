@@ -1,8 +1,10 @@
 import { useState, useEffect, type FC } from 'react';
-import { NavTab, Article, HistoryTest, VideoLesson } from '../types';
+import { NavTab, Article, HistoryTest, VideoLesson, MockExamBannerInfo } from '../types';
 import { HERO_IMAGE, ABOUT_IMAGE, HISTORICAL_EPOCHS } from '../data/historyData';
 import { fetchAllArticles } from '../lib/blogService';
-import { Video, BookOpen, FileText, ArrowRight, CheckCircle2, MapPin, Wifi, Phone, GraduationCap, Award, Quote } from 'lucide-react';
+import { fetchActiveMockExamBanner } from '../lib/mockExamService';
+import { supabase } from '../lib/supabase';
+import { Video, BookOpen, FileText, ArrowRight, CheckCircle2, MapPin, Wifi, Phone, GraduationCap, Award, Quote, Clock } from 'lucide-react';
 import { motion } from 'motion/react';
 import { CatalogModal } from '../components/CatalogModal';
 
@@ -19,16 +21,69 @@ export const HomeView: FC<HomeViewProps> = ({
 }) => {
   const [catalogType, setCatalogType] = useState<'universities' | 'colleges' | 'programs' | null>(null);
   const [featuredArticles, setFeaturedArticles] = useState<Article[]>([]);
+  const [activeMockBanner, setActiveMockBanner] = useState<MockExamBannerInfo | null>(null);
 
   useEffect(() => {
     fetchAllArticles().then(arts => {
       setFeaturedArticles(arts.slice(0, 3));
     });
+
+    const loadMockBanner = () => {
+      fetchActiveMockExamBanner().then(banner => {
+        setActiveMockBanner(banner);
+      });
+    };
+    loadMockBanner();
+
+    const channel = supabase
+      .channel('home-mock-exam-banner')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mock_exams' }, loadMockBanner)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
 
   return (
     <div className="space-y-24 pb-20 overflow-x-hidden">
+
+      {/* LIVE MOCK EXAM TOP BANNER */}
+      {activeMockBanner && (
+        <div className="max-w-[1180px] mx-auto px-4 sm:px-6 pt-4 -mb-16">
+          <div
+            onClick={() => setActiveTab('tests')}
+            className="w-full p-4 sm:px-6 bg-gradient-to-r from-[#0D1B2A] via-[#13253D] to-[#0D1B2A] text-white rounded-2xl border-2 border-[#C79B3A] shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 cursor-pointer hover:border-[#E6C86B] transition-all group"
+          >
+            <div className="flex items-center gap-3">
+              <span className="relative flex h-3.5 w-3.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-rose-500" />
+              </span>
+              <div className="text-left">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-400/30">
+                    LIVE გამოცდა
+                  </span>
+                  <span className="font-serif font-bold text-sm sm:text-base text-[#FAF8F3]">
+                    მიმდინარეობს იმიტირებული ეროვნული გამოცდა: {activeMockBanner.title}
+                  </span>
+                </div>
+                <p className="text-xs text-[#FAF8F3]/75 mt-0.5 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-[#C79B3A]" />
+                  <span>ხანგრძლივობა: {activeMockBanner.duration_minutes} წუთი • დააჭირეთ გამოცდაში შესასვლელად</span>
+                </p>
+              </div>
+            </div>
+
+            <span className="px-4 py-2 bg-[#C79B3A] group-hover:bg-[#E6C86B] text-[#0D1B2A] text-xs font-bold uppercase tracking-wider rounded-xl transition-all flex items-center gap-1.5 shrink-0 shadow-sm">
+              <span>შეუერთდი</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </span>
+          </div>
+        </div>
+      )}
       
       {/* 1. HERO SECTION (Split 50/50 Layout) */}
       <section className="relative py-8 lg:py-12">
@@ -60,7 +115,25 @@ export const HomeView: FC<HomeViewProps> = ({
                 მოემზადე ეროვნული გამოცდებისთვის ისტორიის პედაგოგ ნოდარ თოთაძესთან ერთად. პროფესიონალური ტესტები, ვიდეო გაკვეთილები, ისტორიული ბლოგები და ყველა საჭირო რესურსი უმაღლესი შედეგებისთვის.
               </p>
 
-              {/* Social Media Links */}
+              {/* Primary Action Buttons (Directly below subtitle for strong CTA hierarchy) */}
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <button
+                  onClick={() => setActiveTab('tests')}
+                  className="px-6 py-3.5 bg-[#C79B3A] text-white text-[12px] uppercase tracking-widest font-bold rounded-[2px] shadow-md shadow-[#C79B3A]/20 hover:bg-[#D4AF37] transition-all cursor-pointer active:scale-[0.98] flex items-center gap-2"
+                >
+                  <span>საგამოცდო ტესტები</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('videos')}
+                  className="px-6 py-3.5 border border-[#E6DDCB] text-[#13253D] text-[12px] uppercase tracking-widest font-bold hover:bg-[#F5F2EA] transition-colors rounded-[2px] cursor-pointer"
+                >
+                  ვიდეოთეკა
+                </button>
+              </div>
+
+              {/* Compact Social Media Links below Primary CTAs */}
               <div className="flex flex-wrap items-center gap-2 pt-1">
                 <a 
                   href="https://www.facebook.com/profile.php?id=61593642503126" 
@@ -113,23 +186,6 @@ export const HomeView: FC<HomeViewProps> = ({
                   </svg>
                   <span>YouTube</span>
                 </a>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center gap-3 pt-1">
-                <button
-                  onClick={() => setActiveTab('tests')}
-                  className="px-6 py-3.5 bg-[#C79B3A] text-white text-[12px] uppercase tracking-widest font-bold rounded-[2px] shadow-md shadow-[#C79B3A]/20 hover:bg-[#D4AF37] transition-all cursor-pointer active:scale-[0.98]"
-                >
-                  საგამოცდო ტესტები
-                </button>
-
-                <button
-                  onClick={() => setActiveTab('videos')}
-                  className="px-6 py-3.5 border border-[#E6DDCB] text-[#13253D] text-[12px] uppercase tracking-widest font-bold hover:bg-[#F5F2EA] transition-colors rounded-[2px] cursor-pointer"
-                >
-                  ვიდეოთეკა
-                </button>
               </div>
 
               {/* Key Trust Signals */}
