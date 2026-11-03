@@ -510,41 +510,108 @@ export const fetchAllRowsFromTable = async (
 };
 
 /**
- * Fetch Real Test Questions for a category from Supabase with in-memory TTL cache
- * and in-flight request deduplication (prevents duplicate full-table downloads).
+ * Lightweight chapter question counter for MCQ so clicking the MCQ category
+ * does not download all 1,500 question texts & options until a chapter is chosen.
+ */
+const chapterCountsCache = new Map<string, CacheEntry<Record<string, number>>>();
+
+export const fetchChapterCountsForCategory = async (
+  categoryKey: string
+): Promise<Record<string, number>> => {
+  const cached = chapterCountsCache.get(categoryKey);
+  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  if (categoryKey === 'mcq') {
+    try {
+      const counts: Record<string, number> = {};
+      let from = 0;
+      const pageSize = 1000;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('multiple_choice_questions')
+          .select('program_number')
+          .range(from, from + pageSize - 1);
+
+        if (error || !data || data.length === 0) {
+          hasMore = false;
+        } else {
+          data.forEach((row: any) => {
+            const pNum = Number(row.program_number) || 1;
+            const chId = `ch-${pNum}`;
+            counts[chId] = (counts[chId] || 0) + 1;
+          });
+          if (data.length < pageSize) hasMore = false;
+          else from += pageSize;
+        }
+      }
+
+      if (Object.keys(counts).length > 0) {
+        chapterCountsCache.set(categoryKey, { data: counts, fetchedAt: Date.now() });
+        return counts;
+      }
+    } catch {}
+  }
+
+  const allQ = await fetchQuestionsForCategory(categoryKey);
+  const counts: Record<string, number> = {};
+  allQ.forEach((q) => {
+    counts[q.chapterId] = (counts[q.chapterId] || 0) + 1;
+  });
+  chapterCountsCache.set(categoryKey, { data: counts, fetchedAt: Date.now() });
+  return counts;
+};
+
+/**
+ * Fetch Real Test Questions for a category from Supabase with in-memory TTL cache,
+ * server-side chapter filtering for MCQ, and in-flight request deduplication.
  */
 export const fetchQuestionsForCategory = async (
   categoryKey: string,
   chapterId?: string
 ): Promise<(QuizQuestion & { chapterId: string })[]> => {
+  const targetChapterNum =
+    chapterId && chapterId !== 'all'
+      ? Number(String(chapterId).replace(/[^0-9]/g, ''))
+      : 0;
+
+  // 1. If full category is already cached, filter in memory (0ms)
   const fullCache = categoryQuestionsCache.get(categoryKey);
   if (fullCache && Date.now() - fullCache.fetchedAt < CACHE_TTL_MS) {
-    if (chapterId && chapterId !== 'all') {
-      const targetNum = Number(String(chapterId).replace(/[^0-9]/g, ''));
-      if (targetNum > 0) {
-        return fullCache.data.filter((q) => {
-          const qNum = Number(String(q.chapterId).replace(/[^0-9]/g, ''));
-          return qNum === targetNum || q.chapterId === chapterId || q.chapterId === `ch-${targetNum}`;
-        });
-      }
+    if (targetChapterNum > 0) {
+      return fullCache.data.filter((q) => {
+        const qNum = Number(String(q.chapterId).replace(/[^0-9]/g, ''));
+        return qNum === targetChapterNum || q.chapterId === chapterId || q.chapterId === `ch-${targetChapterNum}`;
+      });
     }
     return fullCache.data;
   }
 
-  // Deduplicate concurrent requests for the same category
-  const existingPromise = inFlightCategoryPromises.get(categoryKey);
+  // 2. For MCQ with a specific chapter requested, check chapter-specific cache or query ONLY that chapter from DB!
+  const cacheKey =
+    categoryKey === 'mcq' && targetChapterNum > 0
+      ? `${categoryKey}_ch-${targetChapterNum}`
+      : categoryKey;
+
+  const specificCache = categoryQuestionsCache.get(cacheKey);
+  if (specificCache && Date.now() - specificCache.fetchedAt < CACHE_TTL_MS) {
+    return specificCache.data;
+  }
+
+  // Deduplicate concurrent requests for the same cacheKey
+  const existingPromise = inFlightCategoryPromises.get(cacheKey);
   if (existingPromise) {
-    const allQ = await existingPromise;
-    if (chapterId && chapterId !== 'all') {
-      const targetNum = Number(String(chapterId).replace(/[^0-9]/g, ''));
-      if (targetNum > 0) {
-        return allQ.filter((q) => {
-          const qNum = Number(String(q.chapterId).replace(/[^0-9]/g, ''));
-          return qNum === targetNum || q.chapterId === chapterId || q.chapterId === `ch-${targetNum}`;
-        });
-      }
+    const res = await existingPromise;
+    if (targetChapterNum > 0 && cacheKey === categoryKey) {
+      return res.filter((q) => {
+        const qNum = Number(String(q.chapterId).replace(/[^0-9]/g, ''));
+        return qNum === targetChapterNum || q.chapterId === chapterId || q.chapterId === `ch-${targetChapterNum}`;
+      });
     }
-    return allQ;
+    return res;
   }
 
   const loadPromise = (async (): Promise<(QuizQuestion & { chapterId: string })[]> => {
@@ -553,7 +620,9 @@ export const fetchQuestionsForCategory = async (
 
     for (const tableName of tablesToQuery) {
       try {
-        const rawQuestions: any[] = await fetchAllRowsFromTable(tableName);
+        const chapterFilterNum =
+          categoryKey === 'mcq' && targetChapterNum > 0 ? targetChapterNum : undefined;
+        const rawQuestions: any[] = await fetchAllRowsFromTable(tableName, chapterFilterNum);
 
         if (rawQuestions.length > 0) {
           let mapsMap: Record<number, { map_url: string; program_number: number; sub_program_number: number }> = {};
@@ -789,7 +858,7 @@ export const fetchQuestionsForCategory = async (
             };
           });
 
-          categoryQuestionsCache.set(categoryKey, { data: mapped, fetchedAt: Date.now() });
+          categoryQuestionsCache.set(cacheKey, { data: mapped, fetchedAt: Date.now() });
           return mapped;
         }
       } catch (err) {
@@ -800,21 +869,18 @@ export const fetchQuestionsForCategory = async (
     return [];
   })();
 
-  inFlightCategoryPromises.set(categoryKey, loadPromise);
+  inFlightCategoryPromises.set(cacheKey, loadPromise);
   try {
     const allQ = await loadPromise;
-    if (chapterId && chapterId !== 'all') {
-      const targetNum = Number(String(chapterId).replace(/[^0-9]/g, ''));
-      if (targetNum > 0) {
-        return allQ.filter((q) => {
-          const qNum = Number(String(q.chapterId).replace(/[^0-9]/g, ''));
-          return qNum === targetNum || q.chapterId === chapterId || q.chapterId === `ch-${targetNum}`;
-        });
-      }
+    if (targetChapterNum > 0 && cacheKey === categoryKey) {
+      return allQ.filter((q) => {
+        const qNum = Number(String(q.chapterId).replace(/[^0-9]/g, ''));
+        return qNum === targetChapterNum || q.chapterId === chapterId || q.chapterId === `ch-${targetChapterNum}`;
+      });
     }
     return allQ;
   } finally {
-    inFlightCategoryPromises.delete(categoryKey);
+    inFlightCategoryPromises.delete(cacheKey);
   }
 };
 

@@ -805,7 +805,15 @@ export async function deleteQuizAttempt(attemptId: string): Promise<boolean> {
 // Fetch Quiz Questions with correct answer flags for Detailed Review Modal
 export async function fetchQuizQuestionsWithAnswers(quizId: string): Promise<QuizQuestionItem[]> {
   try {
-    // P2 FIX: single query with nested answers (was N+1)
+    // 1. Try secure RPC (works when column-level SELECT on quiz_answers.is_correct is revoked)
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('get_quiz_questions_with_answers', {
+      p_quiz_id: quizId
+    });
+    if (!rpcErr && Array.isArray(rpcData) && rpcData.length > 0) {
+      return rpcData as QuizQuestionItem[];
+    }
+
+    // 2. Fallback: single query with nested answers
     const { data: questionsData, error: qError } = await supabase
       .from('quiz_questions')
       .select('id, quiz_id, question_text, image_path, question_order, quiz_answers(id, question_id, answer_text, is_correct, answer_order)')
@@ -970,7 +978,15 @@ export async function deleteQuizAdmin(quizId: string): Promise<void> {
 // Fetch Questions for Admin (Includes is_correct)
 export async function fetchQuizQuestionsAdmin(quizId: string): Promise<QuizQuestionItem[]> {
   try {
-    // P2 FIX: single query with nested answers including is_correct (was N+1)
+    // 1. Try secure RPC first
+    const { data: rpcData, error: rpcErr } = await supabase.rpc('get_quiz_questions_with_answers', {
+      p_quiz_id: quizId
+    });
+    if (!rpcErr && Array.isArray(rpcData)) {
+      return rpcData as QuizQuestionItem[];
+    }
+
+    // 2. Fallback: single query with nested answers including is_correct
     const { data: questionsData, error: qError } = await supabase
       .from('quiz_questions')
       .select('*, quiz_answers(*)')
@@ -1058,9 +1074,14 @@ export async function saveQuestionAdmin(
   const { data: savedAnswers, error: ansError } = await supabase
     .from('quiz_answers')
     .insert(answersPayload)
-    .select();
+    .select('id, question_id, answer_text, answer_order, created_at');
 
   if (ansError) throw new Error(`პასუხების შენახვა ვერ მოხერხდა: ${ansError.message}`);
+
+  const mergedAnswers: QuizAnswerItem[] = (savedAnswers || []).map((sa, idx) => ({
+    ...sa,
+    is_correct: answersPayload[idx]?.is_correct ?? false
+  }));
 
   return {
     id: savedQId!,
@@ -1068,7 +1089,7 @@ export async function saveQuestionAdmin(
     question_text: qPayload.question_text!,
     image_path: qPayload.image_path,
     question_order: qPayload.question_order,
-    answers: savedAnswers || []
+    answers: mergedAnswers
   };
 }
 

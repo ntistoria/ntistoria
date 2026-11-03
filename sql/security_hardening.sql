@@ -351,12 +351,78 @@ CREATE POLICY "Users or admins can delete quiz attempts"
   );
 
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE public.quizzes, public.quiz_questions, public.quiz_answers FROM anon;
-GRANT SELECT ON TABLE public.quizzes, public.quiz_questions, public.quiz_answers TO anon, authenticated;
+GRANT SELECT ON TABLE public.quizzes, public.quiz_questions TO anon, authenticated;
 GRANT INSERT, UPDATE, DELETE ON TABLE public.quizzes, public.quiz_questions, public.quiz_answers TO authenticated, service_role;
+
+-- quiz_answers.is_correct სვეტის დამალვა პირდაპირი SELECT მოთხოვნებისგან
+REVOKE SELECT ON public.quiz_answers FROM anon, authenticated;
+GRANT SELECT (id, question_id, answer_text, answer_order, created_at) ON public.quiz_answers TO anon, authenticated;
+GRANT SELECT ON public.quiz_answers TO service_role;
+
+-- დაცული RPC ქვიზის შედეგების განხილვისა და ადმინ-რედაქტირებისთვის
+CREATE OR REPLACE FUNCTION public.get_quiz_questions_with_answers(p_quiz_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_result JSONB;
+BEGIN
+  SELECT COALESCE(
+    jsonb_agg(
+      jsonb_build_object(
+        'id', qq.id,
+        'quiz_id', qq.quiz_id,
+        'question_text', qq.question_text,
+        'image_path', qq.image_path,
+        'question_order', qq.question_order,
+        'answers', COALESCE(
+          (
+            SELECT jsonb_agg(
+              jsonb_build_object(
+                'id', qa.id,
+                'question_id', qa.question_id,
+                'answer_text', qa.answer_text,
+                'is_correct', qa.is_correct,
+                'answer_order', qa.answer_order
+              )
+              ORDER BY qa.answer_order ASC
+            )
+            FROM public.quiz_answers qa
+            WHERE qa.question_id = qq.id
+          ),
+          '[]'::jsonb
+        )
+      )
+      ORDER BY qq.question_order ASC
+    ),
+    '[]'::jsonb
+  )
+  INTO v_result
+  FROM public.quiz_questions qq
+  WHERE qq.quiz_id = p_quiz_id;
+
+  RETURN v_result;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_quiz_questions_with_answers(UUID) TO anon, authenticated, service_role;
 
 -- ====================================================================
 -- 8. MOCK EXAMS — მოსწავლისთვის სწორი პასუხების დამალვა Network-ში
+-- მოსწავლეებს ეკრძალებათ პირდაპირი SELECT mock_exams ცხრილზე (სადაც პასუხებია);
+-- ისინი ტესტს იღებენ მხოლოდ get_active_mock_exam_student() RPC-ით!
 -- ====================================================================
+DROP POLICY IF EXISTS "Students can view active mock exams" ON public.mock_exams;
+DROP POLICY IF EXISTS "Admins have full access to mock_exams" ON public.mock_exams;
+
+CREATE POLICY "Admins have full access to mock_exams"
+  ON public.mock_exams
+  FOR ALL
+  TO authenticated
+  USING (public.is_admin_user())
+  WITH CHECK (public.is_admin_user());
 CREATE OR REPLACE FUNCTION public.get_active_mock_exam_student()
 RETURNS JSONB
 LANGUAGE plpgsql

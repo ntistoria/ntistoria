@@ -6,6 +6,7 @@ import {
   ProgramChapter, 
   fetchProgramsAndSubprograms, 
   fetchQuestionsForCategory, 
+  fetchChapterCountsForCategory,
   fetchCategoryQuestionsCount,
   fetchCategoryItemDetails,
   CategoryItemDetails,
@@ -299,14 +300,21 @@ export const TestsView: FC<TestsViewProps> = ({ onOpenTest, user, onOpenAuth, on
     const loadCategoryData = async () => {
       setLoading(true);
       try {
-        const allQ = await fetchQuestionsForCategory(selectedCategoryKey);
-        setCategoryQuestions(allQ);
+        if (selectedCategoryKey === 'mcq') {
+          // For MCQ, only fetch lightweight chapter counts; full questions are fetched per-chapter on start
+          const counts = await fetchChapterCountsForCategory('mcq');
+          setCategoryQuestions([]);
+          setQuestionsCountMap(counts);
+        } else {
+          const allQ = await fetchQuestionsForCategory(selectedCategoryKey);
+          setCategoryQuestions(allQ);
 
-        const counts: Record<string, number> = {};
-        allQ.forEach(q => {
-          counts[q.chapterId] = (counts[q.chapterId] || 0) + 1;
-        });
-        setQuestionsCountMap(counts);
+          const counts: Record<string, number> = {};
+          allQ.forEach(q => {
+            counts[q.chapterId] = (counts[q.chapterId] || 0) + 1;
+          });
+          setQuestionsCountMap(counts);
+        }
       } catch (err) {
         console.error('Error loading category questions:', err);
       } finally {

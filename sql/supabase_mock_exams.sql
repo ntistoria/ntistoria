@@ -31,20 +31,12 @@ DROP POLICY IF EXISTS "Allow public all mock_exams" ON public.mock_exams;
 DROP POLICY IF EXISTS "Students can view active mock exams" ON public.mock_exams;
 DROP POLICY IF EXISTS "Admins have full access to mock_exams" ON public.mock_exams;
 
--- 3. RLS Policy for Students (Authenticated Users):
--- Only SELECT is allowed, and ONLY when is_active = true AND now() <= end_time
-CREATE POLICY "Students can view active mock exams"
-  ON public.mock_exams
-  FOR SELECT
-  TO authenticated
-  USING (
-    is_active = true
-    AND end_time IS NOT NULL
-    AND now() <= end_time
-  );
+-- 3. RLS Policy for Mock Exams:
+-- Direct table access (including full questions_payload with answer keys) is restricted to Admins ONLY.
+-- Students fetch the active exam exclusively via `get_active_mock_exam_student()` RPC which strips answer keys!
+DROP POLICY IF EXISTS "Students can view active mock exams" ON public.mock_exams;
+DROP POLICY IF EXISTS "Admins have full access to mock_exams" ON public.mock_exams;
 
--- 4. RLS Policy for Admins:
--- Full access (SELECT, INSERT, UPDATE, DELETE)
 CREATE POLICY "Admins have full access to mock_exams"
   ON public.mock_exams
   FOR ALL
