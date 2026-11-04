@@ -712,7 +712,7 @@ export const TestsView: FC<TestsViewProps> = ({
       setProgressData(optimisticUpdate as any);
 
       recordUserAnswers(userEmail, selectedCategoryKey, chId, [
-        { questionId: currentQ.id, isCorrect }
+        { questionId: currentQ.id, isCorrect, selectedOptionIndex: optIndex }
       ]).then(setProgressData).catch(err => {
         console.error('recordUserAnswers failed:', err);
       });
@@ -816,7 +816,7 @@ export const TestsView: FC<TestsViewProps> = ({
     if (currentQ && selectedCategoryKey) {
       const chId = currentQ.chapterId || selectedChapterId || 'ch-1';
       recordUserAnswers(userEmail, selectedCategoryKey, chId, [
-        { questionId: currentQ.id, isCorrect }
+        { questionId: currentQ.id, isCorrect, userAnswerText: currentOrder.join(' → ') }
       ]).then(setProgressData).catch(console.error);
     }
   };
@@ -883,7 +883,7 @@ export const TestsView: FC<TestsViewProps> = ({
     if (currentQ && selectedCategoryKey) {
       const chId = currentQ.chapterId || selectedChapterId || 'ch-1';
       recordUserAnswers(userEmail, selectedCategoryKey, chId, [
-        { questionId: currentQ.id, isCorrect }
+        { questionId: currentQ.id, isCorrect, userAnswerText: typed }
       ]).then(setProgressData).catch(console.error);
     }
   };
@@ -917,21 +917,25 @@ export const TestsView: FC<TestsViewProps> = ({
     clearSession();
     exitFullscreen();
 
-    const resultsByChapter: Record<string, { questionId: string; isCorrect: boolean }[]> = {};
+    const resultsByChapter: Record<string, { questionId: string; isCorrect: boolean; selectedOptionIndex?: number; userAnswerText?: string }[]> = {};
 
     activeInlineTest.questions.forEach((q, idx) => {
       let isCorrect = false;
+      let selectedOptionIndex: number | undefined;
+      let userAnswerText: string | undefined;
 
       if (q.questionType === 'chronology') {
         const order = chronologyOrders[idx] || q.chronologyItems || [];
         isCorrect = checkChronologyItemsMatch(order, q.chronologyItems || [], q.correctSequence || [0, 1, 2]);
       } else if (q.questionType === 'open_text') {
         const typed = openTextAnswers[idx] || '';
+        userAnswerText = typed;
         const graded = openTextScores[idx];
         isCorrect = graded
           ? graded.score >= graded.maxScore
           : (!q.maxScore && checkOpenAnswerMatch(typed, q.correctAnswerText || ''));
       } else {
+        selectedOptionIndex = selectedAnswers[idx];
         isCorrect = selectedAnswers[idx] === q.correctAnswerIndex;
       }
 
@@ -941,7 +945,9 @@ export const TestsView: FC<TestsViewProps> = ({
       }
       resultsByChapter[chId].push({
         questionId: q.id,
-        isCorrect
+        isCorrect,
+        selectedOptionIndex,
+        userAnswerText
       });
     });
 

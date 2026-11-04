@@ -6,6 +6,14 @@ export interface ChapterProgressStats {
   correctQuestionIds: string[];
   incorrectQuestionIds: string[];
   attemptedQuestionIds: string[];
+  wrongAnswers?: Record<string, number | string>;
+}
+
+export interface UserAnswerRecordInput {
+  questionId: string;
+  isCorrect: boolean;
+  selectedOptionIndex?: number;
+  userAnswerText?: string;
 }
 
 export interface StudentProfileProgress {
@@ -96,7 +104,7 @@ export const recordUserAnswers = (
   userEmail: string,
   categoryKey: string,
   chapterId: string,
-  results: { questionId: string; isCorrect: boolean }[]
+  results: UserAnswerRecordInput[]
 ): Promise<StudentProfileProgress> =>
   enqueueProgressWrite(() => recordUserAnswersUnsafe(userEmail, categoryKey, chapterId, results));
 
@@ -104,7 +112,7 @@ const recordUserAnswersUnsafe = async (
   userEmail: string,
   categoryKey: string,
   chapterId: string,
-  results: { questionId: string; isCorrect: boolean }[]
+  results: UserAnswerRecordInput[]
 ): Promise<StudentProfileProgress> => {
   if (!userEmail) {
     // Guest mode: save to guest storage
@@ -119,21 +127,31 @@ const recordUserAnswersUnsafe = async (
     categoryKey,
     correctQuestionIds: [],
     incorrectQuestionIds: [],
-    attemptedQuestionIds: []
+    attemptedQuestionIds: [],
+    wrongAnswers: {}
   };
 
   const correctSet = new Set(existingChapter.correctQuestionIds);
   const incorrectSet = new Set(existingChapter.incorrectQuestionIds);
   const attemptedSet = new Set(existingChapter.attemptedQuestionIds);
+  const wrongAnswersMap: Record<string, number | string> = {
+    ...(existingChapter.wrongAnswers || {})
+  };
 
   results.forEach(res => {
     attemptedSet.add(res.questionId);
     if (res.isCorrect) {
       correctSet.add(res.questionId);
       incorrectSet.delete(res.questionId);
+      delete wrongAnswersMap[res.questionId];
     } else {
       incorrectSet.add(res.questionId);
       correctSet.delete(res.questionId);
+      if (typeof res.selectedOptionIndex === 'number' && res.selectedOptionIndex >= 0) {
+        wrongAnswersMap[res.questionId] = res.selectedOptionIndex;
+      } else if (typeof res.userAnswerText === 'string' && res.userAnswerText.trim()) {
+        wrongAnswersMap[res.questionId] = res.userAnswerText.trim();
+      }
     }
   });
 
@@ -142,7 +160,8 @@ const recordUserAnswersUnsafe = async (
     categoryKey,
     correctQuestionIds: Array.from(correctSet),
     incorrectQuestionIds: Array.from(incorrectSet),
-    attemptedQuestionIds: Array.from(attemptedSet)
+    attemptedQuestionIds: Array.from(attemptedSet),
+    wrongAnswers: wrongAnswersMap
   };
 
   const updatedProgress: StudentProfileProgress = {

@@ -392,6 +392,85 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_quiz_questions_with_answers(UUID) TO anon, authenticated, service_role;
 
+-- დაცული RPC ქვიზის მცდელობის შესაფასებლად და შესანახად (tab_switches მხარდაჭერით)
+ALTER TABLE public.quiz_attempts ADD COLUMN IF NOT EXISTS tab_switches INTEGER DEFAULT 0;
+
+DROP FUNCTION IF EXISTS public.submit_quiz_attempt(UUID, UUID, TEXT, JSONB);
+
+CREATE OR REPLACE FUNCTION public.submit_quiz_attempt(
+  p_quiz_id UUID,
+  p_user_id UUID,
+  p_guest_name TEXT,
+  p_user_answers JSONB,
+  p_tab_switches INTEGER DEFAULT 0
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_total_questions INT := 0;
+  v_correct_answers INT := 0;
+  v_percentage NUMERIC(5,2) := 0;
+  v_attempt_id UUID;
+  v_ans RECORD;
+  v_is_correct BOOLEAN;
+BEGIN
+  SELECT COUNT(*) INTO v_total_questions
+  FROM public.quiz_questions
+  WHERE quiz_id = p_quiz_id;
+
+  IF v_total_questions = 0 THEN
+    RAISE EXCEPTION 'No questions found for this quiz';
+  END IF;
+
+  FOR v_ans IN SELECT * FROM jsonb_to_recordset(COALESCE(p_user_answers, '[]'::jsonb)) AS x(question_id UUID, answer_id UUID)
+  LOOP
+    SELECT is_correct INTO v_is_correct
+    FROM public.quiz_answers
+    WHERE id = v_ans.answer_id AND question_id = v_ans.question_id;
+
+    IF v_is_correct IS TRUE THEN
+      v_correct_answers := v_correct_answers + 1;
+    END IF;
+  END LOOP;
+
+  v_percentage := ROUND((v_correct_answers::NUMERIC / v_total_questions::NUMERIC) * 100, 2);
+
+  INSERT INTO public.quiz_attempts (
+    quiz_id,
+    user_id,
+    guest_name,
+    total_questions,
+    correct_answers,
+    percentage,
+    user_answers,
+    tab_switches
+  ) VALUES (
+    p_quiz_id,
+    p_user_id,
+    p_guest_name,
+    v_total_questions,
+    v_correct_answers,
+    v_percentage,
+    COALESCE(p_user_answers, '[]'::jsonb),
+    COALESCE(p_tab_switches, 0)
+  )
+  RETURNING id INTO v_attempt_id;
+
+  RETURN jsonb_build_object(
+    'attempt_id', v_attempt_id,
+    'total_questions', v_total_questions,
+    'correct_answers', v_correct_answers,
+    'percentage', v_percentage,
+    'tab_switches', COALESCE(p_tab_switches, 0)
+  );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.submit_quiz_attempt(UUID, UUID, TEXT, JSONB, INTEGER) TO anon, authenticated, service_role;
+
 -- ====================================================================
 -- 8. MOCK EXAMS — მოსწავლისთვის სწორი პასუხების დამალვა Network-ში
 -- მოსწავლეებს ეკრძალებათ პირდაპირი SELECT mock_exams ცხრილზე (სადაც პასუხებია);

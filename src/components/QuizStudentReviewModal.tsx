@@ -16,6 +16,7 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
 }) => {
   const [questions, setQuestions] = useState<QuizQuestionItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filterMode, setFilterMode] = useState<'all' | 'incorrect' | 'correct'>('all');
 
   useEffect(() => {
     let isMounted = true;
@@ -51,24 +52,66 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
         const qId = item.question_id || item.questionId || item.qId || item.q;
         const aId = item.answer_id || item.answerId || item.aId || item.a;
         if (qId && aId) {
-          userAnswersMap[String(qId)] = String(aId);
+          userAnswersMap[String(qId).trim()] = String(aId).trim();
         } else if (typeof item === 'string') {
-          userAnswersMap[`index_${idx}`] = item;
+          userAnswersMap[`index_${idx}`] = item.trim();
         }
       });
     } else if (typeof raw === 'object' && raw !== null) {
       Object.entries(raw).forEach(([k, v]) => {
         if (v && typeof v === 'object' && ('answer_id' in (v as any) || 'answerId' in (v as any))) {
           const aId = (v as any).answer_id || (v as any).answerId;
-          userAnswersMap[String(k)] = String(aId);
+          userAnswersMap[String(k).trim()] = String(aId).trim();
         } else if (v) {
-          userAnswersMap[String(k)] = String(v);
+          userAnswersMap[String(k).trim()] = String(v).trim();
         }
       });
     }
   }
 
-  const feedback = getQuizResultFeedback(attempt.percentage);
+  const hasRecordedUserAnswers = Object.keys(userAnswersMap).length > 0;
+
+  // Evaluate each question against userAnswersMap
+  const evaluatedQuestions = questions.map((q, qIndex) => {
+    const qIdStr = String(q.id).trim();
+    const selectedAnsId = userAnswersMap[qIdStr] || userAnswersMap[q.id] || userAnswersMap[`index_${qIndex}`];
+    const correctAnswer = (q.answers || []).find(a => Boolean(a.is_correct));
+    const selectedAnswer = selectedAnsId
+      ? (q.answers || []).find(a => String(a.id).trim() === String(selectedAnsId).trim())
+      : undefined;
+    const isUserCorrect = Boolean(
+      selectedAnsId &&
+      correctAnswer &&
+      String(selectedAnsId).trim() === String(correctAnswer.id).trim()
+    );
+    return {
+      q,
+      qIndex,
+      selectedAnsId,
+      selectedAnswer,
+      correctAnswer,
+      isUserCorrect
+    };
+  });
+
+  const computedCorrectCount = evaluatedQuestions.filter(item => item.isUserCorrect).length;
+  const displayTotal = questions.length > 0 ? questions.length : attempt.total_questions;
+  const displayCorrect = hasRecordedUserAnswers && questions.length > 0
+    ? computedCorrectCount
+    : attempt.correct_answers;
+  const displayIncorrect = Math.max(0, displayTotal - displayCorrect);
+  const displayPercentage = displayTotal > 0
+    ? Math.round((displayCorrect / displayTotal) * 100)
+    : Math.round(Number(attempt.percentage));
+
+  const feedback = getQuizResultFeedback(displayPercentage);
+
+  const filteredQuestions = evaluatedQuestions.filter(item => {
+    if (!hasRecordedUserAnswers) return true;
+    if (filterMode === 'incorrect') return !item.isUserCorrect;
+    if (filterMode === 'correct') return item.isUserCorrect;
+    return true;
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
@@ -98,39 +141,84 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
           </button>
         </div>
 
-        {/* Score Banner */}
-        <div className="px-6 py-4 bg-[#FAF8F3] border-b border-[#E6DDCB] flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-[#0D1B2A] text-[#C79B3A] font-serif font-bold text-lg flex items-center justify-center shadow-sm">
-              {attempt.percentage}%
+        {/* Score Banner & Filter Bar */}
+        <div className="px-6 py-4 bg-[#FAF8F3] border-b border-[#E6DDCB] space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-[#0D1B2A] text-[#C79B3A] font-serif font-bold text-lg flex items-center justify-center shadow-sm">
+                {displayPercentage}%
+              </div>
+              <div className="space-y-1">
+                <span className="font-serif font-bold text-base text-[#0D1B2A] block">
+                  {displayCorrect} / {displayTotal} სწორი პასუხი
+                </span>
+                <div className="flex items-center gap-2 text-[11px] font-bold">
+                  <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-md">
+                    ✓ სწორი: {displayCorrect}
+                  </span>
+                  <span className="px-2 py-0.5 bg-rose-100 text-rose-800 border border-rose-300 rounded-md">
+                    ✗ არასწორი: {displayIncorrect}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div>
-              <span className="text-xs text-[#666666] font-semibold block">შედეგი:</span>
-              <span className="font-serif font-bold text-base text-[#0D1B2A]">
-                {attempt.correct_answers} / {attempt.total_questions} სწორი პასუხი
-              </span>
+
+            {/* Anti-cheating Tab Switch Status */}
+            <div className="flex items-center gap-2">
+              {(attempt.tab_switches ?? 0) > 0 ? (
+                <span className="px-3 py-1 bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-xs">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>⚠️ ტესტის მიმდინარეობისას {attempt.tab_switches}-ჯერ დატოვა გვერდი</span>
+                </span>
+              ) : (
+                <span className="px-3 py-1 bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-xs">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>✓ გვერდის დატოვება არ დაფიქსირებულა</span>
+                </span>
+              )}
             </div>
           </div>
 
-          {/* Anti-cheating Tab Switch Status */}
-          <div className="flex items-center gap-2">
-            {(attempt.tab_switches ?? 0) > 0 ? (
-              <span className="px-3 py-1 bg-amber-100 border border-amber-300 text-amber-900 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-xs">
-                <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <span>⚠️ ტესტის მიმდინარეობისას {attempt.tab_switches}-ჯერ დატოვა გვერდი</span>
-              </span>
-            ) : (
-              <span className="px-3 py-1 bg-emerald-100 border border-emerald-300 text-emerald-900 text-xs font-bold rounded-full flex items-center gap-1.5 shadow-xs">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>✓ გვერდის დატოვება არ დაფიქსირებულა</span>
-              </span>
-            )}
-          </div>
-
-          <div className="text-right">
-            <span className="text-xs font-bold text-[#C79B3A] block">{feedback.title}</span>
-            <span className="text-[11px] text-[#666666] italic">{feedback.comment}</span>
-          </div>
+          {/* Filter Tabs: All / Incorrect / Correct */}
+          {!loading && questions.length > 0 && hasRecordedUserAnswers && (
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[#E6DDCB]">
+              <button
+                type="button"
+                onClick={() => setFilterMode('all')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                  filterMode === 'all'
+                    ? 'bg-[#0D1B2A] text-white border-[#0D1B2A] shadow-xs'
+                    : 'bg-white text-[#0D1B2A] border-[#E6DDCB] hover:border-[#C79B3A]'
+                }`}
+              >
+                ყველა კითხვა ({questions.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterMode('incorrect')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                  filterMode === 'incorrect'
+                    ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                    : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
+                }`}
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                <span>არასწორი პასუხები ({displayIncorrect})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterMode('correct')}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                  filterMode === 'correct'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50'
+                }`}
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>სწორი პასუხები ({displayCorrect})</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Questions Breakdown List */}
@@ -144,112 +232,157 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
             <div className="p-8 text-center bg-white rounded-2xl border border-[#E6DDCB] text-xs text-[#666666]">
               კითხვების დეტალური მონაცემები ვერ მოიძებნა.
             </div>
+          ) : filteredQuestions.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-2xl border border-[#E6DDCB] text-xs text-[#666666] space-y-2">
+              <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+              <p className="font-bold text-sm text-[#0D1B2A]">
+                {filterMode === 'incorrect' ? 'არასწორი პასუხები არ ფიქსირდება!' : 'სწორი პასუხები არ მოიძებნა'}
+              </p>
+            </div>
           ) : (
-            questions.map((q, qIndex) => {
-              const selectedAnsId = userAnswersMap[q.id] || userAnswersMap[String(q.id)] || userAnswersMap[`index_${qIndex}`];
-              const correctAnswer = q.answers.find(a => a.is_correct);
-              const isUserCorrect = selectedAnsId && correctAnswer && String(selectedAnsId).trim() === String(correctAnswer.id).trim();
-
-              return (
-                <div
-                  key={q.id}
-                  className={`bg-white rounded-2xl p-5 border-2 shadow-sm space-y-4 ${
-                    isUserCorrect ? 'border-emerald-300 bg-emerald-50/30' : selectedAnsId ? 'border-rose-300 bg-rose-50/30' : 'border-[#E6DDCB]'
-                  }`}
-                >
-                  {/* Question Header */}
-                  <div className="flex items-start justify-between gap-3 border-b border-[#E6DDCB]/60 pb-3">
-                    <div className="flex items-start gap-2.5">
-                      <span className="w-7 h-7 rounded-xl bg-[#0D1B2A] text-[#FAF8F3] text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
-                        {qIndex + 1}
-                      </span>
-                      <h3 className="font-serif font-bold text-sm sm:text-base text-[#0D1B2A] leading-snug">
-                        {q.question_text}
-                      </h3>
-                    </div>
-
-                    {isUserCorrect ? (
-                      <span className="px-3 py-1 bg-emerald-100 border border-emerald-300 text-emerald-800 text-[11px] font-bold rounded-full flex items-center gap-1 shrink-0">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>სწორია</span>
-                      </span>
-                    ) : selectedAnsId ? (
-                      <span className="px-3 py-1 bg-rose-100 border border-rose-300 text-rose-800 text-[11px] font-bold rounded-full flex items-center gap-1 shrink-0">
-                        <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                        <span>არასწორია</span>
-                      </span>
-                    ) : (
-                      <span className="px-3 py-1 bg-slate-100 text-slate-700 text-[11px] font-bold rounded-full shrink-0">
-                        უპასუხო
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Question Image if present */}
-                  {q.image_path && (
-                    <div className="rounded-xl overflow-hidden border border-[#E6DDCB] max-h-56 bg-[#FAF8F3]">
-                      <img
-                        src={getQuizImageUrl(q.image_path, 'quiz-question-images')}
-                        alt="Question illustration"
-                        className="w-full h-full object-contain max-h-56 mx-auto"
-                      />
-                    </div>
-                  )}
-
-                  {/* Options List */}
-                  <div className="space-y-2">
-                    {q.answers.map((ans, aIdx) => {
-                      const isSelected = selectedAnsId && String(selectedAnsId).trim() === String(ans.id).trim();
-                      const isCorrect = ans.is_correct;
-
-                      let styleClasses = 'bg-[#FAF8F3] border-[#E6DDCB] text-[#0D1B2A]';
-                      let badge = null;
-
-                      if (isSelected && isCorrect) {
-                        styleClasses = 'bg-emerald-100 border-2 border-emerald-500 text-emerald-950 font-bold shadow-xs';
-                        badge = (
-                          <span className="text-[11px] bg-emerald-600 text-white font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ml-auto shrink-0">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>თქვენი სწორი პასუხი</span>
-                          </span>
-                        );
-                      } else if (isSelected && !isCorrect) {
-                        styleClasses = 'bg-rose-100 border-2 border-rose-500 text-rose-950 font-bold shadow-xs';
-                        badge = (
-                          <span className="text-[11px] bg-rose-600 text-white font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ml-auto shrink-0">
-                            <XCircle className="w-3.5 h-3.5" />
-                            <span>თქვენი პასუხი (არასწორია)</span>
-                          </span>
-                        );
-                      } else if (isCorrect) {
-                        styleClasses = 'bg-emerald-50 border-2 border-emerald-400 text-emerald-900 font-semibold';
-                        badge = (
-                          <span className="text-[11px] bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ml-auto shrink-0">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>სწორი პასუხი</span>
-                          </span>
-                        );
-                      }
-
-                      return (
-                        <div
-                          key={ans.id}
-                          className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-3 transition-all ${styleClasses}`}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <span className="w-5 h-5 rounded-full bg-white/60 border border-current text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
-                              {String.fromCharCode(65 + aIdx)}
-                            </span>
-                            <span>{ans.answer_text}</span>
-                          </div>
-                          {badge}
-                        </div>
-                      );
-                    })}
-                  </div>
+            <>
+              {!hasRecordedUserAnswers && (
+                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl text-amber-900 text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>ამ ძველ მცდელობაზე ინდივიდუალური არჩეული ვარიანტები შენახული არ არის — ნაჩვენებია კითხვების სწორი პასუხები.</span>
                 </div>
-              );
-            })
+              )}
+              {filteredQuestions.map(({ q, qIndex, selectedAnsId, selectedAnswer, correctAnswer, isUserCorrect }) => {
+                const optionLetters = ['ა', 'ბ', 'გ', 'დ', 'ე', 'ვ', 'ზ', 'თ'];
+
+                return (
+                  <div
+                    key={q.id}
+                    className={`bg-white rounded-2xl p-5 border-2 shadow-sm space-y-4 ${
+                      !hasRecordedUserAnswers
+                        ? 'border-[#E6DDCB]'
+                        : isUserCorrect
+                        ? 'border-emerald-300 bg-emerald-50/30'
+                        : 'border-rose-300 bg-rose-50/40'
+                    }`}
+                  >
+                    {/* Question Header */}
+                    <div className="flex items-start justify-between gap-3 border-b border-[#E6DDCB]/60 pb-3">
+                      <div className="flex items-start gap-2.5">
+                        <span
+                          className={`w-7 h-7 rounded-xl text-xs font-bold flex items-center justify-center shrink-0 mt-0.5 ${
+                            !hasRecordedUserAnswers
+                              ? 'bg-[#0D1B2A] text-[#FAF8F3]'
+                              : isUserCorrect
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-rose-600 text-white'
+                          }`}
+                        >
+                          {qIndex + 1}
+                        </span>
+                        <h3 className="font-serif font-bold text-sm sm:text-base text-[#0D1B2A] leading-snug">
+                          {q.question_text}
+                        </h3>
+                      </div>
+
+                      {!hasRecordedUserAnswers ? null : isUserCorrect ? (
+                        <span className="px-3 py-1 bg-emerald-100 border border-emerald-300 text-emerald-800 text-[11px] font-bold rounded-full flex items-center gap-1 shrink-0">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>სწორია</span>
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 bg-rose-100 border border-rose-300 text-rose-800 text-[11px] font-bold rounded-full flex items-center gap-1 shrink-0">
+                          <XCircle className="w-3.5 h-3.5 text-rose-600" />
+                          <span>{selectedAnsId ? 'არასწორია' : 'არასწორია (უპასუხო)'}</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Explicit Wrong vs Correct summary box when user answered wrong */}
+                    {hasRecordedUserAnswers && !isUserCorrect && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                        <div className="p-3 rounded-xl bg-rose-100/90 border border-rose-300 text-rose-950">
+                          <span className="block text-[10px] font-bold uppercase tracking-wider text-rose-700 mb-0.5">
+                            ✗ თქვენი არასწორი პასუხი:
+                          </span>
+                          <span className="font-bold">
+                            {selectedAnswer ? selectedAnswer.answer_text : 'პასუხი არ გაცემულა'}
+                          </span>
+                        </div>
+                        {correctAnswer && (
+                          <div className="p-3 rounded-xl bg-emerald-100/80 border border-emerald-300 text-emerald-950">
+                            <span className="block text-[10px] font-bold uppercase tracking-wider text-emerald-700 mb-0.5">
+                              ✓ სწორი პასუხი:
+                            </span>
+                            <span className="font-bold">{correctAnswer.answer_text}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Question Image if present */}
+                    {q.image_path && (
+                      <div className="rounded-xl overflow-hidden border border-[#E6DDCB] max-h-56 bg-[#FAF8F3]">
+                        <img
+                          src={getQuizImageUrl(q.image_path, 'quiz-question-images')}
+                          alt="Question illustration"
+                          className="w-full h-full object-contain max-h-56 mx-auto"
+                        />
+                      </div>
+                    )}
+
+                    {/* Options List */}
+                    <div className="space-y-2">
+                      {q.answers.map((ans, aIdx) => {
+                        const isSelected = Boolean(
+                          selectedAnsId && String(selectedAnsId).trim() === String(ans.id).trim()
+                        );
+                        const isCorrect = Boolean(ans.is_correct);
+
+                        let styleClasses = 'bg-[#FAF8F3] border-[#E6DDCB] text-[#0D1B2A]';
+                        let badge = null;
+
+                        if (isSelected && isCorrect) {
+                          styleClasses = 'bg-emerald-100 border-2 border-emerald-500 text-emerald-950 font-bold shadow-xs';
+                          badge = (
+                            <span className="text-[11px] bg-emerald-600 text-white font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ml-auto shrink-0">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>თქვენი სწორი პასუხი</span>
+                            </span>
+                          );
+                        } else if (isSelected && !isCorrect) {
+                          styleClasses = 'bg-rose-100 border-2 border-rose-500 text-rose-950 font-bold shadow-xs';
+                          badge = (
+                            <span className="text-[11px] bg-rose-600 text-white font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ml-auto shrink-0">
+                              <XCircle className="w-3.5 h-3.5" />
+                              <span>თქვენი პასუხი (არასწორია)</span>
+                            </span>
+                          );
+                        } else if (isCorrect) {
+                          styleClasses = 'bg-emerald-50 border-2 border-emerald-400 text-emerald-900 font-semibold';
+                          badge = (
+                            <span className="text-[11px] bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ml-auto shrink-0">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>სწორი პასუხი</span>
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={ans.id}
+                            className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-3 transition-all ${styleClasses}`}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-5 h-5 rounded-full bg-white/60 border border-current text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
+                                {optionLetters[aIdx] || String.fromCharCode(65 + aIdx)}
+                              </span>
+                              <span>{ans.answer_text}</span>
+                            </div>
+                            {badge}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </>
           )}
         </div>
 

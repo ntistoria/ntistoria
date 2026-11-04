@@ -59,6 +59,7 @@ export const ProfileView: FC<ProfileViewProps> = ({
     questions: (QuizQuestion & { chapterId: string })[];
     incorrectQuestionIds: string[];
     correctQuestionIds: string[];
+    wrongAnswers?: Record<string, number | string>;
   } | null>(null);
 
   const userEmail = user?.email || '';
@@ -291,6 +292,7 @@ export const ProfileView: FC<ProfileViewProps> = ({
     const chapterStat = progress?.statsByChapter[statKey];
     const correctIds = chapterStat?.correctQuestionIds || [];
     const incorrectIds = chapterStat?.incorrectQuestionIds || [];
+    const wrongAnswers = chapterStat?.wrongAnswers || {};
 
     if (catKey === 'mcq' || catKey === 'chronology') {
       let correct = 0;
@@ -312,7 +314,8 @@ export const ProfileView: FC<ProfileViewProps> = ({
         pct: total > 0 ? Math.round((correct / total) * 100) : 0,
         questions: chQuestions,
         incorrectIds,
-        correctIds
+        correctIds,
+        wrongAnswers
       };
     }
 
@@ -376,7 +379,8 @@ export const ProfileView: FC<ProfileViewProps> = ({
       pct,
       questions: chQuestions,
       incorrectIds,
-      correctIds
+      correctIds,
+      wrongAnswers
     };
   };
 
@@ -654,13 +658,22 @@ export const ProfileView: FC<ProfileViewProps> = ({
                         </div>
 
                         {/* Card Body */}
-                        <div className="p-4 space-y-2">
+                        <div className="p-4 space-y-2.5">
                           <h4 className="font-serif font-bold text-base text-[#0D1B2A] line-clamp-1">
                             {attempt.quiz_title || 'ისტორიული ქვიზი'}
                           </h4>
                           <div className="flex items-center justify-between text-xs text-[#666666]">
                             <span>შედეგი: <strong className="text-[#0D1B2A] font-mono font-bold">{attempt.correct_answers}/{attempt.total_questions}</strong></span>
                             <span className="text-[10px] font-mono">{new Date(attempt.created_at).toLocaleDateString('ka-GE')}</span>
+                          </div>
+
+                          <div className="flex items-center gap-2 text-[11px] font-bold">
+                            <span className="px-2 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-md">
+                              ✓ სწორი: {attempt.correct_answers}
+                            </span>
+                            <span className="px-2 py-0.5 bg-rose-50 border border-rose-200 text-rose-700 rounded-md">
+                              ✗ არასწორი: {Math.max(0, attempt.total_questions - attempt.correct_answers)}
+                            </span>
                           </div>
 
                           {/* Anti-cheating status indicator */}
@@ -877,7 +890,8 @@ export const ProfileView: FC<ProfileViewProps> = ({
                                         chapterId: prog.id,
                                         questions: stats.questions,
                                         incorrectQuestionIds: stats.incorrectIds,
-                                        correctQuestionIds: stats.correctIds
+                                        correctQuestionIds: stats.correctIds,
+                                        wrongAnswers: stats.wrongAnswers
                                       });
                                     }}
                                     className="w-full py-2 bg-white hover:bg-[#0D1B2A] text-[#0D1B2A] hover:text-white border border-[#E6DDCB] text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
@@ -1055,7 +1069,8 @@ export const ProfileView: FC<ProfileViewProps> = ({
                                         chapterId: prog.id,
                                         questions: stats.questions,
                                         incorrectQuestionIds: stats.incorrectIds,
-                                        correctQuestionIds: stats.correctIds
+                                        correctQuestionIds: stats.correctIds,
+                                        wrongAnswers: stats.wrongAnswers
                                       });
                                     }}
                                     className="w-full py-2 bg-white hover:bg-[#0D1B2A] text-[#0D1B2A] hover:text-white border border-[#E6DDCB] text-xs font-bold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
@@ -1128,6 +1143,7 @@ export const ProfileView: FC<ProfileViewProps> = ({
           questions={modalState.questions}
           incorrectQuestionIds={modalState.incorrectQuestionIds}
           correctQuestionIds={modalState.correctQuestionIds}
+          wrongAnswers={modalState.wrongAnswers}
           onGoToTest={onOpenTest}
         />
       )}

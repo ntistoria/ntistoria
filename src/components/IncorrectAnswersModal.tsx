@@ -26,6 +26,7 @@ interface IncorrectAnswersModalProps {
   questions: (QuizQuestion & { chapterId: string })[];
   incorrectQuestionIds: string[];
   correctQuestionIds: string[];
+  wrongAnswers?: Record<string, number | string>;
   onGoToTest?: (categoryKey: string, chapterId: string) => void;
 }
 
@@ -50,6 +51,7 @@ export const IncorrectAnswersModal: FC<IncorrectAnswersModalProps> = ({
   questions,
   incorrectQuestionIds,
   correctQuestionIds,
+  wrongAnswers,
   onGoToTest
 }) => {
   if (!isOpen) return null;
@@ -222,45 +224,87 @@ export const IncorrectAnswersModal: FC<IncorrectAnswersModalProps> = ({
                       </span>
                     </div>
 
-                    {/* Options list showing correct answer */}
-                    {q.options && q.options.length > 0 ? (
-                      <div className="space-y-2 pt-2 border-t border-[#E6DDCB]">
-                        {q.options.map((optText, optIdx) => {
-                          const isCorrect = optIdx === q.correctAnswerIndex;
-                          const optLabels = ['ა', 'ბ', 'გ', 'დ'];
+                    {/* Options list showing wrong and correct answers */}
+                    {(() => {
+                      const recordedWrong = wrongAnswers?.[q.id];
+                      const optLabels = ['ა', 'ბ', 'გ', 'დ'];
+                      const hasRecordedOption = typeof recordedWrong === 'number' && q.options && recordedWrong >= 0 && recordedWrong < q.options.length;
+                      const wrongOptionText = hasRecordedOption && q.options ? `${optLabels[recordedWrong] || recordedWrong + 1}) ${q.options[recordedWrong]}` : (typeof recordedWrong === 'string' ? recordedWrong : null);
+                      const correctOptionText = q.options && q.options[q.correctAnswerIndex]
+                        ? `${optLabels[q.correctAnswerIndex] || q.correctAnswerIndex + 1}) ${q.options[q.correctAnswerIndex]}`
+                        : (q.correctAnswerText || null);
 
-                          return (
-                            <div
-                              key={optIdx}
-                              className={`p-3 rounded-xl border text-xs flex items-center justify-between gap-3 ${
-                                isCorrect
-                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold'
-                                  : 'bg-[#FAF8F3] border-[#E6DDCB] text-[#666666] opacity-75'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold ${
-                                  isCorrect ? 'bg-emerald-600 text-white' : 'bg-gray-200 text-gray-700'
-                                }`}>
-                                  {optLabels[optIdx] || optIdx + 1}
-                                </span>
-                                <span>{optText}</span>
-                              </div>
-
-                              {isCorrect && (
-                                <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded font-bold">
-                                  სწორი პასუხი
-                                </span>
-                              )}
+                      return (
+                        <div className="space-y-3 pt-2 border-t border-[#E6DDCB]">
+                          {/* Red vs Green Comparison Banner */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs space-y-0.5">
+                              <span className="text-[10px] font-extrabold uppercase tracking-wider text-rose-700 block">
+                                ✗ თქვენი არასწორი პასუხი:
+                              </span>
+                              <p className="font-semibold text-rose-900">
+                                {wrongOptionText || 'დაფიქსირებულია არასწორი პასუხი'}
+                              </p>
                             </div>
-                          );
-                        })}
-                      </div>
-                    ) : q.correctAnswerText ? (
-                      <div className="pt-2 border-t border-[#E6DDCB] text-xs font-semibold text-[#0D1B2A]">
-                        სწორი პასუხი: <strong className="text-emerald-700">{q.correctAnswerText}</strong>
-                      </div>
-                    ) : null}
+                            {correctOptionText && (
+                              <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs space-y-0.5">
+                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 block">
+                                  ✓ სწორი პასუხი:
+                                </span>
+                                <p className="font-bold text-emerald-900">
+                                  {correctOptionText}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+
+                          {q.options && q.options.length > 0 && (
+                            <div className="space-y-2">
+                              {q.options.map((optText, optIdx) => {
+                                const isCorrect = optIdx === q.correctAnswerIndex;
+                                const isWrongSelected = typeof recordedWrong === 'number' && optIdx === recordedWrong && !isCorrect;
+
+                                let rowClass = 'bg-[#FAF8F3] border-[#E6DDCB] text-[#666666] opacity-75';
+                                let badgeClass = 'bg-gray-200 text-gray-700';
+
+                                if (isCorrect) {
+                                  rowClass = 'bg-emerald-50 border-emerald-400 text-emerald-900 font-bold';
+                                  badgeClass = 'bg-emerald-600 text-white';
+                                } else if (isWrongSelected) {
+                                  rowClass = 'bg-rose-50 border-rose-400 text-rose-900 font-bold';
+                                  badgeClass = 'bg-rose-600 text-white';
+                                }
+
+                                return (
+                                  <div
+                                    key={optIdx}
+                                    className={`p-3 rounded-xl border-2 text-xs flex items-center justify-between gap-3 ${rowClass}`}
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold shrink-0 ${badgeClass}`}>
+                                        {optLabels[optIdx] || optIdx + 1}
+                                      </span>
+                                      <span>{optText}</span>
+                                    </div>
+
+                                    {isCorrect && (
+                                      <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded font-bold shrink-0">
+                                        ✓ სწორი პასუხი
+                                      </span>
+                                    )}
+                                    {isWrongSelected && (
+                                      <span className="text-[10px] bg-rose-600 text-white px-2 py-0.5 rounded font-bold shrink-0">
+                                        ✗ თქვენი არჩევანი
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Explanation */}
                     {q.explanation && (
@@ -364,16 +408,35 @@ export const IncorrectAnswersModal: FC<IncorrectAnswersModalProps> = ({
                               )}
                             </div>
 
-                            {/* Correct answer display */}
-                            {q.questionType === 'open_text' ? (
-                              <div className="text-xs font-semibold text-[#0D1B2A]">
-                                სწორი პასუხი: <strong className="text-emerald-700">{q.correctAnswerText || '—'}</strong>
-                              </div>
-                            ) : q.options && q.options.length > 0 ? (
-                              <div className="text-xs text-[#0D1B2A]">
-                                სწორი ვარიანტი: <strong className="text-emerald-700">{q.options[q.correctAnswerIndex]}</strong>
-                              </div>
-                            ) : null}
+                            {/* Wrong & Correct answer display */}
+                            {(() => {
+                              const recordedWrong = wrongAnswers?.[q.id];
+                              const optLabels = ['ა', 'ბ', 'გ', 'დ'];
+                              const wrongDisplay = typeof recordedWrong === 'number' && q.options && q.options[recordedWrong]
+                                ? `${optLabels[recordedWrong] || recordedWrong + 1}) ${q.options[recordedWrong]}`
+                                : typeof recordedWrong === 'string'
+                                ? recordedWrong
+                                : null;
+
+                              return (
+                                <div className="space-y-1.5">
+                                  {isIncorrect && wrongDisplay && (
+                                    <div className="text-xs font-semibold text-rose-800">
+                                      ✗ თქვენი არასწორი პასუხი: <strong className="text-rose-700">{wrongDisplay}</strong>
+                                    </div>
+                                  )}
+                                  {q.questionType === 'open_text' ? (
+                                    <div className="text-xs font-semibold text-[#0D1B2A]">
+                                      ✓ სწორი პასუხი: <strong className="text-emerald-700">{q.correctAnswerText || '—'}</strong>
+                                    </div>
+                                  ) : q.options && q.options.length > 0 ? (
+                                    <div className="text-xs text-[#0D1B2A]">
+                                      ✓ სწორი ვარიანტი: <strong className="text-emerald-700">{q.options[q.correctAnswerIndex]}</strong>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })()}
 
                             {q.explanation && (
                               <div className="text-[11px] text-[#666666] italic pt-1 border-t border-black/5">

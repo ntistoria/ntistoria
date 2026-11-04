@@ -533,13 +533,10 @@ export async function submitQuizAttempt(
   tab_switches?: number;
 }> {
   const cleanGuest = guestName ? guestName.trim() : null;
-  // P7 FIX: Do NOT blindly delete the previous attempt before we know the new score.
-  // We fetch the current best first; after grading, we only reset if the new score is better.
-  // This preserves the user’s achievement history in localStorage.
 
   try {
-    // Try RPC submit (always replaces the old attempt server-side via RPC logic)
-    const { data, error } = await supabase.rpc('submit_quiz_attempt', {
+    // 1. Try 5-parameter RPC submit (with p_tab_switches)
+    let { data, error } = await supabase.rpc('submit_quiz_attempt', {
       p_quiz_id: quizId,
       p_user_id: userId || null,
       p_guest_name: cleanGuest,
@@ -547,14 +544,38 @@ export async function submitQuizAttempt(
       p_tab_switches: tabSwitches
     });
 
+    // 2. If the DB has the 4-parameter overload (without p_tab_switches), call it seamlessly
+    if (error) {
+      await resetQuizAttempt(quizId, userId || null, cleanGuest);
+      const fallbackRpc = await supabase.rpc('submit_quiz_attempt', {
+        p_quiz_id: quizId,
+        p_user_id: userId || null,
+        p_guest_name: cleanGuest,
+        p_user_answers: userAnswers
+      });
+      data = fallbackRpc.data;
+      error = fallbackRpc.error;
+    }
+
     if (!error && data) {
-      // P7 FIX: Only clear local storage attempt after we have a confirmed DB result
-      removeLocalAttemptsForQuiz(quizId, userId || null, cleanGuest);
+      const pct = Math.round(Number(data.percentage));
+      saveLocalAttempt({
+        id: data.attempt_id,
+        quiz_id: quizId,
+        user_id: userId,
+        guest_name: cleanGuest || 'სტუმარი',
+        correct_answers: Number(data.correct_answers),
+        total_questions: Number(data.total_questions),
+        percentage: pct,
+        created_at: new Date().toISOString(),
+        user_answers: userAnswers,
+        tab_switches: tabSwitches
+      });
       return {
         attempt_id: data.attempt_id,
-        correct_answers: data.correct_answers,
-        total_questions: data.total_questions,
-        percentage: Number(data.percentage),
+        correct_answers: Number(data.correct_answers),
+        total_questions: Number(data.total_questions),
+        percentage: pct,
         tab_switches: tabSwitches
       };
     }
@@ -564,84 +585,90 @@ export async function submitQuizAttempt(
     console.warn('RPC submit exception, doing fallback grading:', e);
   }
 
-  // Fallback grading: fetch answers with is_correct from Supabase
+  // Fallback grading: use fetchQuizQuestionsWithAnswers (which uses SECURITY DEFINER RPC get_quiz_questions_with_answers)
   let total = 0;
   let correct = 0;
 
-  const { data: qData } = await supabase
-    .from('quiz_questions')
-    .select('id')
-    .eq('quiz_id', quizId);
-
-  total = qData?.length || userAnswers.length || 1;
-
-  for (const uAns of userAnswers) {
-    const { data: aData } = await supabase
-      .from('quiz_answers')
-      .select('is_correct')
-      .eq('id', uAns.answer_id)
-      .single();
-
-    if (aData?.is_correct) {
-      correct++;
+  const questionsWithAnswers = await fetchQuizQuestionsWithAnswers(quizId);
+  if (questionsWithAnswers.length > 0) {
+    total = questionsWithAnswers.length;
+    const correctAnswerIdByQuestion = new Map<string, string>();
+    for (const q of questionsWithAnswers) {
+      const correctAns = (q.answers || []).find(a => a.is_correct);
+      if (correctAns) {
+        correctAnswerIdByQuestion.set(String(q.id).trim(), String(correctAns.id).trim());
+      }
     }
+    for (const uAns of userAnswers) {
+      const expectedAnsId = correctAnswerIdByQuestion.get(String(uAns.question_id).trim());
+      if (expectedAnsId && expectedAnsId === String(uAns.answer_id).trim()) {
+        correct++;
+      }
+    }
+  } else {
+    const { data: qData } = await supabase
+      .from('quiz_questions')
+      .select('id')
+      .eq('quiz_id', quizId);
+
+    total = qData?.length || userAnswers.length || 1;
   }
 
   const percentage = Math.round((correct / (total || 1)) * 100);
   const newId = `att-${Date.now()}`;
 
-  // P7 FIX: For client-side fallback, only replace the stored attempt if the new score is better.
-  // This preserves the user's best achievement if they retake and do worse.
-  const existingLocal = getLocalAttempts(quizId).find(
-    a => (userId ? a.user_id === userId : a.guest_name?.toLowerCase() === (cleanGuest || '').toLowerCase())
-  );
-  const isImprovement = !existingLocal || percentage > (existingLocal.percentage || 0);
-
   // Insert attempt to database (always replace server-side — DB has its own best-score view)
   try {
-    // Clear old DB attempt before inserting the new one
     await resetQuizAttempt(quizId, userId || null, cleanGuest);
-    await supabase.from('quiz_attempts').insert({
+    const { data: inserted } = await supabase
+      .from('quiz_attempts')
+      .insert({
+        quiz_id: quizId,
+        user_id: userId || null,
+        guest_name: cleanGuest,
+        correct_answers: correct,
+        total_questions: total,
+        percentage: percentage,
+        user_answers: userAnswers,
+        tab_switches: tabSwitches
+      })
+      .select('id')
+      .single();
+
+    const finalId = inserted?.id || newId;
+    saveLocalAttempt({
+      id: finalId,
       quiz_id: quizId,
-      user_id: userId || null,
-      guest_name: cleanGuest,
+      user_id: userId,
+      guest_name: cleanGuest || 'სტუმარი',
       correct_answers: correct,
       total_questions: total,
       percentage: percentage,
+      created_at: new Date().toISOString(),
       user_answers: userAnswers,
       tab_switches: tabSwitches
     });
-    // Only update localStorage if score improved
-    if (isImprovement) {
-      saveLocalAttempt({
-        id: newId,
-        quiz_id: quizId,
-        user_id: userId,
-        guest_name: cleanGuest || 'სტუმარი',
-        correct_answers: correct,
-        total_questions: total,
-        percentage: percentage,
-        created_at: new Date().toISOString(),
-        user_answers: userAnswers,
-        tab_switches: tabSwitches
-      });
-    }
+    return {
+      attempt_id: finalId,
+      correct_answers: correct,
+      total_questions: total,
+      percentage: percentage,
+      tab_switches: tabSwitches
+    };
   } catch (e) {
     console.warn('Failed to insert attempt to Supabase, saving to localStorage:', e);
-    if (isImprovement) {
-      saveLocalAttempt({
-        id: newId,
-        quiz_id: quizId,
-        user_id: userId,
-        guest_name: cleanGuest || 'სტუმარი',
-        correct_answers: correct,
-        total_questions: total,
-        percentage: percentage,
-        created_at: new Date().toISOString(),
-        user_answers: userAnswers,
-        tab_switches: tabSwitches
-      });
-    }
+    saveLocalAttempt({
+      id: newId,
+      quiz_id: quizId,
+      user_id: userId,
+      guest_name: cleanGuest || 'სტუმარი',
+      correct_answers: correct,
+      total_questions: total,
+      percentage: percentage,
+      created_at: new Date().toISOString(),
+      user_answers: userAnswers,
+      tab_switches: tabSwitches
+    });
   }
 
   return {
@@ -713,12 +740,17 @@ export function removeLocalAttempt(attemptId: string) {
 // the “takes the first occurrence” logic always picks the most recent entry,
 // regardless of how the caller has ordered the input array.
 function getLatestAttemptsPerQuiz(attempts: QuizAttempt[]): QuizAttempt[] {
-  const sorted = [...attempts].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
+  const sorted = [...attempts].sort((a, b) => {
+    const timeDiff = new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    if (Math.abs(timeDiff) > 1000) return timeDiff;
+    return (b.correct_answers || 0) - (a.correct_answers || 0);
+  });
   const map = new Map<string, QuizAttempt>();
   for (const a of sorted) {
-    if (!map.has(a.quiz_id)) {
+    const existing = map.get(a.quiz_id);
+    if (!existing) {
+      map.set(a.quiz_id, a);
+    } else if (existing.correct_answers === 0 && a.correct_answers > 0) {
       map.set(a.quiz_id, a);
     }
   }
@@ -773,6 +805,7 @@ export async function fetchUserQuizAttempts(userId: string, guestName?: string):
       const qInfo = quizMap.get(a.quiz_id);
       return {
         ...a,
+        percentage: Math.round(Number(a.percentage)),
         quiz_title: qInfo?.title || a.quiz_title || 'ისტორიული ქვიზი',
         quiz_cover_image_path: qInfo?.cover_image_path || a.quiz_cover_image_path || null
       };
