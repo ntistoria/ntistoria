@@ -104,10 +104,9 @@ export const HomeView: FC<HomeViewProps> = ({
               className="space-y-5 text-left flex flex-col justify-center"
             >
               {/* Prestigious Eyebrow Header Line */}
-              <div className="flex items-center gap-3">
-                <div className="h-[1px] w-10 bg-[#C79B3A]" />
+              <div className="flex items-center">
                 <span className="text-[11px] uppercase tracking-[0.25em] text-[#C79B3A] font-bold">
-                  NT ისტორიის მასწავლებელი
+                  NT HISTORY ACADEMY
                 </span>
               </div>
 
