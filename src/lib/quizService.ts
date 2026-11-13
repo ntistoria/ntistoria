@@ -1,7 +1,9 @@
 import { supabase } from './supabase';
 import { QuizItem, QuizQuestionItem, QuizAnswerItem, QuizAttempt, QuizLeaderboardItem, QuizResultFeedback } from '../types';
+import { OLYMPIAD_LEVEL_1_QUIZ, OLYMPIAD_LEVEL_1_QUESTIONS, OLYMPIAD_LEVEL_1_QUIZ_ID } from '../data/olympiadQuizzes';
 
 export const FALLBACK_QUIZZES: QuizItem[] = [
+  OLYMPIAD_LEVEL_1_QUIZ,
   {
     id: 'quiz-diauehi-kolkha',
     title: 'დიაოხი და კოლხა',
@@ -13,6 +15,7 @@ export const FALLBACK_QUIZZES: QuizItem[] = [
 ];
 
 export const FALLBACK_QUESTIONS: Record<string, QuizQuestionItem[]> = {
+  [OLYMPIAD_LEVEL_1_QUIZ_ID]: OLYMPIAD_LEVEL_1_QUESTIONS,
   'quiz-diauehi-kolkha': [
     {
       id: 'q-dk-1',
@@ -413,8 +416,98 @@ async function fetchQuestionCountsForQuizIds(quizIds: string[]): Promise<Record<
   }
 }
 
+let olympiadSeedPromise: Promise<void> | null = null;
+
+/**
+ * Automatically seeds "ოლიმპიადა - I დონე" into Supabase `quizzes`, `quiz_questions`,
+ * and `quiz_answers` tables when an admin session (`ntistoria@gmail.com`) is active.
+ */
+async function ensureOlympiadQuizSeededInDb(): Promise<void> {
+  if (olympiadSeedPromise) return olympiadSeedPromise;
+
+  olympiadSeedPromise = (async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const email = session?.user?.email?.toLowerCase().trim();
+      if (email !== 'ntistoria@gmail.com') return;
+
+      const { count } = await supabase
+        .from('quiz_questions')
+        .select('id', { count: 'exact', head: true })
+        .eq('quiz_id', OLYMPIAD_LEVEL_1_QUIZ_ID);
+
+      if ((count || 0) >= OLYMPIAD_LEVEL_1_QUESTIONS.length) return;
+
+      // 1. Upsert Quiz row
+      const { error: qzErr } = await supabase.from('quizzes').upsert(
+        {
+          id: OLYMPIAD_LEVEL_1_QUIZ.id,
+          title: OLYMPIAD_LEVEL_1_QUIZ.title,
+          description: OLYMPIAD_LEVEL_1_QUIZ.description || null,
+          status: 'published',
+          is_active: true
+        },
+        { onConflict: 'id' }
+      );
+      if (qzErr) return;
+
+      // 2. Upsert all 69 Questions in one batch
+      const questionRows = OLYMPIAD_LEVEL_1_QUESTIONS.map(q => ({
+        id: q.id,
+        quiz_id: OLYMPIAD_LEVEL_1_QUIZ_ID,
+        question_text: q.question_text,
+        image_path: q.image_path || null,
+        question_order: q.question_order
+      }));
+      const { error: qqErr } = await supabase
+        .from('quiz_questions')
+        .upsert(questionRows, { onConflict: 'id' });
+      if (qqErr) return;
+
+      // 3. Upsert all 276 Answers in one batch
+      const answerRows = OLYMPIAD_LEVEL_1_QUESTIONS.flatMap(q =>
+        (q.answers || []).map((a, idx) => ({
+          id: a.id,
+          question_id: q.id,
+          answer_text: a.answer_text,
+          is_correct: Boolean(a.is_correct),
+          answer_order: a.answer_order || idx + 1
+        }))
+      );
+      await supabase.from('quiz_answers').upsert(answerRows, { onConflict: 'id' });
+    } catch {
+      // Best-effort background sync
+    }
+  })();
+
+  return olympiadSeedPromise;
+}
+
+function mergeOlympiadQuizIntoList(dbQuizzes: QuizItem[]): QuizItem[] {
+  const existingIdx = dbQuizzes.findIndex(
+    q => q.id === OLYMPIAD_LEVEL_1_QUIZ_ID || q.title.trim() === OLYMPIAD_LEVEL_1_QUIZ.title
+  );
+
+  if (existingIdx !== -1) {
+    const existing = dbQuizzes[existingIdx];
+    const hydrated: QuizItem = {
+      ...existing,
+      question_count: existing.question_count && existing.question_count > 0
+        ? existing.question_count
+        : OLYMPIAD_LEVEL_1_QUESTIONS.length
+    };
+    const rest = dbQuizzes.filter((_, idx) => idx !== existingIdx);
+    return [hydrated, ...rest];
+  }
+
+  return [OLYMPIAD_LEVEL_1_QUIZ, ...dbQuizzes];
+}
+
 // Fetch all published quizzes
 export async function fetchPublishedQuizzes(): Promise<QuizItem[]> {
+  // Trigger background DB seed if admin is logged in
+  void ensureOlympiadQuizSeededInDb();
+
   try {
     const { data: quizzes, error } = await supabase
       .from('quizzes')
@@ -425,20 +518,22 @@ export async function fetchPublishedQuizzes(): Promise<QuizItem[]> {
 
     if (error || !quizzes || quizzes.length === 0) {
       if (error) console.error('Error loading quizzes:', error);
-      return [];
+      return [OLYMPIAD_LEVEL_1_QUIZ];
     }
 
     // P1 FIX: one batch request for all question counts instead of N separate requests
     const quizIds = quizzes.map(q => q.id);
     const countMap = await fetchQuestionCountsForQuizIds(quizIds);
 
-    return quizzes.map(q => ({
+    const mapped = quizzes.map(q => ({
       ...q,
       question_count: countMap[q.id] || 0
     }));
+
+    return mergeOlympiadQuizIntoList(mapped);
   } catch (err) {
     console.error('Error fetching published quizzes:', err);
-    return [];
+    return [OLYMPIAD_LEVEL_1_QUIZ];
   }
 }
 
@@ -451,9 +546,18 @@ export async function fetchQuizQuestionsForPlay(quizId: string): Promise<{ quiz:
       .from('quizzes')
       .select('*')
       .eq('id', quizId)
-      .single();
+      .maybeSingle();
 
     if (quizError || !quizData) {
+      if (quizId === OLYMPIAD_LEVEL_1_QUIZ_ID) {
+        return {
+          quiz: OLYMPIAD_LEVEL_1_QUIZ,
+          questions: OLYMPIAD_LEVEL_1_QUESTIONS.map(q => ({
+            ...q,
+            answers: (q.answers || []).map(a => ({ ...a, is_correct: undefined }))
+          }))
+        };
+      }
       return null;
     }
 
@@ -465,6 +569,16 @@ export async function fetchQuizQuestionsForPlay(quizId: string): Promise<{ quiz:
       .order('question_order', { ascending: true });
 
     if (qError || !questionsData || questionsData.length === 0) {
+      if (quizId === OLYMPIAD_LEVEL_1_QUIZ_ID || quizData.title?.trim() === OLYMPIAD_LEVEL_1_QUIZ.title) {
+        return {
+          quiz: quizData,
+          questions: OLYMPIAD_LEVEL_1_QUESTIONS.map(q => ({
+            ...q,
+            quiz_id: quizData.id,
+            answers: (q.answers || []).map(a => ({ ...a, is_correct: undefined }))
+          }))
+        };
+      }
       return { quiz: quizData, questions: [] };
     }
 
@@ -788,7 +902,9 @@ export async function fetchUserQuizAttempts(userId: string, guestName?: string):
 
     // Fetch quiz titles and cover images for each attempt
     const quizIds = [...new Set(latestAttempts.map(a => a.quiz_id))];
-    const quizMap = new Map<string, { title: string; cover_image_path: string | null }>();
+    const quizMap = new Map<string, { title: string; cover_image_path: string | null }>([
+      [OLYMPIAD_LEVEL_1_QUIZ_ID, { title: OLYMPIAD_LEVEL_1_QUIZ.title, cover_image_path: null }]
+    ]);
 
     if (quizIds.length > 0) {
       const { data: quizzes } = await supabase
@@ -853,7 +969,9 @@ export async function fetchQuizQuestionsWithAnswers(quizId: string): Promise<Qui
       .eq('quiz_id', quizId)
       .order('question_order', { ascending: true });
 
-    if (qError || !questionsData) return [];
+    if (qError || !questionsData || questionsData.length === 0) {
+      return FALLBACK_QUESTIONS[quizId] || [];
+    }
 
     return questionsData.map(q => {
       const rawAnswers: QuizAnswerItem[] = ((q as any).quiz_answers || []);
@@ -869,7 +987,7 @@ export async function fetchQuizQuestionsWithAnswers(quizId: string): Promise<Qui
     });
   } catch (err) {
     console.error('Error fetching questions with answers for review:', err);
-    return [];
+    return FALLBACK_QUESTIONS[quizId] || [];
   }
 }
 
@@ -939,6 +1057,7 @@ export async function fetchQuizLeaderboard(quizId: string): Promise<QuizLeaderbo
 
 // Fetch all quizzes for Admin (Including drafts)
 export async function fetchAllQuizzesAdmin(): Promise<QuizItem[]> {
+  await ensureOlympiadQuizSeededInDb();
   try {
     const { data: quizzes, error } = await supabase
       .from('quizzes')
@@ -953,10 +1072,12 @@ export async function fetchAllQuizzesAdmin(): Promise<QuizItem[]> {
     const quizIds = quizzes.map(q => q.id);
     const countMap = await fetchQuestionCountsForQuizIds(quizIds);
 
-    return quizzes.map(q => ({
+    const mapped = quizzes.map(q => ({
       ...q,
       question_count: countMap[q.id] || 0
     }));
+
+    return mergeOlympiadQuizIntoList(mapped);
   } catch (err) {
     console.error('Error fetching admin quizzes:', err);
     return FALLBACK_QUIZZES;
@@ -1015,7 +1136,7 @@ export async function fetchQuizQuestionsAdmin(quizId: string): Promise<QuizQuest
     const { data: rpcData, error: rpcErr } = await supabase.rpc('get_quiz_questions_with_answers', {
       p_quiz_id: quizId
     });
-    if (!rpcErr && Array.isArray(rpcData)) {
+    if (!rpcErr && Array.isArray(rpcData) && rpcData.length > 0) {
       return rpcData as QuizQuestionItem[];
     }
 
@@ -1026,7 +1147,7 @@ export async function fetchQuizQuestionsAdmin(quizId: string): Promise<QuizQuest
       .eq('quiz_id', quizId)
       .order('question_order', { ascending: true });
 
-    if (qError || !questionsData) {
+    if (qError || !questionsData || questionsData.length === 0) {
       return FALLBACK_QUESTIONS[quizId] || [];
     }
 
