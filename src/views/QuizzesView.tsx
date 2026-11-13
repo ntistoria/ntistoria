@@ -604,7 +604,7 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
 
               {/* Question Text */}
               <div className="space-y-4">
-                <h2 className="font-serif font-bold text-xl sm:text-2xl text-[#0D1B2A] leading-snug">
+                <h2 className="font-serif font-bold text-xl sm:text-2xl text-[#0D1B2A] leading-snug whitespace-pre-line">
                   {currentQuestion.question_text}
                 </h2>
 

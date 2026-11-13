@@ -275,7 +275,7 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
                         >
                           {qIndex + 1}
                         </span>
-                        <h3 className="font-serif font-bold text-sm sm:text-base text-[#0D1B2A] leading-snug">
+                        <h3 className="font-serif font-bold text-sm sm:text-base text-[#0D1B2A] leading-snug whitespace-pre-line">
                           {q.question_text}
                         </h3>
                       </div>

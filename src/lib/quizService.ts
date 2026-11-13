@@ -1,8 +1,21 @@
 import { supabase } from './supabase';
 import { QuizItem, QuizQuestionItem, QuizAnswerItem, QuizAttempt, QuizLeaderboardItem, QuizResultFeedback } from '../types';
-import { OLYMPIAD_LEVEL_1_QUIZ, OLYMPIAD_LEVEL_1_QUESTIONS, OLYMPIAD_LEVEL_1_QUIZ_ID } from '../data/olympiadQuizzes';
+import {
+  OLYMPIAD_LEVEL_1_QUIZ,
+  OLYMPIAD_LEVEL_1_QUESTIONS,
+  OLYMPIAD_LEVEL_1_QUIZ_ID,
+  OLYMPIAD_LEVEL_2_QUIZ,
+  OLYMPIAD_LEVEL_2_QUESTIONS,
+  OLYMPIAD_LEVEL_2_QUIZ_ID,
+  OLYMPIAD_LEVEL_3_QUIZ,
+  OLYMPIAD_LEVEL_3_QUESTIONS,
+  OLYMPIAD_LEVEL_3_QUIZ_ID,
+  OLYMPIAD_BUILT_IN_QUIZZES
+} from '../data/olympiadQuizzes';
 
 export const FALLBACK_QUIZZES: QuizItem[] = [
+  OLYMPIAD_LEVEL_3_QUIZ,
+  OLYMPIAD_LEVEL_2_QUIZ,
   OLYMPIAD_LEVEL_1_QUIZ,
   {
     id: 'quiz-diauehi-kolkha',
@@ -15,6 +28,8 @@ export const FALLBACK_QUIZZES: QuizItem[] = [
 ];
 
 export const FALLBACK_QUESTIONS: Record<string, QuizQuestionItem[]> = {
+  [OLYMPIAD_LEVEL_3_QUIZ_ID]: OLYMPIAD_LEVEL_3_QUESTIONS,
+  [OLYMPIAD_LEVEL_2_QUIZ_ID]: OLYMPIAD_LEVEL_2_QUESTIONS,
   [OLYMPIAD_LEVEL_1_QUIZ_ID]: OLYMPIAD_LEVEL_1_QUESTIONS,
   'quiz-diauehi-kolkha': [
     {
@@ -427,9 +442,9 @@ function hydrateQuestionsWithFallbackAnswers(
   if (!fallbackList || fallbackList.length === 0) {
     return stripCorrectFlag
       ? questions.map(q => ({
-          ...q,
-          answers: (q.answers || []).map(a => ({ ...a, is_correct: undefined }))
-        }))
+        ...q,
+        answers: (q.answers || []).map(a => ({ ...a, is_correct: undefined }))
+      }))
       : questions;
   }
 
@@ -466,7 +481,7 @@ function hydrateQuestionsWithFallbackAnswers(
 }
 
 /**
- * Automatically seeds "ოლიმპიადა - I დონე" into Supabase `quizzes`, `quiz_questions`,
+ * Automatically seeds built-in Olympiad quizzes into Supabase `quizzes`, `quiz_questions`,
  * and `quiz_answers` tables when an admin session (`ntistoria@gmail.com`) is active.
  */
 async function ensureOlympiadQuizSeededInDb(): Promise<void> {
@@ -478,67 +493,72 @@ async function ensureOlympiadQuizSeededInDb(): Promise<void> {
       const email = session?.user?.email?.toLowerCase().trim();
       if (email !== 'ntistoria@gmail.com') return;
 
-      // 1. Ensure Quiz row exists
-      const { data: existingQuiz } = await supabase
-        .from('quizzes')
-        .select('id')
-        .eq('id', OLYMPIAD_LEVEL_1_QUIZ_ID)
-        .maybeSingle();
+      for (const entry of OLYMPIAD_BUILT_IN_QUIZZES) {
+        const quizObj = entry.quiz;
+        const quizQuestions = entry.questions;
 
-      if (!existingQuiz) {
-        const { error: qzErr } = await supabase.from('quizzes').insert({
-          id: OLYMPIAD_LEVEL_1_QUIZ.id,
-          title: OLYMPIAD_LEVEL_1_QUIZ.title,
-          description: OLYMPIAD_LEVEL_1_QUIZ.description || null,
-          status: 'published',
-          is_active: true
-        });
-        if (qzErr) return;
-      }
+        // 1. Ensure Quiz row exists
+        const { data: existingQuiz } = await supabase
+          .from('quizzes')
+          .select('id')
+          .eq('id', quizObj.id)
+          .maybeSingle();
 
-      // 2. Ensure all 69 Questions exist
-      const { data: existingQuestions } = await supabase
-        .from('quiz_questions')
-        .select('id')
-        .eq('quiz_id', OLYMPIAD_LEVEL_1_QUIZ_ID);
+        if (!existingQuiz) {
+          const { error: qzErr } = await supabase.from('quizzes').insert({
+            id: quizObj.id,
+            title: quizObj.title,
+            description: quizObj.description || null,
+            status: 'published',
+            is_active: true
+          });
+          if (qzErr) continue;
+        }
 
-      const existingQIds = new Set((existingQuestions || []).map(q => q.id));
-      const missingQuestionRows = OLYMPIAD_LEVEL_1_QUESTIONS
-        .filter(q => !existingQIds.has(q.id))
-        .map(q => ({
-          id: q.id,
-          quiz_id: OLYMPIAD_LEVEL_1_QUIZ_ID,
-          question_text: q.question_text,
-          image_path: q.image_path || null,
-          question_order: q.question_order
-        }));
+        // 2. Ensure all Questions exist
+        const { data: existingQuestions } = await supabase
+          .from('quiz_questions')
+          .select('id')
+          .eq('quiz_id', quizObj.id);
 
-      if (missingQuestionRows.length > 0) {
-        await supabase.from('quiz_questions').insert(missingQuestionRows);
-      }
+        const existingQIds = new Set((existingQuestions || []).map(q => q.id));
+        const missingQuestionRows = quizQuestions
+          .filter(q => !existingQIds.has(q.id))
+          .map(q => ({
+            id: q.id,
+            quiz_id: quizObj.id,
+            question_text: q.question_text,
+            image_path: q.image_path || null,
+            question_order: q.question_order
+          }));
 
-      // 3. Ensure all 276 Answers exist (use plain INSERT without upsert/select on is_correct)
-      const allQuestionIds = OLYMPIAD_LEVEL_1_QUESTIONS.map(q => q.id);
-      const { data: existingAnswers } = await supabase
-        .from('quiz_answers')
-        .select('id')
-        .in('question_id', allQuestionIds);
+        if (missingQuestionRows.length > 0) {
+          await supabase.from('quiz_questions').insert(missingQuestionRows);
+        }
 
-      const existingAnsIds = new Set((existingAnswers || []).map(a => a.id));
-      const missingAnswerRows = OLYMPIAD_LEVEL_1_QUESTIONS.flatMap(q =>
-        (q.answers || [])
-          .filter(a => !existingAnsIds.has(a.id))
-          .map((a, idx) => ({
-            id: a.id,
-            question_id: q.id,
-            answer_text: a.answer_text,
-            is_correct: Boolean(a.is_correct),
-            answer_order: a.answer_order || idx + 1
-          }))
-      );
+        // 3. Ensure all Answers exist (use plain INSERT without upsert/select on is_correct)
+        const allQuestionIds = quizQuestions.map(q => q.id);
+        const { data: existingAnswers } = await supabase
+          .from('quiz_answers')
+          .select('id')
+          .in('question_id', allQuestionIds);
 
-      if (missingAnswerRows.length > 0) {
-        await supabase.from('quiz_answers').insert(missingAnswerRows);
+        const existingAnsIds = new Set((existingAnswers || []).map(a => a.id));
+        const missingAnswerRows = quizQuestions.flatMap(q =>
+          (q.answers || [])
+            .filter(a => !existingAnsIds.has(a.id))
+            .map((a, idx) => ({
+              id: a.id,
+              question_id: q.id,
+              answer_text: a.answer_text,
+              is_correct: Boolean(a.is_correct),
+              answer_order: a.answer_order || idx + 1
+            }))
+        );
+
+        if (missingAnswerRows.length > 0) {
+          await supabase.from('quiz_answers').insert(missingAnswerRows);
+        }
       }
     } catch {
       // Best-effort background sync
@@ -549,23 +569,31 @@ async function ensureOlympiadQuizSeededInDb(): Promise<void> {
 }
 
 function mergeOlympiadQuizIntoList(dbQuizzes: QuizItem[]): QuizItem[] {
-  const existingIdx = dbQuizzes.findIndex(
-    q => q.id === OLYMPIAD_LEVEL_1_QUIZ_ID || q.title.trim() === OLYMPIAD_LEVEL_1_QUIZ.title
-  );
+  const remainingDb = [...dbQuizzes];
+  const topList: QuizItem[] = [];
 
-  if (existingIdx !== -1) {
-    const existing = dbQuizzes[existingIdx];
-    const hydrated: QuizItem = {
-      ...existing,
-      question_count: existing.question_count && existing.question_count > 0
-        ? existing.question_count
-        : OLYMPIAD_LEVEL_1_QUESTIONS.length
-    };
-    const rest = dbQuizzes.filter((_, idx) => idx !== existingIdx);
-    return [hydrated, ...rest];
+  for (const entry of OLYMPIAD_BUILT_IN_QUIZZES) {
+    const builtInQuiz = entry.quiz;
+    const builtInCount = entry.questions.length;
+    const existingIdx = remainingDb.findIndex(
+      q => q.id === builtInQuiz.id || q.title.trim() === builtInQuiz.title
+    );
+
+    if (existingIdx !== -1) {
+      const existing = remainingDb[existingIdx];
+      remainingDb.splice(existingIdx, 1);
+      topList.push({
+        ...existing,
+        question_count: existing.question_count && existing.question_count > 0
+          ? existing.question_count
+          : builtInCount
+      });
+    } else {
+      topList.push(builtInQuiz);
+    }
   }
 
-  return [OLYMPIAD_LEVEL_1_QUIZ, ...dbQuizzes];
+  return [...topList, ...remainingDb];
 }
 
 // Fetch all published quizzes
@@ -583,7 +611,7 @@ export async function fetchPublishedQuizzes(): Promise<QuizItem[]> {
 
     if (error || !quizzes || quizzes.length === 0) {
       if (error) console.error('Error loading quizzes:', error);
-      return [OLYMPIAD_LEVEL_1_QUIZ];
+      return OLYMPIAD_BUILT_IN_QUIZZES.map(e => e.quiz);
     }
 
     // P1 FIX: one batch request for all question counts instead of N separate requests
@@ -598,12 +626,14 @@ export async function fetchPublishedQuizzes(): Promise<QuizItem[]> {
     return mergeOlympiadQuizIntoList(mapped);
   } catch (err) {
     console.error('Error fetching published quizzes:', err);
-    return [OLYMPIAD_LEVEL_1_QUIZ];
+    return OLYMPIAD_BUILT_IN_QUIZZES.map(e => e.quiz);
   }
 }
 
 // Fetch questions for a specific quiz (without exposing is_correct to client)
 export async function fetchQuizQuestionsForPlay(quizId: string): Promise<{ quiz: QuizItem; questions: QuizQuestionItem[] } | null> {
+  const builtInMatch = OLYMPIAD_BUILT_IN_QUIZZES.find(e => e.quiz.id === quizId);
+
   try {
     // P2 FIX: quiz info + questions + answers in TWO queries total (was N+2)
     // 1. Fetch Quiz Info
@@ -614,10 +644,10 @@ export async function fetchQuizQuestionsForPlay(quizId: string): Promise<{ quiz:
       .maybeSingle();
 
     if (quizError || !quizData) {
-      if (quizId === OLYMPIAD_LEVEL_1_QUIZ_ID) {
+      if (builtInMatch) {
         return {
-          quiz: OLYMPIAD_LEVEL_1_QUIZ,
-          questions: OLYMPIAD_LEVEL_1_QUESTIONS.map(q => ({
+          quiz: builtInMatch.quiz,
+          questions: builtInMatch.questions.map(q => ({
             ...q,
             answers: (q.answers || []).map(a => ({ ...a, is_correct: undefined }))
           }))
@@ -633,11 +663,13 @@ export async function fetchQuizQuestionsForPlay(quizId: string): Promise<{ quiz:
       .eq('quiz_id', quizId)
       .order('question_order', { ascending: true });
 
+    const matchedByTitle = builtInMatch || OLYMPIAD_BUILT_IN_QUIZZES.find(e => e.quiz.title === quizData.title?.trim());
+
     if (qError || !questionsData || questionsData.length === 0) {
-      if (quizId === OLYMPIAD_LEVEL_1_QUIZ_ID || quizData.title?.trim() === OLYMPIAD_LEVEL_1_QUIZ.title) {
+      if (matchedByTitle) {
         return {
           quiz: quizData,
-          questions: OLYMPIAD_LEVEL_1_QUESTIONS.map(q => ({
+          questions: matchedByTitle.questions.map(q => ({
             ...q,
             quiz_id: quizData.id,
             answers: (q.answers || []).map(a => ({ ...a, is_correct: undefined }))
@@ -971,9 +1003,9 @@ export async function fetchUserQuizAttempts(userId: string, guestName?: string):
 
     // Fetch quiz titles and cover images for each attempt
     const quizIds = [...new Set(latestAttempts.map(a => a.quiz_id))];
-    const quizMap = new Map<string, { title: string; cover_image_path: string | null }>([
-      [OLYMPIAD_LEVEL_1_QUIZ_ID, { title: OLYMPIAD_LEVEL_1_QUIZ.title, cover_image_path: null }]
-    ]);
+    const quizMap = new Map<string, { title: string; cover_image_path: string | null }>(
+      OLYMPIAD_BUILT_IN_QUIZZES.map(e => [e.quiz.id, { title: e.quiz.title, cover_image_path: null }])
+    );
 
     if (quizIds.length > 0) {
       const { data: quizzes } = await supabase
