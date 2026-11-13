@@ -1,12 +1,18 @@
 import { useState, useEffect, type FC } from 'react';
 import { X, CheckCircle2, XCircle, HelpCircle, Trophy, RotateCcw, AlertCircle } from 'lucide-react';
 import { QuizAttempt, QuizQuestionItem } from '../types';
-import { fetchQuizQuestionsWithAnswers, getQuizResultFeedback, getQuizImageUrl } from '../lib/quizService';
+import { fetchQuizQuestionsWithAnswers, getQuizResultFeedback, getQuizImageUrl, getLocalAttempts } from '../lib/quizService';
 
 interface QuizStudentReviewModalProps {
   attempt: QuizAttempt;
   onClose: () => void;
   onRetake?: (quizId: string) => void;
+}
+
+interface ParsedUserAnswerEntry {
+  answerId: string;
+  answerOrder?: number;
+  answerText?: string;
 }
 
 export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
@@ -35,10 +41,33 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
     return () => { isMounted = false; };
   }, [attempt.quiz_id]);
 
-  // Robust parse of user answers into map of question_id -> answer_id
-  const userAnswersMap: Record<string, string> = {};
-  if (attempt.user_answers) {
-    let raw: any = attempt.user_answers;
+  // Resolve user_answers from attempt prop, or fallback to localStorage if DB row had null user_answers
+  const resolvedRawUserAnswers = (() => {
+    const rawAttemptAnswers: unknown = attempt.user_answers;
+    if (rawAttemptAnswers) {
+      if (Array.isArray(rawAttemptAnswers) && rawAttemptAnswers.length > 0) {
+        return rawAttemptAnswers;
+      }
+      if (typeof rawAttemptAnswers === 'string' && rawAttemptAnswers.trim().length > 2) {
+        return rawAttemptAnswers;
+      }
+      if (typeof rawAttemptAnswers === 'object' && Object.keys(rawAttemptAnswers as object).length > 0) {
+        return rawAttemptAnswers;
+      }
+    }
+    const localMatches = getLocalAttempts(attempt.quiz_id);
+    const exactMatch = localMatches.find(a => a.id === attempt.id && a.user_answers);
+    if (exactMatch?.user_answers) return exactMatch.user_answers;
+    const quizMatch = localMatches.find(a => a.user_answers && (
+      Array.isArray(a.user_answers) ? a.user_answers.length > 0 : Object.keys(a.user_answers).length > 0
+    ));
+    return quizMatch?.user_answers || null;
+  })();
+
+  // Robust parse of user answers into map of question_id -> ParsedUserAnswerEntry
+  const userAnswersMap: Record<string, ParsedUserAnswerEntry> = {};
+  if (resolvedRawUserAnswers) {
+    let raw: any = resolvedRawUserAnswers;
     if (typeof raw === 'string') {
       try {
         raw = JSON.parse(raw);
@@ -51,19 +80,29 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
         if (!item) return;
         const qId = item.question_id || item.questionId || item.qId || item.q;
         const aId = item.answer_id || item.answerId || item.aId || item.a;
-        if (qId && aId) {
-          userAnswersMap[String(qId).trim()] = String(aId).trim();
+        const aOrder = typeof item.answer_order === 'number' ? item.answer_order : undefined;
+        const aText = typeof item.answer_text === 'string' ? item.answer_text : undefined;
+        if (qId && (aId || aOrder !== undefined || aText)) {
+          userAnswersMap[String(qId).trim()] = {
+            answerId: aId ? String(aId).trim() : '',
+            answerOrder: aOrder,
+            answerText: aText
+          };
         } else if (typeof item === 'string') {
-          userAnswersMap[`index_${idx}`] = item.trim();
+          userAnswersMap[`index_${idx}`] = { answerId: item.trim() };
         }
       });
     } else if (typeof raw === 'object' && raw !== null) {
       Object.entries(raw).forEach(([k, v]) => {
         if (v && typeof v === 'object' && ('answer_id' in (v as any) || 'answerId' in (v as any))) {
           const aId = (v as any).answer_id || (v as any).answerId;
-          userAnswersMap[String(k).trim()] = String(aId).trim();
+          userAnswersMap[String(k).trim()] = {
+            answerId: String(aId).trim(),
+            answerOrder: typeof (v as any).answer_order === 'number' ? (v as any).answer_order : undefined,
+            answerText: typeof (v as any).answer_text === 'string' ? (v as any).answer_text : undefined
+          };
         } else if (v) {
-          userAnswersMap[String(k).trim()] = String(v).trim();
+          userAnswersMap[String(k).trim()] = { answerId: String(v).trim() };
         }
       });
     }
@@ -74,16 +113,36 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
   // Evaluate each question against userAnswersMap
   const evaluatedQuestions = questions.map((q, qIndex) => {
     const qIdStr = String(q.id).trim();
-    const selectedAnsId = userAnswersMap[qIdStr] || userAnswersMap[q.id] || userAnswersMap[`index_${qIndex}`];
-    const correctAnswer = (q.answers || []).find(a => Boolean(a.is_correct));
-    const selectedAnswer = selectedAnsId
-      ? (q.answers || []).find(a => String(a.id).trim() === String(selectedAnsId).trim())
+    const entry = userAnswersMap[qIdStr] || userAnswersMap[q.id] || userAnswersMap[`index_${qIndex}`];
+    const qAnswers = q.answers || [];
+    const correctAnswer = qAnswers.find(a => Boolean(a.is_correct));
+
+    let selectedAnswer = entry?.answerId
+      ? qAnswers.find(a => String(a.id).trim() === String(entry.answerId).trim())
       : undefined;
+
+    if (!selectedAnswer && entry?.answerText) {
+      const targetText = entry.answerText.trim();
+      selectedAnswer = qAnswers.find(a => (a.answer_text || '').trim() === targetText);
+    }
+
+    if (!selectedAnswer && entry?.answerOrder !== undefined) {
+      selectedAnswer =
+        qAnswers.find(a => a.answer_order === entry.answerOrder) ||
+        qAnswers[entry.answerOrder - 1];
+    }
+
+    const selectedAnsId = selectedAnswer
+      ? String(selectedAnswer.id).trim()
+      : entry?.answerId;
+
     const isUserCorrect = Boolean(
-      selectedAnsId &&
-      correctAnswer &&
-      String(selectedAnsId).trim() === String(correctAnswer.id).trim()
+      (selectedAnswer && Boolean(selectedAnswer.is_correct)) ||
+      (selectedAnsId &&
+        correctAnswer &&
+        String(selectedAnsId).trim() === String(correctAnswer.id).trim())
     );
+
     return {
       q,
       qIndex,
@@ -242,9 +301,16 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
           ) : (
             <>
               {!hasRecordedUserAnswers && (
-                <div className="p-3.5 bg-amber-50 border border-amber-300 rounded-2xl text-amber-900 text-xs font-semibold flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>ამ ძველ მცდელობაზე ინდივიდუალური არჩეული ვარიანტები შენახული არ არის — ნაჩვენებია კითხვების სწორი პასუხები.</span>
+                <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl text-amber-950 text-xs font-semibold flex items-start gap-2.5 shadow-xs">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <span className="font-bold block">
+                      შენიშვნა ძველი მცდელობის შესახებ ({displayCorrect}/{displayTotal} სწორი, {displayIncorrect} შეცდომა):
+                    </span>
+                    <span className="font-normal text-amber-900 leading-relaxed block">
+                      ეს მცდელობა შენახულია განახლებამდე, როდესაც ბაზაში მხოლოდ საბოლოო ქულა იწერებოდა და თითოეულ კითხვაზე მონიშნული ვარიანტი ცალ-ცალკე არ ინახებოდა. ქვემოთ ნაჩვენებია კითხვების საცნობარო სწორი პასუხები. გაიარეთ ქვიზი ხელახლა, რათა თქვენი ყველა სწორი და არასწორი პასუხი დეტალურად შეინახოს.
+                    </span>
+                  </div>
                 </div>
               )}
               {filteredQuestions.map(({ q, qIndex, selectedAnsId, selectedAnswer, correctAnswer, isUserCorrect }) => {
@@ -280,7 +346,12 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
                         </h3>
                       </div>
 
-                      {!hasRecordedUserAnswers ? null : isUserCorrect ? (
+                      {!hasRecordedUserAnswers ? (
+                        <span className="px-3 py-1 bg-[#FAF8F3] border border-[#E6DDCB] text-[#666666] text-[11px] font-bold rounded-full flex items-center gap-1 shrink-0">
+                          <HelpCircle className="w-3.5 h-3.5 text-[#C79B3A]" />
+                          <span>საცნობარო პასუხი</span>
+                        </span>
+                      ) : isUserCorrect ? (
                         <span className="px-3 py-1 bg-emerald-100 border border-emerald-300 text-emerald-800 text-[11px] font-bold rounded-full flex items-center gap-1 shrink-0">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                           <span>სწორია</span>
@@ -330,14 +401,23 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
                     <div className="space-y-2">
                       {q.answers.map((ans, aIdx) => {
                         const isSelected = Boolean(
-                          selectedAnsId && String(selectedAnsId).trim() === String(ans.id).trim()
+                          hasRecordedUserAnswers &&
+                          selectedAnsId &&
+                          String(selectedAnsId).trim() === String(ans.id).trim()
                         );
                         const isCorrect = Boolean(ans.is_correct);
 
                         let styleClasses = 'bg-[#FAF8F3] border-[#E6DDCB] text-[#0D1B2A]';
                         let badge = null;
 
-                        if (isSelected && isCorrect) {
+                        if (!hasRecordedUserAnswers && isCorrect) {
+                          styleClasses = 'bg-[#FAF8F3] border-2 border-[#C79B3A] text-[#0D1B2A] font-semibold';
+                          badge = (
+                            <span className="text-[11px] bg-[#0D1B2A] text-[#C79B3A] font-bold px-2.5 py-0.5 rounded-md flex items-center gap-1 ml-auto shrink-0">
+                              <span>სწორი ვარიანტი (საცნობარო)</span>
+                            </span>
+                          );
+                        } else if (isSelected && isCorrect) {
                           styleClasses = 'bg-emerald-100 border-2 border-emerald-500 text-emerald-950 font-bold shadow-xs';
                           badge = (
                             <span className="text-[11px] bg-emerald-600 text-white font-bold px-2 py-0.5 rounded-md flex items-center gap-1 ml-auto shrink-0">

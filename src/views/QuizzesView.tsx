@@ -279,11 +279,17 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
     setIsSubmitting(true);
 
     try {
-      // Format answers array
-      const userAnswersList: { question_id: string; answer_id: string }[] = Object.entries(selectedAnswers).map(([question_id, answer_id]) => ({
-        question_id,
-        answer_id: answer_id as string
-      }));
+      // Format answers array with question_id, answer_id, and fallback metadata (answer_order, answer_text)
+      const userAnswersList: { question_id: string; answer_id: string; answer_order?: number; answer_text?: string }[] = Object.entries(selectedAnswers).map(([question_id, answer_id]) => {
+        const qObj = questions.find(q => String(q.id).trim() === String(question_id).trim());
+        const ansIndex = (qObj?.answers || []).findIndex(a => String(a.id).trim() === String(answer_id).trim());
+        const ansObj = ansIndex >= 0 ? qObj?.answers[ansIndex] : undefined;
+        return {
+          question_id: String(question_id).trim(),
+          answer_id: String(answer_id).trim(),
+          ...(ansObj ? { answer_order: ansObj.answer_order || ansIndex + 1, answer_text: ansObj.answer_text } : {})
+        };
+      });
 
       // Get logged-in user session ID if available
       const { data: { session } } = await supabase.auth.getSession();

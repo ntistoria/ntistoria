@@ -729,12 +729,12 @@ export async function resetQuizAttempt(
   }
 }
 
-// Submit Quiz Attempt (Server-side evaluation via RPC with client fallback)
+// Submit Quiz Attempt (Evaluates with authoritative answers & persists user_answers + tab_switches to DB)
 export async function submitQuizAttempt(
   quizId: string,
   userId: string | null,
   guestName: string | null,
-  userAnswers: { question_id: string; answer_id: string }[],
+  userAnswers: { question_id: string; answer_id: string; answer_order?: number; answer_text?: string }[],
   tabSwitches: number = 0
 ): Promise<{
   attempt_id: string;
@@ -745,97 +745,108 @@ export async function submitQuizAttempt(
 }> {
   const cleanGuest = guestName ? guestName.trim() : null;
 
-  const hasBuiltInAnswers = Boolean(FALLBACK_QUESTIONS[quizId] && FALLBACK_QUESTIONS[quizId].length > 0);
+  let total = 0;
+  let correct = 0;
+  let gradedViaQuestions = false;
+  let enrichedUserAnswers = [...userAnswers];
 
-  if (!hasBuiltInAnswers) {
+  // 1. Primary grading via fetchQuizQuestionsWithAnswers (uses SECURITY DEFINER RPC + built-in fallback)
+  try {
+    const questionsWithAnswers = await fetchQuizQuestionsWithAnswers(quizId);
+    if (questionsWithAnswers.length > 0) {
+      gradedViaQuestions = true;
+      total = questionsWithAnswers.length;
+
+      const questionMap = new Map<string, QuizQuestionItem>();
+      const correctAnswerIdByQuestion = new Map<string, string>();
+
+      for (const q of questionsWithAnswers) {
+        const qIdKey = String(q.id).trim();
+        questionMap.set(qIdKey, q);
+        const correctAns = (q.answers || []).find(a => Boolean(a.is_correct));
+        if (correctAns) {
+          correctAnswerIdByQuestion.set(qIdKey, String(correctAns.id).trim());
+        }
+      }
+
+      enrichedUserAnswers = userAnswers.map(uAns => {
+        const qIdKey = String(uAns.question_id).trim();
+        const aIdKey = String(uAns.answer_id).trim();
+        const qObj = questionMap.get(qIdKey);
+        const matchedAns = (qObj?.answers || []).find(a => String(a.id).trim() === aIdKey);
+        return {
+          question_id: qIdKey,
+          answer_id: aIdKey,
+          ...(matchedAns?.answer_order !== undefined ? { answer_order: matchedAns.answer_order } : {}),
+          ...(matchedAns?.answer_text ? { answer_text: matchedAns.answer_text } : {})
+        };
+      });
+
+      const countedQuestions = new Set<string>();
+      for (const uAns of enrichedUserAnswers) {
+        const qIdKey = String(uAns.question_id).trim();
+        if (countedQuestions.has(qIdKey)) continue;
+        countedQuestions.add(qIdKey);
+
+        const expectedAnsId = correctAnswerIdByQuestion.get(qIdKey);
+        if (expectedAnsId && expectedAnsId === String(uAns.answer_id).trim()) {
+          correct++;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Error fetching questions for grading, trying RPC fallback:', err);
+  }
+
+  // 2. Fallback to RPC if questions could not be loaded directly
+  if (!gradedViaQuestions) {
     try {
-      // 1. Try 5-parameter RPC submit (with p_tab_switches)
       let { data, error } = await supabase.rpc('submit_quiz_attempt', {
         p_quiz_id: quizId,
         p_user_id: userId || null,
         p_guest_name: cleanGuest,
-        p_user_answers: userAnswers,
+        p_user_answers: enrichedUserAnswers,
         p_tab_switches: tabSwitches
       });
 
-      // 2. If the DB has the 4-parameter overload (without p_tab_switches), call it seamlessly
       if (error) {
         await resetQuizAttempt(quizId, userId || null, cleanGuest);
         const fallbackRpc = await supabase.rpc('submit_quiz_attempt', {
           p_quiz_id: quizId,
           p_user_id: userId || null,
           p_guest_name: cleanGuest,
-          p_user_answers: userAnswers
+          p_user_answers: enrichedUserAnswers
         });
         data = fallbackRpc.data;
         error = fallbackRpc.error;
       }
 
       if (!error && data) {
-        const pct = Math.round(Number(data.percentage));
-        saveLocalAttempt({
-          id: data.attempt_id,
-          quiz_id: quizId,
-          user_id: userId,
-          guest_name: cleanGuest || 'სტუმარი',
-          correct_answers: Number(data.correct_answers),
-          total_questions: Number(data.total_questions),
-          percentage: pct,
-          created_at: new Date().toISOString(),
-          user_answers: userAnswers,
-          tab_switches: tabSwitches
-        });
-        return {
-          attempt_id: data.attempt_id,
-          correct_answers: Number(data.correct_answers),
-          total_questions: Number(data.total_questions),
-          percentage: pct,
-          tab_switches: tabSwitches
-        };
+        correct = Number(data.correct_answers) || 0;
+        total = Number(data.total_questions) || enrichedUserAnswers.length || 1;
+        gradedViaQuestions = true;
       }
-
-      console.warn('RPC submit failed or not present, executing client-side fallback grading:', error);
     } catch (e) {
-      console.warn('RPC submit exception, doing fallback grading:', e);
+      console.warn('RPC submit fallback exception:', e);
     }
   }
 
-  // Fallback grading: use fetchQuizQuestionsWithAnswers (which uses SECURITY DEFINER RPC get_quiz_questions_with_answers)
-  let total = 0;
-  let correct = 0;
-
-  const questionsWithAnswers = await fetchQuizQuestionsWithAnswers(quizId);
-  if (questionsWithAnswers.length > 0) {
-    total = questionsWithAnswers.length;
-    const correctAnswerIdByQuestion = new Map<string, string>();
-    for (const q of questionsWithAnswers) {
-      const correctAns = (q.answers || []).find(a => a.is_correct);
-      if (correctAns) {
-        correctAnswerIdByQuestion.set(String(q.id).trim(), String(correctAns.id).trim());
-      }
-    }
-    for (const uAns of userAnswers) {
-      const expectedAnsId = correctAnswerIdByQuestion.get(String(uAns.question_id).trim());
-      if (expectedAnsId && expectedAnsId === String(uAns.answer_id).trim()) {
-        correct++;
-      }
-    }
-  } else {
+  if (!gradedViaQuestions) {
     const { data: qData } = await supabase
       .from('quiz_questions')
       .select('id')
       .eq('quiz_id', quizId);
-
-    total = qData?.length || userAnswers.length || 1;
+    total = qData?.length || enrichedUserAnswers.length || 1;
   }
 
   const percentage = Math.round((correct / (total || 1)) * 100);
   const newId = `att-${Date.now()}`;
 
-  // Insert attempt to database (always replace server-side — DB has its own best-score view)
+  // 3. Persist attempt directly to public.quiz_attempts with user_answers and tab_switches
+  // (Ensures user_answers is ALWAYS saved in Supabase even if the 4-param RPC omitted it)
   try {
     await resetQuizAttempt(quizId, userId || null, cleanGuest);
-    const { data: inserted } = await supabase
+    const { data: inserted, error: insertError } = await supabase
       .from('quiz_attempts')
       .insert({
         quiz_id: quizId,
@@ -844,11 +855,15 @@ export async function submitQuizAttempt(
         correct_answers: correct,
         total_questions: total,
         percentage: percentage,
-        user_answers: userAnswers,
+        user_answers: enrichedUserAnswers,
         tab_switches: tabSwitches
       })
       .select('id')
       .single();
+
+    if (insertError) {
+      console.warn('Direct insert into quiz_attempts returned error:', insertError);
+    }
 
     const finalId = inserted?.id || newId;
     saveLocalAttempt({
@@ -860,7 +875,7 @@ export async function submitQuizAttempt(
       total_questions: total,
       percentage: percentage,
       created_at: new Date().toISOString(),
-      user_answers: userAnswers,
+      user_answers: enrichedUserAnswers,
       tab_switches: tabSwitches
     });
     return {
@@ -881,7 +896,7 @@ export async function submitQuizAttempt(
       total_questions: total,
       percentage: percentage,
       created_at: new Date().toISOString(),
-      user_answers: userAnswers,
+      user_answers: enrichedUserAnswers,
       tab_switches: tabSwitches
     });
   }
@@ -926,7 +941,7 @@ function saveLocalAttempt(attempt: QuizAttempt) {
   }
 }
 
-function getLocalAttempts(quizId?: string): QuizAttempt[] {
+export function getLocalAttempts(quizId?: string): QuizAttempt[] {
   try {
     const raw = localStorage.getItem('nt_quiz_attempts');
     if (!raw) return [];
@@ -950,6 +965,23 @@ export function removeLocalAttempt(attemptId: string) {
   }
 }
 
+function hasValidUserAnswers(attempt: QuizAttempt | null | undefined): boolean {
+  if (!attempt || !attempt.user_answers) return false;
+  if (Array.isArray(attempt.user_answers)) return attempt.user_answers.length > 0;
+  if (typeof attempt.user_answers === 'string') {
+    try {
+      const parsed = JSON.parse(attempt.user_answers);
+      return Array.isArray(parsed) ? parsed.length > 0 : Object.keys(parsed || {}).length > 0;
+    } catch {
+      return false;
+    }
+  }
+  if (typeof attempt.user_answers === 'object') {
+    return Object.keys(attempt.user_answers).length > 0;
+  }
+  return false;
+}
+
 // Helper to deduplicate attempts keeping only the latest attempt per quiz.
 // P12 FIX: Explicitly sort by created_at descending BEFORE deduplication so
 // the “takes the first occurrence” logic always picks the most recent entry,
@@ -967,6 +999,12 @@ function getLatestAttemptsPerQuiz(attempts: QuizAttempt[]): QuizAttempt[] {
       map.set(a.quiz_id, a);
     } else if (existing.correct_answers === 0 && a.correct_answers > 0) {
       map.set(a.quiz_id, a);
+    } else if (!hasValidUserAnswers(existing) && hasValidUserAnswers(a)) {
+      map.set(a.quiz_id, {
+        ...existing,
+        user_answers: a.user_answers,
+        tab_switches: existing.tab_switches ?? a.tab_switches
+      });
     }
   }
   return Array.from(map.values());
@@ -975,6 +1013,16 @@ function getLatestAttemptsPerQuiz(attempts: QuizAttempt[]): QuizAttempt[] {
 // Fetch all attempts for a specific logged-in user or guest (stores only the latest result per quiz)
 export async function fetchUserQuizAttempts(userId: string, guestName?: string): Promise<QuizAttempt[]> {
   try {
+    const localAttempts = getLocalAttempts();
+    const localById = new Map<string, QuizAttempt>();
+    const localByQuizId = new Map<string, QuizAttempt>();
+    for (const loc of localAttempts) {
+      if (loc.id) localById.set(loc.id, loc);
+      if (loc.quiz_id && (!localByQuizId.has(loc.quiz_id) || hasValidUserAnswers(loc))) {
+        localByQuizId.set(loc.quiz_id, loc);
+      }
+    }
+
     let query = supabase
       .from('quiz_attempts')
       .select('id, quiz_id, user_id, guest_name, correct_answers, total_questions, percentage, created_at, user_answers, tab_switches')
@@ -985,7 +1033,7 @@ export async function fetchUserQuizAttempts(userId: string, guestName?: string):
     } else if (guestName) {
       query = query.eq('guest_name', guestName);
     } else {
-      return getLatestAttemptsPerQuiz(getLocalAttempts());
+      return getLatestAttemptsPerQuiz(localAttempts);
     }
 
     const { data: attempts, error } = await query;
@@ -993,7 +1041,54 @@ export async function fetchUserQuizAttempts(userId: string, guestName?: string):
     let dbAttempts: QuizAttempt[] = (attempts || []) as QuizAttempt[];
 
     if (error || dbAttempts.length === 0) {
-      dbAttempts = getLocalAttempts();
+      dbAttempts = localAttempts;
+    } else {
+      // Hydrate any DB attempt whose user_answers was dropped by the legacy 4-param RPC
+      dbAttempts = dbAttempts.map(dbAtt => {
+        if (hasValidUserAnswers(dbAtt)) return dbAtt;
+        const localMatch = localById.get(dbAtt.id) || localByQuizId.get(dbAtt.quiz_id);
+        if (localMatch && hasValidUserAnswers(localMatch)) {
+          // Backfill DB row in background so user_answers is permanently stored in Supabase
+          void (async () => {
+            try {
+              await supabase.from('quiz_attempts').delete().eq('id', dbAtt.id);
+              await supabase.from('quiz_attempts').insert({
+                id: dbAtt.id,
+                quiz_id: dbAtt.quiz_id,
+                user_id: dbAtt.user_id || null,
+                guest_name: dbAtt.guest_name || null,
+                correct_answers: dbAtt.correct_answers,
+                total_questions: dbAtt.total_questions,
+                percentage: dbAtt.percentage,
+                created_at: dbAtt.created_at,
+                user_answers: localMatch.user_answers,
+                tab_switches: dbAtt.tab_switches ?? localMatch.tab_switches ?? 0
+              });
+            } catch {
+              // Ignore background repair error
+            }
+          })();
+
+          return {
+            ...dbAtt,
+            user_answers: localMatch.user_answers,
+            tab_switches: dbAtt.tab_switches ?? localMatch.tab_switches ?? 0
+          };
+        }
+        return dbAtt;
+      });
+
+      // Also include any local attempts for quizzes not yet present in dbAttempts
+      const dbQuizIds = new Set(dbAttempts.map(a => a.quiz_id));
+      for (const loc of localAttempts) {
+        if (!dbQuizIds.has(loc.quiz_id)) {
+          const matchesUser = (userId && loc.user_id === userId) ||
+            (guestName && loc.guest_name && loc.guest_name.trim().toLowerCase() === guestName.trim().toLowerCase());
+          if (matchesUser) {
+            dbAttempts.push(loc);
+          }
+        }
+      }
     }
 
     if (dbAttempts.length === 0) return [];
@@ -1322,8 +1417,9 @@ export async function saveQuestionAdmin(
       .eq('question_id', savedQId);
   }
 
-  // Insert answers
+  // Insert answers (preserving existing answer IDs so historical user_answers references stay valid)
   const answersPayload = answers.map((ans, idx) => ({
+    ...(ans.id && !ans.id.startsWith('ans-') && !ans.id.startsWith('temp-') ? { id: ans.id } : {}),
     question_id: savedQId,
     answer_text: ans.answer_text.trim(),
     is_correct: ans.is_correct,
