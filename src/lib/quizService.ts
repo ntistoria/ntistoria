@@ -418,6 +418,53 @@ async function fetchQuestionCountsForQuizIds(quizIds: string[]): Promise<Record<
 
 let olympiadSeedPromise: Promise<void> | null = null;
 
+function hydrateQuestionsWithFallbackAnswers(
+  quizId: string,
+  questions: QuizQuestionItem[],
+  stripCorrectFlag: boolean
+): QuizQuestionItem[] {
+  const fallbackList = FALLBACK_QUESTIONS[quizId];
+  if (!fallbackList || fallbackList.length === 0) {
+    return stripCorrectFlag
+      ? questions.map(q => ({
+          ...q,
+          answers: (q.answers || []).map(a => ({ ...a, is_correct: undefined }))
+        }))
+      : questions;
+  }
+
+  const byId = new Map<string, QuizQuestionItem>();
+  const byOrder = new Map<number, QuizQuestionItem>();
+  for (const fq of fallbackList) {
+    byId.set(fq.id, fq);
+    byOrder.set(fq.question_order, fq);
+  }
+
+  return questions.map(q => {
+    const existingAnswers = q.answers || [];
+    if (existingAnswers.length >= 2) {
+      return {
+        ...q,
+        answers: stripCorrectFlag
+          ? existingAnswers.map(a => ({ ...a, is_correct: undefined }))
+          : existingAnswers
+      };
+    }
+
+    const fallbackQ = byId.get(q.id) || byOrder.get(q.question_order);
+    const hydratedAnswers = (fallbackQ?.answers || []).map(a => ({
+      ...a,
+      question_id: q.id,
+      is_correct: stripCorrectFlag ? undefined : a.is_correct
+    }));
+
+    return {
+      ...q,
+      answers: hydratedAnswers
+    };
+  });
+}
+
 /**
  * Automatically seeds "ოლიმპიადა - I დონე" into Supabase `quizzes`, `quiz_questions`,
  * and `quiz_answers` tables when an admin session (`ntistoria@gmail.com`) is active.
@@ -431,50 +478,68 @@ async function ensureOlympiadQuizSeededInDb(): Promise<void> {
       const email = session?.user?.email?.toLowerCase().trim();
       if (email !== 'ntistoria@gmail.com') return;
 
-      const { count } = await supabase
-        .from('quiz_questions')
-        .select('id', { count: 'exact', head: true })
-        .eq('quiz_id', OLYMPIAD_LEVEL_1_QUIZ_ID);
+      // 1. Ensure Quiz row exists
+      const { data: existingQuiz } = await supabase
+        .from('quizzes')
+        .select('id')
+        .eq('id', OLYMPIAD_LEVEL_1_QUIZ_ID)
+        .maybeSingle();
 
-      if ((count || 0) >= OLYMPIAD_LEVEL_1_QUESTIONS.length) return;
-
-      // 1. Upsert Quiz row
-      const { error: qzErr } = await supabase.from('quizzes').upsert(
-        {
+      if (!existingQuiz) {
+        const { error: qzErr } = await supabase.from('quizzes').insert({
           id: OLYMPIAD_LEVEL_1_QUIZ.id,
           title: OLYMPIAD_LEVEL_1_QUIZ.title,
           description: OLYMPIAD_LEVEL_1_QUIZ.description || null,
           status: 'published',
           is_active: true
-        },
-        { onConflict: 'id' }
-      );
-      if (qzErr) return;
+        });
+        if (qzErr) return;
+      }
 
-      // 2. Upsert all 69 Questions in one batch
-      const questionRows = OLYMPIAD_LEVEL_1_QUESTIONS.map(q => ({
-        id: q.id,
-        quiz_id: OLYMPIAD_LEVEL_1_QUIZ_ID,
-        question_text: q.question_text,
-        image_path: q.image_path || null,
-        question_order: q.question_order
-      }));
-      const { error: qqErr } = await supabase
+      // 2. Ensure all 69 Questions exist
+      const { data: existingQuestions } = await supabase
         .from('quiz_questions')
-        .upsert(questionRows, { onConflict: 'id' });
-      if (qqErr) return;
+        .select('id')
+        .eq('quiz_id', OLYMPIAD_LEVEL_1_QUIZ_ID);
 
-      // 3. Upsert all 276 Answers in one batch
-      const answerRows = OLYMPIAD_LEVEL_1_QUESTIONS.flatMap(q =>
-        (q.answers || []).map((a, idx) => ({
-          id: a.id,
-          question_id: q.id,
-          answer_text: a.answer_text,
-          is_correct: Boolean(a.is_correct),
-          answer_order: a.answer_order || idx + 1
-        }))
+      const existingQIds = new Set((existingQuestions || []).map(q => q.id));
+      const missingQuestionRows = OLYMPIAD_LEVEL_1_QUESTIONS
+        .filter(q => !existingQIds.has(q.id))
+        .map(q => ({
+          id: q.id,
+          quiz_id: OLYMPIAD_LEVEL_1_QUIZ_ID,
+          question_text: q.question_text,
+          image_path: q.image_path || null,
+          question_order: q.question_order
+        }));
+
+      if (missingQuestionRows.length > 0) {
+        await supabase.from('quiz_questions').insert(missingQuestionRows);
+      }
+
+      // 3. Ensure all 276 Answers exist (use plain INSERT without upsert/select on is_correct)
+      const allQuestionIds = OLYMPIAD_LEVEL_1_QUESTIONS.map(q => q.id);
+      const { data: existingAnswers } = await supabase
+        .from('quiz_answers')
+        .select('id')
+        .in('question_id', allQuestionIds);
+
+      const existingAnsIds = new Set((existingAnswers || []).map(a => a.id));
+      const missingAnswerRows = OLYMPIAD_LEVEL_1_QUESTIONS.flatMap(q =>
+        (q.answers || [])
+          .filter(a => !existingAnsIds.has(a.id))
+          .map((a, idx) => ({
+            id: a.id,
+            question_id: q.id,
+            answer_text: a.answer_text,
+            is_correct: Boolean(a.is_correct),
+            answer_order: a.answer_order || idx + 1
+          }))
       );
-      await supabase.from('quiz_answers').upsert(answerRows, { onConflict: 'id' });
+
+      if (missingAnswerRows.length > 0) {
+        await supabase.from('quiz_answers').insert(missingAnswerRows);
+      }
     } catch {
       // Best-effort background sync
     }
@@ -598,7 +663,7 @@ export async function fetchQuizQuestionsForPlay(quizId: string): Promise<{ quiz:
 
     return {
       quiz: quizData,
-      questions: formattedQuestions
+      questions: hydrateQuestionsWithFallbackAnswers(quizId, formattedQuestions, true)
     };
   } catch (err) {
     console.error('Error fetching quiz for play:', err);
@@ -648,55 +713,59 @@ export async function submitQuizAttempt(
 }> {
   const cleanGuest = guestName ? guestName.trim() : null;
 
-  try {
-    // 1. Try 5-parameter RPC submit (with p_tab_switches)
-    let { data, error } = await supabase.rpc('submit_quiz_attempt', {
-      p_quiz_id: quizId,
-      p_user_id: userId || null,
-      p_guest_name: cleanGuest,
-      p_user_answers: userAnswers,
-      p_tab_switches: tabSwitches
-    });
+  const hasBuiltInAnswers = Boolean(FALLBACK_QUESTIONS[quizId] && FALLBACK_QUESTIONS[quizId].length > 0);
 
-    // 2. If the DB has the 4-parameter overload (without p_tab_switches), call it seamlessly
-    if (error) {
-      await resetQuizAttempt(quizId, userId || null, cleanGuest);
-      const fallbackRpc = await supabase.rpc('submit_quiz_attempt', {
+  if (!hasBuiltInAnswers) {
+    try {
+      // 1. Try 5-parameter RPC submit (with p_tab_switches)
+      let { data, error } = await supabase.rpc('submit_quiz_attempt', {
         p_quiz_id: quizId,
         p_user_id: userId || null,
         p_guest_name: cleanGuest,
-        p_user_answers: userAnswers
+        p_user_answers: userAnswers,
+        p_tab_switches: tabSwitches
       });
-      data = fallbackRpc.data;
-      error = fallbackRpc.error;
-    }
 
-    if (!error && data) {
-      const pct = Math.round(Number(data.percentage));
-      saveLocalAttempt({
-        id: data.attempt_id,
-        quiz_id: quizId,
-        user_id: userId,
-        guest_name: cleanGuest || 'სტუმარი',
-        correct_answers: Number(data.correct_answers),
-        total_questions: Number(data.total_questions),
-        percentage: pct,
-        created_at: new Date().toISOString(),
-        user_answers: userAnswers,
-        tab_switches: tabSwitches
-      });
-      return {
-        attempt_id: data.attempt_id,
-        correct_answers: Number(data.correct_answers),
-        total_questions: Number(data.total_questions),
-        percentage: pct,
-        tab_switches: tabSwitches
-      };
-    }
+      // 2. If the DB has the 4-parameter overload (without p_tab_switches), call it seamlessly
+      if (error) {
+        await resetQuizAttempt(quizId, userId || null, cleanGuest);
+        const fallbackRpc = await supabase.rpc('submit_quiz_attempt', {
+          p_quiz_id: quizId,
+          p_user_id: userId || null,
+          p_guest_name: cleanGuest,
+          p_user_answers: userAnswers
+        });
+        data = fallbackRpc.data;
+        error = fallbackRpc.error;
+      }
 
-    console.warn('RPC submit failed or not present, executing client-side fallback grading:', error);
-  } catch (e) {
-    console.warn('RPC submit exception, doing fallback grading:', e);
+      if (!error && data) {
+        const pct = Math.round(Number(data.percentage));
+        saveLocalAttempt({
+          id: data.attempt_id,
+          quiz_id: quizId,
+          user_id: userId,
+          guest_name: cleanGuest || 'სტუმარი',
+          correct_answers: Number(data.correct_answers),
+          total_questions: Number(data.total_questions),
+          percentage: pct,
+          created_at: new Date().toISOString(),
+          user_answers: userAnswers,
+          tab_switches: tabSwitches
+        });
+        return {
+          attempt_id: data.attempt_id,
+          correct_answers: Number(data.correct_answers),
+          total_questions: Number(data.total_questions),
+          percentage: pct,
+          tab_switches: tabSwitches
+        };
+      }
+
+      console.warn('RPC submit failed or not present, executing client-side fallback grading:', error);
+    } catch (e) {
+      console.warn('RPC submit exception, doing fallback grading:', e);
+    }
   }
 
   // Fallback grading: use fetchQuizQuestionsWithAnswers (which uses SECURITY DEFINER RPC get_quiz_questions_with_answers)
@@ -959,7 +1028,7 @@ export async function fetchQuizQuestionsWithAnswers(quizId: string): Promise<Qui
       p_quiz_id: quizId
     });
     if (!rpcErr && Array.isArray(rpcData) && rpcData.length > 0) {
-      return rpcData as QuizQuestionItem[];
+      return hydrateQuestionsWithFallbackAnswers(quizId, rpcData as QuizQuestionItem[], false);
     }
 
     // 2. Fallback: single query with nested answers
@@ -973,7 +1042,7 @@ export async function fetchQuizQuestionsWithAnswers(quizId: string): Promise<Qui
       return FALLBACK_QUESTIONS[quizId] || [];
     }
 
-    return questionsData.map(q => {
+    const mapped = questionsData.map(q => {
       const rawAnswers: QuizAnswerItem[] = ((q as any).quiz_answers || []);
       const sortedAnswers = [...rawAnswers].sort((a, b) => (a.answer_order || 0) - (b.answer_order || 0));
       return {
@@ -985,6 +1054,8 @@ export async function fetchQuizQuestionsWithAnswers(quizId: string): Promise<Qui
         answers: sortedAnswers
       };
     });
+
+    return hydrateQuestionsWithFallbackAnswers(quizId, mapped, false);
   } catch (err) {
     console.error('Error fetching questions with answers for review:', err);
     return FALLBACK_QUESTIONS[quizId] || [];
@@ -1137,7 +1208,7 @@ export async function fetchQuizQuestionsAdmin(quizId: string): Promise<QuizQuest
       p_quiz_id: quizId
     });
     if (!rpcErr && Array.isArray(rpcData) && rpcData.length > 0) {
-      return rpcData as QuizQuestionItem[];
+      return hydrateQuestionsWithFallbackAnswers(quizId, rpcData as QuizQuestionItem[], false);
     }
 
     // 2. Fallback: single query with nested answers including is_correct
@@ -1151,7 +1222,7 @@ export async function fetchQuizQuestionsAdmin(quizId: string): Promise<QuizQuest
       return FALLBACK_QUESTIONS[quizId] || [];
     }
 
-    return questionsData.map(q => {
+    const mapped = questionsData.map(q => {
       const rawAnswers: QuizAnswerItem[] = ((q as any).quiz_answers || []);
       const sortedAnswers = [...rawAnswers].sort((a, b) => (a.answer_order || 0) - (b.answer_order || 0));
       const { quiz_answers, ...rest } = q as any;
@@ -1160,6 +1231,8 @@ export async function fetchQuizQuestionsAdmin(quizId: string): Promise<QuizQuest
         answers: sortedAnswers
       };
     });
+
+    return hydrateQuestionsWithFallbackAnswers(quizId, mapped, false);
   } catch (err) {
     console.error('Error fetching admin quiz questions:', err);
     return FALLBACK_QUESTIONS[quizId] || [];
