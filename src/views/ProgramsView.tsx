@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo, type FC } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, type FC } from 'react';
 import { ProgramCatalogItem } from '../types';
 import { fetchAllProgramsWithInstitutions } from '../lib/catalogService';
 import { Search, ChevronRight, Award, RotateCcw, BookOpen, MapPin, Users, Coins, Languages, GraduationCap, Building2, ArrowRight, Loader2 } from 'lucide-react';
+import { scrollToTopInstant } from '../lib/scrollToTop';
 
 interface ProgramsViewProps {
   onNavigateHome: () => void;
@@ -34,6 +35,10 @@ export const ProgramsView: FC<ProgramsViewProps> = ({
   const [minFee, setMinFee] = useState<string>('');
   const [maxFee, setMaxFee] = useState<string>('');
   const [minQuota, setMinQuota] = useState<string>('');
+
+  useLayoutEffect(() => {
+    scrollToTopInstant();
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -176,7 +181,7 @@ export const ProgramsView: FC<ProgramsViewProps> = ({
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
       setCurrentPage(newPage);
-      window.scrollTo({ top: 400, behavior: 'smooth' });
+      scrollToTopInstant();
     }
   };
 

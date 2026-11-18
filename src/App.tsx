@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, lazy, Suspense } from 'react';
 import { NavTab, Article, HistoryTest, VideoLesson, QuizItem } from './types';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
@@ -8,6 +8,7 @@ import { supabase } from './lib/supabase';
 import { isAdminUser, fetchAllArticles, getInitialArticles, generateSlug } from './lib/blogService';
 import { fetchUserProfile, syncUserProfile } from './lib/userService';
 import { getQuizImageUrl } from './lib/quizService';
+import { scrollToTopInstant } from './lib/scrollToTop';
 
 // Lazy-loaded Route Views (Code Splitting)
 const BlogView = lazy(() => import('./views/BlogView').then(m => ({ default: m.BlogView })));
@@ -296,7 +297,12 @@ export function App() {
 
     const handlePopState = () => {
       syncRouteWithState(allArticlesRef.current);
+      scrollToTopInstant();
     };
+
+    if (typeof window !== 'undefined' && 'scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
 
     window.addEventListener('popstate', handlePopState);
     return () => {
@@ -304,6 +310,11 @@ export function App() {
       window.removeEventListener('popstate', handlePopState);
     };
   }, [syncRouteWithState]);
+
+  // Global ScrollToTop on any page/route/subview transition
+  useLayoutEffect(() => {
+    scrollToTopInstant();
+  }, [activeTab, selectedArticle?.id, selectedInstitutionCode, selectedQuizId, isNotFound]);
 
   // Dynamic SEO title, description, canonical & Open Graph manager
   useEffect(() => {
@@ -570,7 +581,7 @@ export function App() {
     if (window.location.pathname !== newPath) {
       window.history.pushState({ articleId: article.id }, '', newPath);
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTopInstant();
   };
 
   const handleCloseArticle = () => {
@@ -578,7 +589,7 @@ export function App() {
     if (window.location.pathname !== '/blog') {
       window.history.pushState({}, '', '/blog');
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTopInstant();
   };
 
   const handleOpenTest = (test: HistoryTest) => {
@@ -603,7 +614,7 @@ export function App() {
     if (window.location.pathname !== newPath) {
       window.history.pushState({ tab }, '', newPath);
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTopInstant();
   };
 
   const handleSelectInstitution = (code: string, type?: string) => {
@@ -618,7 +629,7 @@ export function App() {
     if (window.location.pathname !== newPath) {
       window.history.pushState({ institutionCode: code }, '', newPath);
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTopInstant();
   };
 
   return (
@@ -743,8 +754,8 @@ export function App() {
                     <ProfileView
                       user={user}
                       onOpenQuiz={(quizId) => {
-                        setSelectedQuizId(quizId);
                         handleTabChange('quizzes');
+                        setSelectedQuizId(quizId);
                       }}
                       onOpenTest={(categoryKey, chapterId) => {
                         setTargetTestFilter({ categoryKey, chapterId });

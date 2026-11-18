@@ -1,7 +1,8 @@
-import { useState, useEffect, type FC } from 'react';
+import { useState, useEffect, useLayoutEffect, type FC } from 'react';
 import { Article } from '../types';
 import { formatArticleContent, generateSlug } from '../lib/blogService';
 import { ArrowLeft, Calendar, User, Quote, BookOpen, Share2, Copy, Check } from 'lucide-react';
+import { scrollToTopInstant } from '../lib/scrollToTop';
 
 interface ArticleDetailViewProps {
   article: Article;
@@ -23,6 +24,10 @@ export const ArticleDetailView: FC<ArticleDetailViewProps> = ({
   const related = allArticles.filter(a => a.id !== article.id).slice(0, 3);
   const postSlugOrId = generateSlug(article.title, article.slug || article.id);
   const currentPostUrl = `https://ntistoria.vercel.app/blog/${postSlugOrId}`;
+
+  useLayoutEffect(() => {
+    scrollToTopInstant();
+  }, [article?.id]);
 
   // Update Document Title & Canonical URL on article open
   useEffect(() => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, type FC, type FormEvent } from 'react';
+import React, { useState, useEffect, useLayoutEffect, type FC, type FormEvent } from 'react';
 import {
   HelpCircle, ArrowRight, ArrowLeft, Trophy, CheckCircle2, XCircle, RotateCcw,
   Share2, Copy, Check, Sparkles, Award, User, Clock, AlertCircle, X, ExternalLink, Link as LinkIcon, Eye
@@ -13,6 +13,7 @@ import { QuizLeaderboardModal } from '../components/QuizLeaderboardModal';
 import { QuizStudentReviewModal } from '../components/QuizStudentReviewModal';
 import { supabase } from '../lib/supabase';
 import { useAntiCheating } from '../hooks/useAntiCheating';
+import { scrollToTopInstant } from '../lib/scrollToTop';
 
 interface QuizzesViewProps {
   user?: { name: string; email: string } | null;
@@ -114,6 +115,10 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
     loadQuizzes();
   }, []);
 
+  useLayoutEffect(() => {
+    scrollToTopInstant();
+  }, [viewState, activeQuiz?.id, currentIndex]);
+
   // Return to quizzes list & update route
   const handleBackToList = (updateHistory = true) => {
     setViewState('list');
@@ -122,6 +127,7 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
     if (updateHistory && window.location.pathname !== '/quizzes') {
       window.history.pushState({}, '', '/quizzes');
     }
+    scrollToTopInstant();
   };
 
   // Start playing a quiz & update URL
@@ -132,6 +138,7 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
     setSelectedAnswers({});
     setAttemptResult(null);
     setViewState('play');
+    scrollToTopInstant();
 
     if (pushUrl) {
       const newPath = `/quizzes/${encodeURIComponent(quiz.id)}`;
@@ -322,7 +329,7 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
 
       setIsGuestNameModalOpen(false);
       setViewState('result');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      scrollToTopInstant();
     } catch (err) {
       console.error('Error submitting quiz attempt:', err);
       alert('შედეგის შენახვისას დაფიქსირდა შეცდომა');

@@ -1,5 +1,6 @@
-import { useState, useEffect, type FC } from 'react';
+import { useState, useEffect, useLayoutEffect, type FC } from 'react';
 import { VideoItem } from '../types';
+import { scrollToTopInstant } from '../lib/scrollToTop';
 import { 
   fetchAllVideos, 
   extractYoutubeId, 
@@ -30,6 +31,10 @@ export const VideosView: FC = () => {
   // Track playing video inline or in modal
   const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
   const [activeModalVideo, setActiveModalVideo] = useState<VideoItem | null>(null);
+
+  useLayoutEffect(() => {
+    scrollToTopInstant();
+  }, []);
 
   const loadVideosData = async () => {
     setLoading(true);

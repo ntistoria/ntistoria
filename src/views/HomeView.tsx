@@ -1,9 +1,10 @@
-import { useState, useEffect, type FC } from 'react';
+import { useState, useEffect, useLayoutEffect, type FC } from 'react';
 import { NavTab, Article, HistoryTest, VideoLesson, MockExamBannerInfo } from '../types';
 import { HERO_IMAGE, ABOUT_IMAGE, HISTORICAL_EPOCHS } from '../data/historyData';
 import { fetchAllArticles } from '../lib/blogService';
 import { fetchActiveMockExamBanner } from '../lib/mockExamService';
 import { supabase } from '../lib/supabase';
+import { scrollToTopInstant } from '../lib/scrollToTop';
 import { Video, BookOpen, FileText, ArrowRight, CheckCircle2, MapPin, Wifi, Phone, GraduationCap, Award, Quote, Clock } from 'lucide-react';
 import { motion } from 'motion/react';
 import { CatalogModal } from '../components/CatalogModal';
@@ -46,8 +47,12 @@ export const HomeView: FC<HomeViewProps> = ({
   }, []);
 
 
+  useLayoutEffect(() => {
+    scrollToTopInstant();
+  }, []);
+
   return (
-    <div className="space-y-24 pb-20 overflow-x-hidden">
+    <div className="space-y-24 pb-20 overflow-x-clip">
 
       {/* LIVE MOCK EXAM TOP BANNER */}
       {activeMockBanner && (

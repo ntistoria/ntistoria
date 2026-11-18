@@ -175,7 +175,7 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className="relative bg-white border border-[#E6DDCB] shadow-2xl rounded-3xl w-full max-w-3xl overflow-hidden max-h-[90vh] flex flex-col">
-        
+
         {/* Header */}
         <div className="px-6 py-5 bg-[#0D1B2A] text-white border-b border-[#C79B3A]/30 flex items-center justify-between">
           <div className="space-y-1">
@@ -244,22 +244,20 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
               <button
                 type="button"
                 onClick={() => setFilterMode('all')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
-                  filterMode === 'all'
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${filterMode === 'all'
                     ? 'bg-[#0D1B2A] text-white border-[#0D1B2A] shadow-xs'
                     : 'bg-white text-[#0D1B2A] border-[#E6DDCB] hover:border-[#C79B3A]'
-                }`}
+                  }`}
               >
                 ყველა კითხვა ({questions.length})
               </button>
               <button
                 type="button"
                 onClick={() => setFilterMode('incorrect')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
-                  filterMode === 'incorrect'
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${filterMode === 'incorrect'
                     ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
                     : 'bg-white text-rose-700 border-rose-200 hover:bg-rose-50'
-                }`}
+                  }`}
               >
                 <XCircle className="w-3.5 h-3.5" />
                 <span>არასწორი პასუხები ({displayIncorrect})</span>
@@ -267,11 +265,10 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
               <button
                 type="button"
                 onClick={() => setFilterMode('correct')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
-                  filterMode === 'correct'
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${filterMode === 'correct'
                     ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                     : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50'
-                }`}
+                  }`}
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>სწორი პასუხები ({displayCorrect})</span>
@@ -319,25 +316,23 @@ export const QuizStudentReviewModal: FC<QuizStudentReviewModalProps> = ({
                 return (
                   <div
                     key={q.id}
-                    className={`bg-white rounded-2xl p-5 border-2 shadow-sm space-y-4 ${
-                      !hasRecordedUserAnswers
+                    className={`bg-white rounded-2xl p-5 border-2 shadow-sm space-y-4 ${!hasRecordedUserAnswers
                         ? 'border-[#E6DDCB]'
                         : isUserCorrect
-                        ? 'border-emerald-300 bg-emerald-50/30'
-                        : 'border-rose-300 bg-rose-50/40'
-                    }`}
+                          ? 'border-emerald-300 bg-emerald-50/30'
+                          : 'border-rose-300 bg-rose-50/40'
+                      }`}
                   >
                     {/* Question Header */}
                     <div className="flex items-start justify-between gap-3 border-b border-[#E6DDCB]/60 pb-3">
                       <div className="flex items-start gap-2.5">
                         <span
-                          className={`w-7 h-7 rounded-xl text-xs font-bold flex items-center justify-center shrink-0 mt-0.5 ${
-                            !hasRecordedUserAnswers
+                          className={`w-7 h-7 rounded-xl text-xs font-bold flex items-center justify-center shrink-0 mt-0.5 ${!hasRecordedUserAnswers
                               ? 'bg-[#0D1B2A] text-[#FAF8F3]'
                               : isUserCorrect
-                              ? 'bg-emerald-600 text-white'
-                              : 'bg-rose-600 text-white'
-                          }`}
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-rose-600 text-white'
+                            }`}
                         >
                           {qIndex + 1}
                         </span>

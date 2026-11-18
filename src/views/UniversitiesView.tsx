@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo, type FC } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, type FC } from 'react';
 import { University } from '../types';
 import { fetchInstitutions } from '../lib/catalogService';
 import { GeorgiaMap } from '../components/GeorgiaMap';
 import { Search, MapPin, GraduationCap, ChevronRight, RotateCcw, Building2, BookOpen, ArrowRight, Loader2 } from 'lucide-react';
+import { scrollToTopInstant } from '../lib/scrollToTop';
 
 interface UniversitiesViewProps {
   onNavigateHome: () => void;
@@ -28,6 +29,10 @@ export const UniversitiesView: FC<UniversitiesViewProps> = ({
   const [selectedStatus, setSelectedStatus] = useState(initialStatus);
 
   const [hoveredCode, setHoveredCode] = useState<string | undefined>();
+
+  useLayoutEffect(() => {
+    scrollToTopInstant();
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -124,7 +129,7 @@ export const UniversitiesView: FC<UniversitiesViewProps> = ({
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
       setCurrentPage(newPage);
-      window.scrollTo({ top: 450, behavior: 'smooth' });
+      scrollToTopInstant();
     }
   };
 

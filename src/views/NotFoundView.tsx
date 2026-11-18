@@ -1,12 +1,16 @@
-import { type FC } from 'react';
+import { useLayoutEffect, type FC } from 'react';
 import { NavTab } from '../types';
 import { Home, BookOpen, Clock, ArrowRight, HelpCircle } from 'lucide-react';
+import { scrollToTopInstant } from '../lib/scrollToTop';
 
 interface NotFoundViewProps {
   setActiveTab: (tab: NavTab) => void;
 }
 
 export const NotFoundView: FC<NotFoundViewProps> = ({ setActiveTab }) => {
+  useLayoutEffect(() => {
+    scrollToTopInstant();
+  }, []);
   return (
     <div className="max-w-[1180px] mx-auto min-h-[70vh] flex items-center justify-center py-20 px-4 animate-in fade-in duration-300">
       <div className="text-center space-y-8 max-w-xl w-full bg-white border-2 border-[#E6DDCB] p-8 sm:p-12 rounded-3xl shadow-xl">
@@ -38,7 +42,7 @@ export const NotFoundView: FC<NotFoundViewProps> = ({ setActiveTab }) => {
           <button
             onClick={() => {
               setActiveTab('home');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+              scrollToTopInstant();
             }}
             className="w-full sm:w-auto px-8 py-4 bg-[#C79B3A] hover:bg-[#E6C86B] text-[#0D1B2A] text-xs uppercase tracking-widest font-bold rounded-2xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
           >

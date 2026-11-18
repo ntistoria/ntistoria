@@ -1,7 +1,8 @@
-import { useState, useEffect, type FC } from 'react';
+import { useState, useEffect, useLayoutEffect, type FC } from 'react';
 import { Article } from '../types';
 import { fetchAllArticles, getInitialArticles } from '../lib/blogService';
 import { Search, Clock, Calendar, User, ArrowRight, BookOpen } from 'lucide-react';
+import { scrollToTopInstant } from '../lib/scrollToTop';
 
 interface BlogViewProps {
   onOpenArticle: (article: Article) => void;
@@ -21,6 +22,10 @@ export const BlogView: FC<BlogViewProps> = ({ onOpenArticle }) => {
     'ახალი და უახლესი ისტორია',
     'ეროვნული გამოცდები'
   ];
+
+  useLayoutEffect(() => {
+    scrollToTopInstant();
+  }, []);
 
   useEffect(() => {
     let isMounted = true;

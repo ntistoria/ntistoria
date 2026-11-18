@@ -1,4 +1,5 @@
-import { useState, useEffect, type FC } from 'react';
+import { useState, useEffect, useLayoutEffect, type FC } from 'react';
+import { scrollToTopInstant } from '../lib/scrollToTop';
 import {
   User, ShieldCheck, BookMarked, Award, HelpCircle, RotateCcw,
   CheckCircle2, XCircle, Trash2, Eye, Play, Sparkles, BookOpen,
@@ -63,6 +64,10 @@ export const ProfileView: FC<ProfileViewProps> = ({
   } | null>(null);
 
   const userEmail = user?.email || '';
+
+  useLayoutEffect(() => {
+    scrollToTopInstant();
+  }, []);
 
   const loadData = async () => {
     if (!userEmail) return;

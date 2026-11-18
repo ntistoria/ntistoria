@@ -1,8 +1,12 @@
-import { useState, type FC } from 'react';
+import { useState, useLayoutEffect, type FC } from 'react';
 import { FAQS } from '../data/historyData';
 import { Mail, Phone, MapPin, Clock, Send, CheckCircle2, HelpCircle, ChevronDown, ChevronUp, Facebook, Instagram, Youtube, MessageCircle, Share2 } from 'lucide-react';
+import { scrollToTopInstant } from '../lib/scrollToTop';
 
 export const ContactView: FC = () => {
+  useLayoutEffect(() => {
+    scrollToTopInstant();
+  }, []);
   const [formData, setFormData] = useState({
     name: '',
     email: '',

@@ -1,7 +1,8 @@
-import { useState, useEffect, type FC } from 'react';
+import { useState, useEffect, useLayoutEffect, type FC } from 'react';
 import { University, Specialty } from '../types';
 import { fetchInstitutionByCode, fetchSpecialtiesByInstitutionCode } from '../lib/catalogService';
 import { ChevronRight, ArrowLeft, MapPin, Globe, Mail, GraduationCap, BookOpen, Users, Coins, Languages, Award, Loader2, Building2 } from 'lucide-react';
+import { scrollToTopInstant } from '../lib/scrollToTop';
 
 interface InstitutionProfileViewProps {
   code: string;
@@ -18,6 +19,10 @@ export const InstitutionProfileView: FC<InstitutionProfileViewProps> = ({
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+
+  useLayoutEffect(() => {
+    scrollToTopInstant();
+  }, [code]);
 
   useEffect(() => {
     let mounted = true;

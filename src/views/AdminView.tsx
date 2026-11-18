@@ -1,8 +1,9 @@
-import { useState, useEffect, lazy, Suspense, type FC } from 'react';
+import { useState, useEffect, useLayoutEffect, lazy, Suspense, type FC } from 'react';
 import { Plus, Edit2, Trash2, Search, Filter, FileText, ShieldCheck, RefreshCw, AlertTriangle, Eye, HelpCircle, Video, Clock, Database } from 'lucide-react';
 import { Article } from '../types';
 import { fetchAllArticles, saveArticle, deleteArticle, isAdminUser } from '../lib/blogService';
 import { BlogEditorModal } from '../components/BlogEditorModal';
+import { scrollToTopInstant } from '../lib/scrollToTop';
 
 const AdminQuizManager = lazy(() =>
   import('../components/AdminQuizManager').then(m => ({ default: m.AdminQuizManager }))
@@ -36,6 +37,10 @@ export const AdminView: FC<AdminViewProps> = ({ user, onOpenArticle }) => {
 
   const [deletingArticleId, setDeletingArticleId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  useLayoutEffect(() => {
+    scrollToTopInstant();
+  }, [adminTab]);
 
   const loadData = async () => {
     setLoading(true);

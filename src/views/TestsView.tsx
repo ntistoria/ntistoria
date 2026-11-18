@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense, type FC } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo, lazy, Suspense, type FC } from 'react';
 import { HistoryTest, QuizQuestion, MockExam, MockExamBannerInfo } from '../types';
+import { scrollToTopInstant } from '../lib/scrollToTop';
 import {
   TEST_CATEGORIES,
   ProgramChapter,
@@ -198,6 +199,10 @@ export const TestsView: FC<TestsViewProps> = ({
   const [openTextError, setOpenTextError] = useState<Record<number, string>>({});
 
   const userEmail = user?.email || 'guest_user';
+
+  useLayoutEffect(() => {
+    scrollToTopInstant();
+  }, [selectedCategoryKey, activeInlineTest?.id, isTestFinished, currentQIndex, activeMockExam?.id]);
 
   // =========================================================================
   // 4.3 Routing & Browser History (Back/Forward) Sync for /tests
@@ -485,7 +490,7 @@ export const TestsView: FC<TestsViewProps> = ({
     setVisibleChapterCount(CHAPTERS_PER_PAGE);
     clearSession();
     syncTestsUrl(key, defaultCh, false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTopInstant();
   };
 
   const handleBackToCategories = () => {
@@ -493,7 +498,7 @@ export const TestsView: FC<TestsViewProps> = ({
     setActiveInlineTest(null);
     clearSession();
     syncTestsUrl(null, 'all', false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTopInstant();
   };
 
   const handleSelectChapterId = (chId: string) => {
@@ -534,14 +539,14 @@ export const TestsView: FC<TestsViewProps> = ({
     });
 
     syncTestsUrl(selectedCategoryKey, selectedChapterId, true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTopInstant();
   };
 
   const handleExitInlineTest = () => {
     setActiveInlineTest(null);
     clearSession();
     syncTestsUrl(selectedCategoryKey, selectedChapterId, false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollToTopInstant();
   };
 
   const handleStartRandomTest = async () => {

@@ -5,6 +5,7 @@ import { Menu, X, BookOpen, Search, ArrowRight, User, ShieldCheck } from 'lucide
 import { isAdminUser } from '../lib/blogService';
 import { fetchActiveMockExamBanner } from '../lib/mockExamService';
 import { supabase } from '../lib/supabase';
+import { scrollToTopInstant } from '../lib/scrollToTop';
 
 interface NavbarProps {
   activeTab: NavTab;
@@ -80,9 +81,10 @@ export const Navbar: FC<NavbarProps> = ({ activeTab, setActiveTab, onOpenSearch,
 
 
   const handleNavClick = (id: NavTab) => {
-    setActiveTab(id);
+    document.body.style.overflow = '';
     setMobileMenuOpen(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setActiveTab(id);
+    scrollToTopInstant();
   };
 
   return (
