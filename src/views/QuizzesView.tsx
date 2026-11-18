@@ -1,6 +1,6 @@
 import React, { useState, useEffect, type FC, type FormEvent } from 'react';
 import {
-  HelpCircle, ArrowRight, ArrowLeft, Trophy, CheckCircle2, RotateCcw,
+  HelpCircle, ArrowRight, ArrowLeft, Trophy, CheckCircle2, XCircle, RotateCcw,
   Share2, Copy, Check, Sparkles, Award, User, Clock, AlertCircle, X, ExternalLink, Link as LinkIcon, Eye
 } from 'lucide-react';
 import { QuizItem, QuizQuestionItem, QuizAnswerItem, QuizAttempt } from '../types';
@@ -787,14 +787,27 @@ export const QuizzesView: FC<QuizzesViewProps> = ({ user, onOpenAuth, initialQui
                   </h2>
                 </div>
 
-                {/* Score Gauge Circle */}
-                <div className="relative w-44 h-44 mx-auto rounded-full bg-gradient-to-br from-[#0D1B2A] to-[#1A2E40] text-white flex flex-col items-center justify-center shadow-xl border-4 border-[#C79B3A]">
-                  <span className="font-serif font-bold text-4xl sm:text-5xl text-[#C79B3A]">
-                    {attemptResult.correct_answers} / {attemptResult.total_questions}
-                  </span>
-                  <span className="text-xs font-mono text-[#FAF8F3]/80 mt-1">
-                    {attemptResult.percentage}% სწორი პასუხი
-                  </span>
+                {/* Correct & Incorrect Answers Count (No Score/Points) */}
+                <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
+                  <div className="p-5 rounded-2xl bg-emerald-50 border-2 border-emerald-200 flex flex-col items-center justify-center space-y-1.5 shadow-sm">
+                    <div className="flex items-center gap-1.5 text-emerald-700 text-xs font-bold uppercase tracking-wider">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>სწორი პასუხი</span>
+                    </div>
+                    <span className="font-serif font-bold text-4xl sm:text-5xl text-emerald-800">
+                      {attemptResult.correct_answers}
+                    </span>
+                  </div>
+
+                  <div className="p-5 rounded-2xl bg-rose-50 border-2 border-rose-200 flex flex-col items-center justify-center space-y-1.5 shadow-sm">
+                    <div className="flex items-center gap-1.5 text-rose-700 text-xs font-bold uppercase tracking-wider">
+                      <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                      <span>არასწორი პასუხი</span>
+                    </div>
+                    <span className="font-serif font-bold text-4xl sm:text-5xl text-rose-800">
+                      {Math.max(0, attemptResult.total_questions - attemptResult.correct_answers)}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Dynamic Herodotus History Comment */}
